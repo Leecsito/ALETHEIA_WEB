@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ALETHEIA — ETL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="bg-grid"></div>
+  <div class="scanline"></div>
+
+  <header>
+    <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
+    <div class="header-right">
+      <div class="db-status" id="dbStatus">
+        <span class="dot"></span>
+        <span class="db-label">Verificando DB...</span>
+      </div>
+      <button class="btn-init" id="btnInit">INIT DB</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>ETL <span class="accent">PIPELINE</span></h1>
+      <p class="subtitle">Sube los archivos Excel. Los 8 obligatorios + 2 opcionales (equipos y jugadores, solo la
+        primera vez).</p>
+    </section>
+
+    <!-- BOTÓN SUBIR TODOS -->
+    <div class="bulk-upload-area">
+      <button class="btn-bulk" id="btnBulk">
+        <span class="bulk-icon">⊕</span>
+        SUBIR TODOS LOS EXCEL DE UNA VEZ
+      </button>
+      <input type="file" id="bulkInput" accept=".xlsx" multiple style="display:none" />
+      <div class="bulk-hint">Selecciona varios archivos a la vez — los asigna automáticamente por nombre</div>
+    </div>
+
+    <!-- OBLIGATORIOS -->
+    <div class="section-label">
+      ARCHIVOS OBLIGATORIOS
+      <span class="section-count" id="countRequired">0 / 8</span>
+    </div>
+    <section class="upload-grid" id="uploadGrid">
+
+      <div class="file-card" data-key="vct_partidos">
+        <div class="card-num">01</div>
+        <div class="card-info">
+          <div class="card-title">VCT PARTIDOS</div>
+          <div class="card-desc">vct_partidos.xlsx</div>
+          <div class="card-tables">→ matches · match_veto</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+      <div class="file-card" data-key="vlr_mapas">
+        <div class="card-num">02</div>
+        <div class="card-info">
+          <div class="card-title">VLR MAPAS</div>
+          <div class="card-desc">vlr_mapas.xlsx</div>
+          <div class="card-tables">→ maps</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+      <div class="file-card" data-key="vlr_rondas">
+        <div class="card-num">03</div>
+        <div class="card-info">
+          <div class="card-title">VLR RONDAS</div>
+          <div class="card-desc">vlr_rondas.xlsx</div>
+          <div class="card-tables">→ rounds (fusión)</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+      <div class="file-card" data-key="vlr_economia_rondas">
+        <div class="card-num">04</div>
+        <div class="card-info">
+          <div class="card-title">ECONOMÍA RONDAS</div>
+          <div class="card-desc">vlr_economia_rondas.xlsx</div>
+          <div class="card-tables">→ rounds (fusión)</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+      <div class="file-card" data-key="vlr_stats_players_sides">
+        <div class="card-num">05</div>
+        <div class="card-info">
+          <div class="card-title">STATS JUGADORES</div>
+          <div class="card-desc">vlr_stats_players_sides.xlsx</div>
+          <div class="card-tables">→ player_stats</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+      <div class="file-card" data-key="vlr_economia_resumen">
+        <div class="card-num">06</div>
+        <div class="card-info">
+          <div class="card-title">ECONOMÍA RESUMEN</div>
+          <div class="card-desc">vlr_economia_resumen.xlsx</div>
+          <div class="card-tables">→ economy_summary</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+      <div class="file-card" data-key="vlr_enfrentamientos">
+        <div class="card-num">07</div>
+        <div class="card-info">
+          <div class="card-title">ENFRENTAMIENTOS</div>
+          <div class="card-desc">vlr_enfrentamientos.xlsx</div>
+          <div class="card-tables">→ duels</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+      <div class="file-card" data-key="vlr_multikills_clutches">
+        <div class="card-num">08</div>
+        <div class="card-info">
+          <div class="card-title">MULTIKILLS & CLUTCHES</div>
+          <div class="card-desc">vlr_multikills_clutches.xlsx</div>
+          <div class="card-tables">→ multikills_clutches</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+    </section>
+
+    <!-- OPCIONALES -->
+    <div class="section-label optional-label">
+      ARCHIVOS OPCIONALES
+      <span class="section-sublabel">solo la primera vez</span>
+      <span class="section-count" id="countOptional">0 / 2</span>
+    </div>
+    <section class="upload-grid" id="uploadGridOptional">
+
+      <div class="file-card optional" data-key="vct_equipos">
+        <div class="card-num">09</div>
+        <div class="card-info">
+          <div class="card-title">VCT EQUIPOS</div>
+          <div class="card-desc">vct_equipos.xlsx</div>
+          <div class="card-tables">→ teams</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+      <div class="file-card optional" data-key="vct_jugadores">
+        <div class="card-num">10</div>
+        <div class="card-info">
+          <div class="card-title">VCT JUGADORES</div>
+          <div class="card-desc">vct_jugadores.xlsx</div>
+          <div class="card-tables">→ players</div>
+        </div>
+        <div class="card-state">
+          <div class="state-icon">↑</div>
+        </div>
+        <input type="file" accept=".xlsx" class="file-input" />
+      </div>
+
+    </section>
+
+    <div class="run-area">
+      <div class="progress-bar-wrap" id="progressWrap" style="display:none">
+        <div class="progress-bar" id="progressBar"></div>
+        <div class="progress-label" id="progressLabel">Procesando...</div>
+      </div>
+      <button class="btn-run" id="btnRun" disabled>
+        <span class="btn-run-text">EJECUTAR ETL</span>
+        <span class="btn-run-count" id="fileCount">0 / 8 archivos</span>
+      </button>
+    </div>
+
+    <section class="log-section" id="logSection" style="display:none">
+      <div class="log-header">
+        <span>OUTPUT LOG</span>
+        <button class="btn-clear" id="btnClear">LIMPIAR</button>
+      </div>
+      <div class="log-body" id="logBody"></div>
+    </section>
+
+  </main>
+
+  <script src="script.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ALETHEIA — Predictor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <div class="bg-grid"></div>
+  <div class="scanlines"></div>
+
+  <header>
+    <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
+    <div class="header-title">PREDICTOR <span class="header-badge">MONTE CARLO</span></div>
+    <a href="../inicio/index.html" class="btn-nav">ETL ↑</a>
+  </header>
+
+  <main>
+
+    <!-- ── SELECCIÓN DE EQUIPOS ── -->
+    <section class="selector-section">
+
+      <div class="team-panel" id="panelA">
+        <div class="team-panel-label">EQUIPO A</div>
+        <div class="selected-team" id="selectedA">
+          <span class="sel-placeholder">Selecciona un equipo</span>
+        </div>
+        <input class="team-search" id="searchA" placeholder="Buscar equipo..." autocomplete="off" />
+        <div class="team-grid" id="teamGridA"></div>
+      </div>
+
+      <div class="vs-column">
+        <div class="vs-text">VS</div>
+        <div class="sim-options">
+          <div class="sim-label">SIMULACIONES</div>
+          <div class="sim-btns">
+            <button class="sim-btn" data-n="5000">5K</button>
+            <button class="sim-btn active" data-n="10000">10K</button>
+            <button class="sim-btn" data-n="25000">25K</button>
+            <button class="sim-btn" data-n="50000">50K</button>
+          </div>
+        </div>
+        <button class="btn-predict" id="btnPredict" disabled>
+          <span class="btn-predict-icon">◈</span>
+          SIMULAR
+        </button>
+        <div class="h2h-badge" id="h2hBadge" style="display:none"></div>
+      </div>
+
+      <div class="team-panel" id="panelB">
+        <div class="team-panel-label">EQUIPO B</div>
+        <div class="selected-team" id="selectedB">
+          <span class="sel-placeholder">Selecciona un equipo</span>
+        </div>
+        <input class="team-search" id="searchB" placeholder="Buscar equipo..." autocomplete="off" />
+        <div class="team-grid" id="teamGridB"></div>
+      </div>
+
+    </section>
+
+    <!-- ── MODO TOGGLE (aparece cuando ambos equipos están seleccionados) ── -->
+    <div class="mode-toggle" id="modeToggle" style="display:none">
+      <button class="mode-btn active" data-mode="explorer">
+        <span class="mode-icon">⬡</span> EXPLORADOR DE MAPAS
+      </button>
+      <button class="mode-btn" data-mode="partido">
+        <span class="mode-icon">◈</span> SIMULAR PARTIDO
+      </button>
+    </div>
+
+    <!-- ── CONFIGURADOR DE PARTIDO ── -->
+    <div class="match-builder" id="matchBuilder" style="display:none">
+      <div class="mb-header">
+        <div class="mb-title-wrap">
+          <span class="mb-title">CONFIGURAR PARTIDO</span>
+          <span class="mb-format" id="mbFormat">—</span>
+        </div>
+        <div class="mb-hint">Haz click en los mapas para añadirlos en orden. El último siempre es el
+          <strong>DECIDER</strong>. Elige el lado inicial de <span class="hint-a" id="hintTeamA">Equipo A</span></div>
+      </div>
+
+      <div class="map-slots" id="mapSlots"></div>
+
+      <div class="mb-actions">
+        <button class="btn-add-map" id="btnAddMap">
+          <span>✕</span> LIMPIAR
+        </button>
+        <div class="mb-spacer"></div>
+        <button class="btn-sim-partido" id="btnSimPartido" disabled>
+          <span class="bsp-icon">◈</span>
+          <span class="bsp-text">SIMULAR PARTIDO</span>
+          <span class="bsp-count" id="bspCount">0 mapas</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── LOADING ── -->
+    <div class="sim-progress" id="simProgress" style="display:none">
+      <div class="sim-progress-bar" id="simProgressBar"></div>
+      <div class="sim-progress-label" id="simProgressLabel">Inicializando simulación...</div>
+      <div class="sim-particles" id="simParticles"></div>
+    </div>
+
+    <!-- ── RESULTADOS EXPLORADOR ── -->
+    <section class="results-section" id="resultsSection" style="display:none">
+
+      <!-- Stats comparación -->
+      <div class="stats-compare" id="statsCompare"></div>
+
+      <!-- Grid de predicciones por mapa -->
+      <div class="maps-header">
+        <div class="maps-header-map">MAPA</div>
+        <div class="maps-header-side atk-col">
+          <span class="side-icon">⚔</span> EMPIEZA ATACANDO
+        </div>
+        <div class="maps-header-side def-col">
+          <span class="side-icon">🛡</span> EMPIEZA DEFENDIENDO
+        </div>
+      </div>
+
+      <div class="maps-grid" id="mapsGrid"></div>
+
+      <!-- Leyenda -->
+      <div class="legend">
+        <span class="legend-item"><span class="conf-dot high"></span> Alta confianza (≥4 mapas)</span>
+        <span class="legend-item"><span class="conf-dot medium"></span> Media (2-3 mapas)</span>
+        <span class="legend-item"><span class="conf-dot low"></span> Baja (&lt;2 mapas)</span>
+        <span class="legend-sep">·</span>
+        <span class="legend-item sig-bar green-bar">▓▓▓</span> Ventaja clara (&gt;60%)
+        <span class="legend-item sig-bar yellow-bar">▓▓▓</span> Parejo (45-60%)
+        <span class="legend-item sig-bar red-bar">▓▓▓</span> Desventaja (&lt;40%)
+      </div>
+
+      <!-- Nota metodológica -->
+      <div class="methodology-note" id="methodNote"></div>
+
+    </section>
+
+    <!-- ── RESULTADOS PARTIDO ── -->
+    <section class="partido-results" id="partidoResults" style="display:none">
+
+      <!-- Banner de resultado de serie -->
+      <div class="series-banner" id="seriesBanner"></div>
+
+      <!-- Distribución de scores -->
+      <div class="score-dist-wrap" id="scoreDistWrap"></div>
+
+      <!-- Breakdown por mapa -->
+      <div class="partido-maps-header">
+        <div class="pm-col-map">MAPA</div>
+        <div class="pm-col-side">INICIO <span id="pmTeamAName" class="pm-team-a-label"></span></div>
+        <div class="pm-col-prob">PROBABILIDAD DE GANAR</div>
+      </div>
+      <div class="partido-maps-list" id="partidoMapsList"></div>
+
+      <!-- Nota -->
+      <div class="methodology-note" id="partidoMethodNote"></div>
+
+    </section>
+
+  </main>
+
+  <script src="script.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ALETHEIA — Tablas</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <div class="bg-grid"></div>
+
+    <header>
+        <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
+        <div class="header-center" id="tableTitle">SELECCIONA UNA TABLA</div>
+        <a href="../inicio/index.html" class="btn-nav">ETL ↑</a>
+    </header>
+
+    <div class="layout">
+
+        <!-- ── SIDEBAR ── -->
+        <aside class="sidebar">
+            <div class="sidebar-label">TABLAS</div>
+            <div class="table-list" id="tableList">
+                <div class="table-list-loading">Cargando...</div>
+            </div>
+        </aside>
+
+        <!-- ── CONTENT ── -->
+        <div class="content">
+
+            <div class="empty-state" id="emptyState">
+                <div class="empty-icon">⬡</div>
+                <div class="empty-text">Selecciona una tabla del panel izquierdo</div>
+            </div>
+
+            <div class="table-panel" id="tablePanel" style="display:none">
+
+                <!-- toolbar -->
+                <div class="toolbar">
+                    <input class="search-input" id="searchInput" placeholder="Buscar en esta tabla..." />
+                    <div class="toolbar-right">
+                        <span class="row-info" id="rowInfo"></span>
+                        <select class="limit-select" id="limitSelect">
+                            <option value="25">25 filas</option>
+                            <option value="50" selected>50 filas</option>
+                            <option value="100">100 filas</option>
+                            <option value="200">200 filas</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- tabla -->
+                <div class="table-wrap" id="tableWrap">
+                    <table id="dataTable">
+                        <thead id="tableHead"></thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+
+                <!-- paginación -->
+                <div class="pagination" id="pagination"></div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <div class="loading-bar" id="loadingBar"></div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

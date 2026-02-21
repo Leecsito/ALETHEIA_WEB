@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+
+# Base de Datos (SQLite)
+# Ignoramos los archivos temporales de la base de datos
+*.db-shm
+*.db-wal
+
+# Ignoramos la base de datos si quieres que cada uno use la suya
+# Si quieres que el proyecto ya suba con datos, comenta la siguiente línea:
+# aletheia.db
+
+# Entornos virtuales
+venv/
+.venv/
