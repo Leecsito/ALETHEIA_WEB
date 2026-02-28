@@ -216,14 +216,31 @@ def parse_kills(s):
         a, b = str(s).split('/'); return int(a), int(b)
     except: return 0, 0
 
-def parse_date(s, year=2026):
-    try:
-        clean = re.sub(r'^[A-Za-z]+,\s*', '', str(s).strip())
-        return datetime.strptime(f"{clean} {year}", "%B %d %Y").strftime("%Y-%m-%d")
-    except: return None
+def parse_date(s, fallback_year=None):
+    """
+    Detecta el año dentro del string si existe ('July 16, 2025' → 2025).
+    Si no hay año ('Saturday, August 23'), usa fallback_year.
+    """
+    if not s or str(s).strip() in ('nan', 'None', ''):
+        return None
+    raw = str(s).strip()
+    year_match = re.search(r'\b(20\d{2})\b', raw)
+    year = int(year_match.group(1)) if year_match else fallback_year
+    if not year:
+        return None
+    # Quitar día de semana del inicio: "Saturday, August 23" → "August 23"
+    clean = re.sub(r'^[A-Za-z]+,\s*', '', raw).strip()
+    # Quitar año si ya estaba en el string para no duplicarlo
+    clean_no_year = re.sub(r',?\s*20\d{2}', '', clean).strip()
+    for fmt in ("%B %d", "%B %d,"):
+        try:
+            return datetime.strptime(f"{clean_no_year} {year}", f"{fmt} %Y").strftime("%Y-%m-%d")
+        except:
+            continue
+    return None
 
 def clean_map_id(s):
-    m = re.match(r'(\d+_[a-z]+?)(?=pick|\d|$)', str(s).lower())
+    m = re.match(r'(\d+_[a-z]+?)(?=pick|\d|$|-)', str(s).lower())
     return m.group(1) if m else str(s)
 
 def normalize_winner(name):
@@ -249,12 +266,25 @@ def safe_nan(v):
 # ─── ETL FUNCTIONS ────────────────────────────────────────────────────────────
 def etl_matches(df, cur):
     rows, veto_rows = [], []
+
+    # Inferir año de fallback: del nombre del torneo o de las fechas con año
+    fallback_year = None
+    torneo_year = re.search(r'\b(20\d{2})\b', str(df['torneo'].iloc[0]) if len(df) > 0 else '')
+    if torneo_year:
+        fallback_year = int(torneo_year.group(1))
+    else:
+        for f in df['fecha'].dropna():
+            ym = re.search(r'\b(20\d{2})\b', str(f))
+            if ym:
+                fallback_year = int(ym.group(1))
+                break
+
     for _, r in df.iterrows():
         sa, sb = parse_score_match(r['score'])
         winner = r['equipo_a'] if sa > sb else r['equipo_b']
         patch  = str(r['patch']).replace('Patch ', '').strip() if pd.notna(r.get('patch')) else None
         rows.append((int(r['match_id']), str(r['torneo']), str(r['fase']),
-                     parse_date(r['fecha']), str(r['equipo_a']), str(r['equipo_b']),
+                     parse_date(r['fecha'], fallback_year), str(r['equipo_a']), str(r['equipo_b']),
                      sa, sb, winner, patch))
         mid   = int(r['match_id'])
         order = [1]

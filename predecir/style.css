@@ -1863,3 +1863,80 @@ main {
     color: var(--dim);
     min-width: 28px;
 }
+
+/* ── MAP THUMBNAIL en la grilla de resultados ── */
+.map-label {
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 90px;
+    padding: 0;
+}
+
+.map-thumb {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    opacity: 0.35;
+    transition: opacity .3s;
+    filter: grayscale(30%);
+}
+
+.map-row:hover .map-thumb {
+    opacity: 0.55;
+}
+
+.map-name-text {
+    position: relative;
+    z-index: 1;
+    padding: 6px 0 10px;
+    text-shadow: 0 1px 8px rgba(0, 0, 0, .9);
+}
+
+/* ── QUICK PICKER tiles con imagen ── */
+.mqp-tile {
+    position: relative;
+    overflow: hidden;
+}
+
+.mqp-img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    opacity: 0.2;
+    transition: opacity .2s;
+    filter: grayscale(40%);
+}
+
+.mqp-tile:not(.mqp-used):not(.mqp-full):hover .mqp-img {
+    opacity: 0.45;
+}
+
+.mqp-tile.mqp-used .mqp-img {
+    opacity: 0.08;
+}
+
+.mqp-name {
+    position: relative;
+    z-index: 1;
+}
+
+/* ── QUEUE ITEM imagen ── */
+.qi-map-img {
+    width: 44px;
+    height: 28px;
+    object-fit: cover;
+    border-radius: 2px;
+    opacity: 0.7;
+    margin-right: 6px;
+    flex-shrink: 0;
+    filter: grayscale(20%);
+}

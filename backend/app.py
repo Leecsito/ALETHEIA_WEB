@@ -17,7 +17,9 @@ sys.path.insert(0, os.path.join(ROOT, 'inicio'))
 sys.path.insert(0, os.path.join(ROOT, 'tablas'))
 sys.path.insert(0, os.path.join(ROOT, 'visualizar'))
 sys.path.insert(0, os.path.join(ROOT, 'predecir'))
+sys.path.insert(0, os.path.join(ROOT, 'predecir'))
 
+from predecir import predecir_bp
 from flask import Flask
 from flask_cors import CORS
 

@@ -362,8 +362,10 @@ function renderMaps(results, summary) {
       `;
     }
 
+    const mapImg = `../multimedia/maps/${mapName.toUpperCase()}.avif`;
     row.innerHTML = `
       <div class="map-label">
+        <img class="map-thumb" src="${mapImg}" alt="${mapName}" onerror="this.style.display='none'">
         <span class="map-name-text">${mapName.toUpperCase()}</span>
       </div>
       ${atk ? cell(atk, 'atk-cell') : '<div class="prediction-cell">—</div>'}
@@ -430,7 +432,7 @@ function showModeToggle() {
 }
 
 // ─── MATCH BUILDER ────────────────────────────────────────────────────────────
-const MAPS_LIST = ['Abyss', 'Bind', 'Fracture', 'Haven', 'Lotus', 'Pearl', 'Split'];
+const MAPS_LIST = ['Abyss', 'Ascent', 'Bind', 'Corrode', 'Fracture', 'Haven', 'Icebox', 'Lotus', 'Pearl', 'Split', 'Sunset'];
 const mapSlots = document.getElementById('mapSlots');
 const btnAddMap = document.getElementById('btnAddMap');
 const btnSimPart = document.getElementById('btnSimPartido');
@@ -457,7 +459,11 @@ function syncMatchBuilder() {
     const full = matchMaps.length >= 5;
     const tile = document.createElement('button');
     tile.className = `mqp-tile${used ? ' mqp-used' : ''}${(!used && full) ? ' mqp-full' : ''}`;
-    tile.innerHTML = `<span class="mqp-name">${m.toUpperCase()}</span>`;
+    const tImg = `../multimedia/maps/${m.toUpperCase()}.avif`;
+    tile.innerHTML = `
+      <img class="mqp-img" src="${tImg}" alt="${m}" onerror="this.style.display='none'">
+      <span class="mqp-name">${m.toUpperCase()}</span>
+    `;
     tile.disabled = used || full;
     if (!used && !full) {
       tile.addEventListener('click', () => {
@@ -485,6 +491,7 @@ function syncMatchBuilder() {
       item.innerHTML = `
         <div class="qi-left">
           <span class="qi-num">0${i + 1}</span>
+          <img class="qi-map-img" src="../multimedia/maps/${cfg.map_name.toUpperCase()}.avif" alt="${cfg.map_name}" onerror="this.style.display='none'">
           <span class="qi-mapname">${cfg.map_name.toUpperCase()}</span>
           ${isDecider ? '<span class="qi-decider-badge">DECIDER</span>' : ''}
         </div>
