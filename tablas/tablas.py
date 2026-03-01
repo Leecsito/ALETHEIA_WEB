@@ -5,7 +5,10 @@ Permite ver el contenido raw de cualquier tabla de la BD con paginacion.
 """
 
 from flask import Blueprint, request, jsonify
-from conexion import get_conn, release_conn
+try:
+    from backend.conexion import get_conn, release_conn
+except ImportError:
+    from conexion import get_conn, release_conn
 
 tablas_bp = Blueprint('tablas', __name__)
 
