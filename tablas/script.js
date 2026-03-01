@@ -1,4 +1,5 @@
-const API = 'http://localhost:5000/api';
+const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const API = isLocal ? `${window.location.origin}/api` : 'https://aletheia-web.onrender.com/api';
 
 let currentTable = null;
 let currentPage = 1;

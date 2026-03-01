@@ -1,4 +1,5 @@
-const API = 'http://localhost:5000/api';
+const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+const API = isLocal ? `${window.location.origin}/api` : 'https://aletheia-web.onrender.com/api';
 
 let teams = [];
 let selectedA = null;
@@ -432,7 +433,7 @@ function showModeToggle() {
 }
 
 // ─── MATCH BUILDER ────────────────────────────────────────────────────────────
-const MAPS_LIST = ['Abyss', 'Ascent', 'Bind', 'Corrode', 'Fracture', 'Haven', 'Icebox', 'Lotus', 'Pearl', 'Split', 'Sunset'];
+const MAPS_LIST = ['Abyss', 'Ascent', 'Bind', 'Breeze', 'Corrode', 'Fracture', 'Haven', 'Icebox', 'Lotus', 'Pearl', 'Split', 'Sunset'];
 const mapSlots = document.getElementById('mapSlots');
 const btnAddMap = document.getElementById('btnAddMap');
 const btnSimPart = document.getElementById('btnSimPartido');

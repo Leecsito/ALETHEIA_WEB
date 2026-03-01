@@ -20,12 +20,15 @@ from flask import Blueprint, jsonify, request
 import numpy as np
 import math
 from datetime import date as date_type, datetime
-from conexion import get_conn, release_conn
+try:
+    from backend.conexion import get_conn, release_conn
+except ImportError:
+    from conexion import get_conn, release_conn
 
 predecir_bp = Blueprint('predecir', __name__)
 
 # ─── CONFIGURACIÓN DEL MODELO ────────────────────────────────────────────────
-MAPS            = ['Abyss', 'Ascent', 'Bind', 'Corrode', 'Fracture', 'Haven', 'Icebox', 'Lotus', 'Pearl', 'Split', 'Sunset']
+MAPS            = ['Abyss', 'Ascent', 'Bind', 'Breeze', 'Corrode', 'Fracture', 'Haven', 'Icebox', 'Lotus', 'Pearl', 'Split', 'Sunset']
 YEAR_FILTER     = '2026'   # ← cambiar aquí cuando llegue 2026
 DECAY_HALF_LIFE = 75       # días: datos de hace 75 días valen ~50% vs datos recientes
 
@@ -34,6 +37,7 @@ MAP_META_ATK = {
     'Abyss':    0.566,  # datos reales del dataset 2026
     'Ascent':   0.455,  # DEF-heavy
     'Bind':     0.507,
+    'Breeze':   0.510,  # ligeramente ATK-heavy
     'Corrode':  0.476,  # DEF-heavy
     'Fracture': 0.502,
     'Haven':    0.512,

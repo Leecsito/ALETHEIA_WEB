@@ -5,7 +5,10 @@ Rutas: /api/matches, /api/player-stats, /api/maps-stats,
 """
 
 from flask import Blueprint, jsonify
-from conexion import get_conn, release_conn
+try:
+    from backend.conexion import get_conn, release_conn
+except ImportError:
+    from conexion import get_conn, release_conn
 
 visualizar_bp = Blueprint('visualizar', __name__)
 
