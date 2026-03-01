@@ -432,7 +432,7 @@ function showModeToggle() {
 }
 
 // ─── MATCH BUILDER ────────────────────────────────────────────────────────────
-const MAPS_LIST = ['Abyss', 'Ascent', 'Bind', 'Corrode', 'Fracture', 'Haven', 'Icebox', 'Lotus', 'Pearl', 'Split', 'Sunset'];
+const MAPS_LIST = ['Abyss', 'Ascent', 'Bind', 'Breeze', 'Corrode', 'Fracture', 'Haven', 'Icebox', 'Lotus', 'Pearl', 'Split', 'Sunset'];
 const mapSlots = document.getElementById('mapSlots');
 const btnAddMap = document.getElementById('btnAddMap');
 const btnSimPart = document.getElementById('btnSimPartido');
