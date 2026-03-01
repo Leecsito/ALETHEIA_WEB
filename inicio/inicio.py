@@ -9,7 +9,10 @@ import pandas as pd
 import re
 import io
 from datetime import datetime
-from conexion import get_conn, release_conn
+try:
+    from backend.conexion import get_conn, release_conn
+except ImportError:
+    from conexion import get_conn, release_conn
 
 inicio_bp = Blueprint('inicio', __name__)
 

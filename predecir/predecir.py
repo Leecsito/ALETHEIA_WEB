@@ -20,7 +20,10 @@ from flask import Blueprint, jsonify, request
 import numpy as np
 import math
 from datetime import date as date_type, datetime
-from conexion import get_conn, release_conn
+try:
+    from backend.conexion import get_conn, release_conn
+except ImportError:
+    from conexion import get_conn, release_conn
 
 predecir_bp = Blueprint('predecir', __name__)
 
