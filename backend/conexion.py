@@ -9,8 +9,8 @@ Sin servidor, sin pool, sin límite de conexiones.
 import sqlite3
 import os
 
-# Ruta al archivo .db — mismo directorio que este archivo (backend/)
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'aletheia.db')
+# Ruta al archivo .db — usaremos variable de entorno para producción, local por defecto
+DB_PATH = os.environ.get('DATABASE_PATH', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'aletheia.db'))
 
 
 def get_conn():

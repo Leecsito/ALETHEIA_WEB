@@ -1,0 +1,35 @@
+services:
+  # Backend application (Python / Flask)
+  - type: web
+    name: aletheia-backend
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn backend.app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      # Al usar disco persistente en Render, guardamos la base de datos en él
+      # - key: DATABASE_PATH  # DESCOMENTAR SI SE USA PLAN PAGO
+      #   value: /data/aletheia.db 
+    
+    # ⚠️ MUY IMPORTANTE ⚠️
+    # SQLite en Render se borrará con cada reinicio a menos que agregues un volumen (Disk).
+    # Los discos en Render SOLO están disponibles para cuentas con un plan pago.
+    # SI TIENES PLAN PAGO, DESCOMENTA ESTA SECCIÓN Y DATABASE_PATH ARRIBA.
+    # disk:
+    #   name: aletheia-data
+    #   mountPath: /data
+    #   sizeGB: 1
+
+  # Frontend aplications (Static files)
+  - type: web
+    name: aletheia-frontend
+    env: static
+    # Como el proyecto consta de múltiples carpetas HTML estáticas en la raíz, publicamos la raíz
+    buildCommand: "echo 'Frontend ready'"
+    staticPublishPath: .
+    # Es necesario decirle a static que cualquier ruta que comience con '/' se muestre
+    routes:
+      - type: rewrite
+        source: /
+        destination: /inicio/index.html

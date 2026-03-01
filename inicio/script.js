@@ -1,4 +1,4 @@
-const API = 'http://localhost:5000/api';
+const API = window.location.hostname.includes('localhost') ? 'http://localhost:5000/api' : 'https://aletheia-backend.onrender.com/api';
 
 // ─── MAPA: nombre base de archivo → key del card ──────────────────────────
 const FILE_MAP = {
