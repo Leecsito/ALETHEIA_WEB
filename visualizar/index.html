@@ -1,121 +1,147 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ALETHEIA — Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
 
-<div class="bg-grid"></div>
+  <div class="bg-grid"></div>
 
-<header>
-  <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
-  <nav>
-    <button class="nav-btn active" data-tab="partidos">PARTIDOS</button>
-    <button class="nav-btn" data-tab="jugadores">JUGADORES</button>
-    <button class="nav-btn" data-tab="mapas">MAPAS</button>
-    <button class="nav-btn" data-tab="economia">ECONOMÍA</button>
-    <button class="nav-btn" data-tab="agentes">AGENTES</button>
-  </nav>
-  <a href="../inicio/index.html" class="btn-etl">ETL ↑</a>
-</header>
+  <header>
+    <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
+    <nav>
+      <button class="nav-btn active" data-tab="partidos">PARTIDOS</button>
+      <button class="nav-btn" data-tab="jugadores">JUGADORES</button>
+      <button class="nav-btn" data-tab="mapas">MAPAS</button>
+      <button class="nav-btn" data-tab="economia">ECONOMÍA</button>
+      <button class="nav-btn" data-tab="agentes">AGENTES</button>
+    </nav>
+    <a href="../inicio/index.html" class="btn-etl">ETL ↑</a>
+  </header>
 
-<main>
+  <main>
 
-  <!-- ── PARTIDOS ── -->
-  <section class="tab-panel active" id="tab-partidos">
-    <div class="panel-header">
-      <h2>PARTIDOS <span class="count" id="count-partidos"></span></h2>
-      <input class="search" id="search-partidos" placeholder="Buscar equipo, fase..."/>
-    </div>
-    <div class="table-wrap">
-      <table id="tbl-partidos">
-        <thead><tr>
-          <th>ID</th><th>FECHA</th><th>FASE</th>
-          <th>EQUIPO A</th><th>SCORE</th><th>EQUIPO B</th>
-          <th>GANADOR</th><th>MAPAS</th><th>PATCH</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+    <!-- ── PARTIDOS ── -->
+    <section class="tab-panel active" id="tab-partidos">
+      <div class="panel-header">
+        <h2>PARTIDOS <span class="count" id="count-partidos"></span></h2>
+        <input class="search" id="search-partidos" placeholder="Buscar equipo, fase..." />
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-partidos">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>FECHA</th>
+              <th>FASE</th>
+              <th>EQUIPO A</th>
+              <th>SCORE</th>
+              <th>EQUIPO B</th>
+              <th>GANADOR</th>
+              <th>MAPAS</th>
+              <th>PATCH</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
 
-  <!-- ── JUGADORES ── -->
-  <section class="tab-panel" id="tab-jugadores">
-    <div class="panel-header">
-      <h2>JUGADORES <span class="count" id="count-jugadores"></span></h2>
-      <input class="search" id="search-jugadores" placeholder="Buscar jugador, equipo..."/>
-    </div>
-    <div class="table-wrap">
-      <table id="tbl-jugadores">
-        <thead><tr>
-          <th>JUGADOR</th><th>EQUIPO</th><th>MAPS</th>
-          <th data-sort="avg_rating">RATING ↕</th>
-          <th data-sort="avg_acs">ACS ↕</th>
-          <th data-sort="total_kills">K ↕</th>
-          <th>D</th><th>A</th>
-          <th data-sort="avg_hs">HS% ↕</th>
-          <th data-sort="avg_adr">ADR ↕</th>
-          <th data-sort="avg_kast">KAST ↕</th>
-          <th>FK</th><th>FD</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+    <!-- ── JUGADORES ── -->
+    <section class="tab-panel" id="tab-jugadores">
+      <div class="panel-header">
+        <h2>JUGADORES <span class="count" id="count-jugadores"></span></h2>
+        <input class="search" id="search-jugadores" placeholder="Buscar jugador, equipo..." />
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-jugadores">
+          <thead>
+            <tr>
+              <th>JUGADOR</th>
+              <th>EQUIPO</th>
+              <th>MAPS</th>
+              <th data-sort="avg_rating">RATING ↕</th>
+              <th data-sort="avg_acs">ACS ↕</th>
+              <th data-sort="total_kills">K ↕</th>
+              <th>D</th>
+              <th>A</th>
+              <th data-sort="avg_hs">HS% ↕</th>
+              <th data-sort="avg_adr">ADR ↕</th>
+              <th data-sort="avg_kast">KAST ↕</th>
+              <th>FK</th>
+              <th>FD</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
 
-  <!-- ── MAPAS ── -->
-  <section class="tab-panel" id="tab-mapas">
-    <div class="panel-header">
-      <h2>ESTADÍSTICAS DE MAPAS</h2>
-    </div>
-    <div class="cards-grid" id="cards-mapas"></div>
-    <div class="panel-header" style="margin-top:40px">
-      <h2>RESULTADOS DE RONDAS</h2>
-    </div>
-    <div class="cards-grid" id="cards-rounds"></div>
-  </section>
+    <!-- ── MAPAS ── -->
+    <section class="tab-panel" id="tab-mapas">
+      <div class="panel-header">
+        <h2>ESTADÍSTICAS DE MAPAS</h2>
+      </div>
+      <div class="cards-grid" id="cards-mapas"></div>
+      <div class="panel-header" style="margin-top:40px">
+        <h2>RESULTADOS DE RONDAS</h2>
+      </div>
+      <div class="cards-grid" id="cards-rounds"></div>
+    </section>
 
-  <!-- ── ECONOMÍA ── -->
-  <section class="tab-panel" id="tab-economia">
-    <div class="panel-header">
-      <h2>ECONOMÍA POR EQUIPO <span class="count" id="count-economia"></span></h2>
-      <input class="search" id="search-economia" placeholder="Buscar equipo..."/>
-    </div>
-    <div class="table-wrap">
-      <table id="tbl-economia">
-        <thead><tr>
-          <th>EQUIPO</th><th>MAPAS</th><th>PISTOL WON</th>
-          <th>ECO WR</th><th>SEMI-ECO WR</th>
-          <th>SEMI-BUY WR</th><th>FULL BUY WR</th>
-          <th>ECO J/G</th><th>S.ECO J/G</th>
-          <th>S.BUY J/G</th><th>F.BUY J/G</th>
-        </tr></thead>
-        <tbody></tbody>
-      </table>
-    </div>
-  </section>
+    <!-- ── ECONOMÍA ── -->
+    <section class="tab-panel" id="tab-economia">
+      <div class="panel-header">
+        <h2>ECONOMÍA POR EQUIPO <span class="count" id="count-economia"></span></h2>
+        <input class="search" id="search-economia" placeholder="Buscar equipo..." />
+      </div>
+      <div class="table-wrap">
+        <table id="tbl-economia">
+          <thead>
+            <tr>
+              <th>EQUIPO</th>
+              <th>MAPAS</th>
+              <th>PISTOL WON</th>
+              <th>ECO WR</th>
+              <th>SEMI-ECO WR</th>
+              <th>SEMI-BUY WR</th>
+              <th>FULL BUY WR</th>
+              <th>ECO J/G</th>
+              <th>S.ECO J/G</th>
+              <th>S.BUY J/G</th>
+              <th>F.BUY J/G</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
 
-  <!-- ── AGENTES ── -->
-  <section class="tab-panel" id="tab-agentes">
-    <div class="panel-header">
-      <h2>PICK RATE DE AGENTES</h2>
-    </div>
-    <div class="agents-grid" id="agents-grid"></div>
-  </section>
+    <!-- ── AGENTES ── -->
+    <section class="tab-panel" id="tab-agentes">
+      <div class="panel-header">
+        <h2>PICK RATE DE AGENTES</h2>
+      </div>
+      <div class="agents-grid" id="agents-grid"></div>
+    </section>
 
-</main>
+  </main>
 
-<div class="loading-overlay" id="loadingOverlay">
-  <div class="spinner"></div>
-  <div class="loading-text">Cargando datos...</div>
-</div>
+  <div class="loading-overlay" id="loadingOverlay">
+    <div class="spinner"></div>
+    <div class="loading-text">Cargando datos...</div>
+  </div>
 
-<script src="script.js"></script>
+  <script src="script.js"></script>
 </body>
+
 </html>
