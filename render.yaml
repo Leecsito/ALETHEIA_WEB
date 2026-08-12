@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: aletheia-web
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn wsgi:app
+    envVars:
+      - key: TURSO_DATABASE_URL
+        value: libsql://aletheia-leecsito.aws-us-east-1.turso.io
+      - key: TURSO_AUTH_TOKEN
+        value: eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODY1NTk2ODMsImlkIjoiMDE5ZmY3MjItZDAwMS03OWQwLWJkNWQtM2Y1NGRmMDQ2ZjU3Iiwia2lkIjoiYzhBUjBCOG9VRlF6ekFULWFFV210X3NnS1o2YlNvRHRxdHFGeWtjN2d2cyIsInJpZCI6ImY4ZjYxNWE4LWFhNmEtNGUyMy04ZGJjLTBmNTg0ZDlmNWVhMCJ9.fS0i12h8SYsyP2YpY1fbf-ktNdxQ9FCJdEkmlUqG69n5VGJqhsZ9lKUyAoP-Vho4r9pJwSA8B485gOkgUITIDw
