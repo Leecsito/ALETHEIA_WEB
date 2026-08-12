@@ -1,5 +1,4 @@
-const isLocal = ['localhost', '127.0.0.1'].includes(window.location.hostname);
-const API = isLocal ? `${window.location.origin}/api` : 'https://aletheia-web.onrender.com/api';
+const API = `${window.location.origin}/api`;
 
 // ─── MAPA: nombre base de archivo → key del card ──────────────────────────
 const FILE_MAP = {
