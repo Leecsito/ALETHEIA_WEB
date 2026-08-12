@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ALETHEIA — Exportar Tablas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="bg-grid"></div>
+  <div class="scanline"></div>
+
+  <header>
+    <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
+    <div class="header-title">EXPORTAR <span class="header-badge">DATOS</span></div>
+    <div class="header-nav">
+      <a href="../inicio/index.html" class="btn-nav">ETL ↑</a>
+      <a href="../tablas/index.html" class="btn-nav">TABLAS</a>
+      <a href="../visualizar/index.html" class="btn-nav">VISUALIZAR</a>
+      <a href="../predecir/index.html" class="btn-nav">PREDECIR</a>
+      <a href="../aletheia/index.html" class="btn-nav">AVANZADO</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>EXPORTAR <span class="accent">TABLAS</span></h1>
+      <p class="subtitle">Descarga cualquier tabla individualmente en formato CSV, Excel o JSON, o descarga la base de datos completa en un archivo ZIP.</p>
+    </section>
+
+    <!-- ACCIÓN PRINCIPAL: BULK ZIP -->
+    <div class="top-action-area">
+      <button class="btn-zip" id="btnExportZip">
+        <span class="zip-icon">📦</span>
+        DESCARGAR TODAS LAS TABLAS EN ZIP (.CSV)
+      </button>
+      <div class="action-hint">Genera un paquete .zip comprimido listo para descargar</div>
+    </div>
+
+    <!-- REJILLA DE TABLAS -->
+    <div class="section-label">
+      TABLAS DISPONIBLES EN LA BASE DE DATOS
+    </div>
+
+    <div class="tables-grid" id="tablesGrid">
+      <div class="loading-spinner">Cargando tablas...</div>
+    </div>
+  </main>
+
+  <script src="script.js"></script>
+</body>
+
+</html>
