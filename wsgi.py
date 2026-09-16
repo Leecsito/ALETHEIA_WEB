@@ -2,10 +2,10 @@
 ALETHEIA — WSGI entry point (ejecutar desde la raíz del proyecto)
 
 Uso local:
-    gunicorn wsgi:app --bind 0.0.0.0:5000
+    gunicorn wsgi:app --bind 0.0.0.0:5000 --worker-class gthread --threads 4 --timeout 300
 
 Uso en Render (Start Command):
-    gunicorn wsgi:app
+    gunicorn wsgi:app --worker-class gthread --workers 1 --threads 4 --timeout 300
 """
 
 import os

@@ -275,6 +275,19 @@ def ss(v):
     s = str(v).strip()
     return s if s and s.lower() != 'nan' else None
 
+def exec_batch(cur, sql_prefix, rows, cols, suffix=''):
+    """
+    Inserción por lotes multi-fila: '(?,?,...),(?,?,...)'.
+    Reduce drásticamente los round-trips contra Turso remoto frente a executemany.
+    """
+    if not rows:
+        return
+    chunk = max(1, 900 // max(1, cols))  # ~900 parámetros por sentencia (límite seguro)
+    for i in range(0, len(rows), chunk):
+        part = rows[i:i + chunk]
+        placeholders = ",".join(["(" + ",".join(["?"] * cols) + ")"] * len(part))
+        cur.execute(sql_prefix + placeholders + suffix, [v for r_ in part for v in r_])
+
 def parse_kills(s):
     try:
         a, b = str(s).split('/'); return int(a), int(b)
@@ -362,12 +375,12 @@ def etl_matches(df, cur):
         add_veto(r.get('pick_a'),'pick','a', a_id); add_veto(r.get('pick_b'),'pick','b', b_id)
         add_veto(r.get('ban_a'),'ban','a', a_id);   add_veto(r.get('ban_b'),'ban','b', b_id)
         add_veto(r.get('decider'),'decider',None,None)
-    cur.executemany(
-        "INSERT OR IGNORE INTO matches (match_id,tournament,phase,match_date,team_a,team_b,score_a,score_b,winner,patch,team_a_id,team_b_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-        rows)
-    cur.executemany(
-        "INSERT INTO match_veto (match_id,action,team,map_name,veto_order,team_id) VALUES (?,?,?,?,?,?)",
-        veto_rows)
+    exec_batch(cur,
+        "INSERT OR IGNORE INTO matches (match_id,tournament,phase,match_date,team_a,team_b,score_a,score_b,winner,patch,team_a_id,team_b_id) VALUES ",
+        rows, 12)
+    exec_batch(cur,
+        "INSERT INTO match_veto (match_id,action,team,map_name,veto_order,team_id) VALUES ",
+        veto_rows, 6)
     return len(rows)
 
 
@@ -387,12 +400,11 @@ def etl_maps(df, cur, match_teams):
         rows.append((str(round_id), int(mid), map_name, map_num,
                      picker, side_chosen, side_top_start, ah1, ah2, bh1, bh2,
                      str(r.get('time','')), picker_id))
-    cur.executemany(
+    exec_batch(cur,
         """INSERT OR IGNORE INTO maps
            (map_id,match_id,map_name,map_number,picker,side_chosen,side_top_start,
-            score_a_attack,score_a_defense,score_b_attack,score_b_defense,duration,picker_id)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        rows)
+            score_a_attack,score_a_defense,score_b_attack,score_b_defense,duration,picker_id) VALUES """,
+        rows, 13)
     return len(rows)
 
 
@@ -420,13 +432,12 @@ def etl_rounds(df_rondas, df_eco, cur, team_names):
                      int(eg('spend_top',0) or 0), str(eg('category_top','') or ''),
                      str(eg('team_bot','') or ''), int(eg('bank_bot',0) or 0),
                      int(eg('spend_bot',0) or 0), str(eg('category_bot','') or '')))
-    cur.executemany(
+    exec_batch(cur,
         """INSERT OR IGNORE INTO rounds
            (map_id,round_num,winner,result_type,winning_side,
             team_top,bank_top,spend_top,category_top,
-            team_bot,bank_bot,spend_bot,category_bot)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-        rows)
+            team_bot,bank_bot,spend_bot,category_bot) VALUES """,
+        rows, 13)
     return len(rows)
 
 
@@ -439,9 +450,9 @@ def etl_stats(df, cur):
              sf(r['adr']), sf(r['hs_percent']), si(r['fk']), si(r['fd']),
              ii(r.get('player_id')), ii(r.get('team_id')))
             for _, r in df.iterrows()]
-    cur.executemany(
-        "INSERT INTO player_stats (match_id,map_id,player_name,team_name,side,agent,rating,acs,kills,deaths,assists,kast,adr,hs_percent,fk,fd,player_id,team_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        rows)
+    exec_batch(cur,
+        "INSERT INTO player_stats (match_id,map_id,player_name,team_name,side,agent,rating,acs,kills,deaths,assists,kast,adr,hs_percent,fk,fd,player_id,team_id) VALUES ",
+        rows, 18)
     return len(rows)
 
 
@@ -453,9 +464,9 @@ def etl_economy_summary(df, cur):
         rows.append((si(r['match_id']), str(r['map_id']), str(r['team']),
                      si(r['pistol_won']), ep,ew,sep,sew,sbp,sbw,fbp,fbw,
                      ii(r.get('team_id'))))
-    cur.executemany(
-        "INSERT INTO economy_summary (match_id,map_id,team,pistol_won,eco_played,eco_won,semi_eco_played,semi_eco_won,semi_buy_played,semi_buy_won,full_buy_played,full_buy_won,team_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        rows)
+    exec_batch(cur,
+        "INSERT INTO economy_summary (match_id,map_id,team,pistol_won,eco_played,eco_won,semi_eco_played,semi_eco_won,semi_buy_played,semi_buy_won,full_buy_played,full_buy_won,team_id) VALUES ",
+        rows, 13)
     return len(rows)
 
 
@@ -466,9 +477,9 @@ def etl_duels(df, cur, nick_to_pid):
         rows.append((int(r['match_id']), str(r['map_id']), str(r['tipo_kill']),
                      str(r['player_a']), str(r['player_b']), ka, kb,
                      nick_to_pid.get(str(r['player_a'])), nick_to_pid.get(str(r['player_b']))))
-    cur.executemany(
-        "INSERT INTO duels (match_id,map_id,duel_type,player_a,player_b,kills_a,kills_b,player_a_id,player_b_id) VALUES (?,?,?,?,?,?,?,?,?)",
-        rows)
+    exec_batch(cur,
+        "INSERT INTO duels (match_id,map_id,duel_type,player_a,player_b,kills_a,kills_b,player_a_id,player_b_id) VALUES ",
+        rows, 9)
     return len(rows)
 
 
@@ -480,22 +491,22 @@ def etl_multikills(df, cur, nick_to_pid):
                      si(r.get('v1')),si(r.get('v2')),si(r.get('v3')),si(r.get('v4')),si(r.get('v5')),
                      si(r.get('econ')),si(r.get('pl')),si(r.get('de')),
                      nick_to_pid.get(str(r['player_name']))))
-    cur.executemany(
-        "INSERT INTO multikills_clutches (match_id,map_id,player_name,agent,k2,k3,k4,k5,v1,v2,v3,v4,v5,econ_rating,plants,defuses,player_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        rows)
+    exec_batch(cur,
+        "INSERT INTO multikills_clutches (match_id,map_id,player_name,agent,k2,k3,k4,k5,v1,v2,v3,v4,v5,econ_rating,plants,defuses,player_id) VALUES ",
+        rows, 17)
     return len(rows)
 
 
 def etl_teams(df, cur):
     rows = [(ii(r['team_id']), ss(r.get('team_name')), ss(r.get('region')), ss(r.get('url')))
             for _, r in df.iterrows() if ii(r.get('team_id')) is not None]
-    cur.executemany(
-        """INSERT INTO teams (team_id,team_name,region,url) VALUES (?,?,?,?)
-           ON CONFLICT(team_id) DO UPDATE SET
+    exec_batch(cur,
+        "INSERT INTO teams (team_id,team_name,region,url) VALUES ",
+        rows, 4,
+        suffix=""" ON CONFLICT(team_id) DO UPDATE SET
                team_name = COALESCE(excluded.team_name, teams.team_name),
                region    = COALESCE(excluded.region, teams.region),
-               url       = COALESCE(excluded.url, teams.url)""",
-        rows)
+               url       = COALESCE(excluded.url, teams.url)""")
     return len(rows)
 
 
@@ -503,14 +514,14 @@ def etl_players(df, cur):
     rows = [(ii(r['player_id']), ss(r.get('nickname')), ss(r.get('real_name')),
              ii(r.get('team_id')), ss(r.get('team_name')))
             for _, r in df.iterrows() if ii(r.get('player_id')) is not None]
-    cur.executemany(
-        """INSERT INTO players (player_id,nickname,real_name,team_id,team_name) VALUES (?,?,?,?,?)
-           ON CONFLICT(player_id) DO UPDATE SET
+    exec_batch(cur,
+        "INSERT INTO players (player_id,nickname,real_name,team_id,team_name) VALUES ",
+        rows, 5,
+        suffix=""" ON CONFLICT(player_id) DO UPDATE SET
                nickname  = COALESCE(excluded.nickname, players.nickname),
                real_name = COALESCE(excluded.real_name, players.real_name),
                team_id   = COALESCE(excluded.team_id, players.team_id),
-               team_name = COALESCE(excluded.team_name, players.team_name)""",
-        rows)
+               team_name = COALESCE(excluded.team_name, players.team_name)""")
     return len(rows)
 
 
@@ -578,9 +589,9 @@ def run_etl():
                 tid = ii(r.get('team_id'))
                 if tid is not None and tid not in team_names:
                     team_names[tid] = ss(r.get('team_name'))
-        cur.executemany(
-            "INSERT OR IGNORE INTO teams (team_id,team_name) VALUES (?,?)",
-            [(tid, name) for tid, name in team_names.items() if tid is not None])
+        exec_batch(cur,
+            "INSERT OR IGNORE INTO teams (team_id,team_name) VALUES ",
+            [(tid, name) for tid, name in team_names.items() if tid is not None], 2)
 
         # ── 2) PLAYERS (antes de player_stats/duels/multikills) ──
         nick_to_pid = {}  # nickname -> player_id
@@ -599,9 +610,9 @@ def run_etl():
                     continue
                 seen.add(pid)
                 player_rows.append((pid, nick, ii(r.get('team_id')), ss(r.get('team_name'))))
-            cur.executemany(
-                "INSERT OR IGNORE INTO players (player_id,nickname,team_id,team_name) VALUES (?,?,?,?)",
-                player_rows)
+            exec_batch(cur,
+                "INSERT OR IGNORE INTO players (player_id,nickname,team_id,team_name) VALUES ",
+                player_rows, 4)
 
         # Mapa nickname -> player_id (fuente principal: stats; refuerzo: vct_jugadores)
         if 'vlr_stats_players_sides' in files:
