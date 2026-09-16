@@ -171,6 +171,40 @@ async function checkStatus() {
 }
 
 // ─── ETL RUN ─────────────────────────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function logInserted(ins) {
+  if (!ins) return;
+  if (ins.matches != null) log(`  matches:          ${ins.matches} partidos`, 'success');
+  if (ins.maps != null) log(`  maps:             ${ins.maps} mapas`, 'success');
+  if (ins.rounds != null) log(`  rounds:           ${ins.rounds} rondas`, 'success');
+  if (ins.player_stats != null) log(`  player_stats:     ${ins.player_stats} filas`, 'success');
+  if (ins.economy_summary != null) log(`  economy_summary:  ${ins.economy_summary} filas`, 'success');
+  if (ins.duels != null) log(`  duels:            ${ins.duels} enfrentamientos`, 'success');
+  if (ins.multikills != null) log(`  multikills:       ${ins.multikills} filas`, 'success');
+  if (ins.teams != null) log(`  teams:            ${ins.teams} equipos`, 'success');
+  if (ins.players != null) log(`  players:          ${ins.players} jugadores`, 'success');
+}
+
+// Consulta el estado del job hasta que termine (evita el timeout del worker).
+async function waitForEtl(jobId) {
+  let pct = 25;
+  for (;;) {
+    await sleep(1500);
+    const res = await fetch(`${API}/etl-status/${jobId}`);
+    if (res.status === 404) throw new Error('El trabajo expiró o el servidor se reinició.');
+    const data = await res.json();
+    if (data.status === 'done') return data;
+    if (data.status === 'error') {
+      const err = new Error(data.error || 'Error en ETL');
+      err.trace = data.trace;
+      throw err;
+    }
+    pct = Math.min(90, pct + 5);
+    setProgress(pct, data.step ? `Procesando: ${data.step}...` : 'Procesando ETL...');
+  }
+}
+
 btnRun.addEventListener('click', async () => {
   btnRun.disabled = true;
   log('─────────────────────────────────', 'info');
@@ -183,36 +217,27 @@ btnRun.addEventListener('click', async () => {
   log(`Subiendo ${Object.keys(state.files).length} Excel al backend...`, 'info');
 
   try {
-    setProgress(30, 'Procesando ETL...');
+    setProgress(25, 'Iniciando proceso...');
     const res = await fetch(`${API}/etl`, { method: 'POST', body: form });
-    setProgress(80, 'Insertando en base de datos...');
     const data = await res.json();
 
-    if (data.ok) {
-      setProgress(100, 'ETL completado.');
-      log('─────────────────────────────────', 'info');
-      log('✓ ETL completado exitosamente.', 'success');
-      const ins = data.inserted;
-      if (ins.matches != null) log(`  matches:          ${ins.matches} partidos`, 'success');
-      if (ins.maps != null) log(`  maps:             ${ins.maps} mapas`, 'success');
-      if (ins.rounds != null) log(`  rounds:           ${ins.rounds} rondas`, 'success');
-      if (ins.player_stats != null) log(`  player_stats:     ${ins.player_stats} filas`, 'success');
-      if (ins.economy_summary != null) log(`  economy_summary:  ${ins.economy_summary} filas`, 'success');
-      if (ins.duels != null) log(`  duels:            ${ins.duels} enfrentamientos`, 'success');
-      if (ins.multikills != null) log(`  multikills:       ${ins.multikills} filas`, 'success');
-      if (ins.teams != null) log(`  teams:            ${ins.teams} equipos`, 'success');
-      if (ins.players != null) log(`  players:          ${ins.players} jugadores`, 'success');
-      log('─────────────────────────────────', 'info');
-      checkStatus(); hideProgress(); resetCards();
-    } else {
-      setProgress(0, 'Error en ETL.');
-      log(`✕ Error: ${data.error}`, 'error');
-      if (data.trace) log(data.trace.split('\n').slice(-3).join(' '), 'error');
-      hideProgress();
+    if (!data.ok || !data.job_id) {
+      throw new Error(data.error || `Respuesta inesperada del servidor (${res.status})`);
     }
+
+    log('Procesando en segundo plano (puede tardar)...', 'accent');
+    const final = await waitForEtl(data.job_id);
+
+    setProgress(100, 'ETL completado.');
+    log('─────────────────────────────────', 'info');
+    log('✓ ETL completado exitosamente.', 'success');
+    logInserted(final.inserted);
+    log('─────────────────────────────────', 'info');
+    checkStatus(); hideProgress(); resetCards();
   } catch (e) {
-    setProgress(0, 'Error de conexión.');
+    setProgress(0, 'Error en ETL.');
     log(`✕ ${e.message}`, 'error');
+    if (e.trace) log(String(e.trace).split('\n').slice(-3).join(' '), 'error');
     hideProgress();
   } finally {
     btnRun.disabled = !state.files['vct_partidos'];

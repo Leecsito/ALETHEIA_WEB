@@ -8,6 +8,10 @@ from flask import Blueprint, request, jsonify
 import pandas as pd
 import re
 import io
+import threading
+import uuid
+import time
+import traceback
 from datetime import datetime
 try:
     from backend.conexion import get_conn, release_conn
@@ -15,6 +19,25 @@ except ImportError:
     from conexion import get_conn, release_conn
 
 inicio_bp = Blueprint('inicio', __name__)
+
+# ─── JOBS ETL EN SEGUNDO PLANO ────────────────────────────────────────────────
+# El ETL puede tardar más que el timeout del worker (30 s por defecto en Gunicorn).
+# Por eso se ejecuta en un hilo y el cliente consulta el estado con /api/etl-status.
+ETL_JOBS = {}
+ETL_JOBS_LOCK = threading.Lock()
+ETL_JOB_TTL = 3600  # segundos que se conserva un job finalizado
+
+def _prune_jobs():
+    now = time.time()
+    with ETL_JOBS_LOCK:
+        expired = [jid for jid, j in ETL_JOBS.items()
+                   if j.get('finished') and now - j['finished'] > ETL_JOB_TTL]
+        for jid in expired:
+            ETL_JOBS.pop(jid, None)
+
+def _job_set(job, **kw):
+    if job is not None:
+        job.update(kw)
 
 # ─── SQL: CREAR TABLAS ────────────────────────────────────────────────────────
 CREATE_TABLES_SQL = [
@@ -544,32 +567,19 @@ def init_db():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@inicio_bp.route('/api/etl', methods=['POST'])
-def run_etl():
-    # Solo vct_partidos es obligatorio (es la "espina dorsal" de match_id)
-    # El resto son opcionales — útil para torneos con datos incompletos (ej. China)
-    all_files = [
-        'vct_partidos', 'vlr_mapas', 'vlr_rondas', 'vlr_economia_rondas',
-        'vlr_stats_players_sides', 'vlr_economia_resumen',
-        'vlr_enfrentamientos', 'vlr_multikills_clutches',
-        'vct_equipos', 'vct_jugadores'
-    ]
-
-    if not request.files.get('vct_partidos'):
-        return jsonify({"ok": False, "error": "vct_partidos.xlsx es obligatorio."}), 400
-
+def _process_etl(raw_files, job=None):
+    """Procesa los Excel (bytes) e inserta en la BD. Pensado para correr en un hilo."""
     files = {}
-    for name in all_files:
-        f = request.files.get(name)
-        if f:
-            files[name] = pd.read_excel(io.BytesIO(f.read()))
+    for name, blob in raw_files.items():
+        files[name] = pd.read_excel(io.BytesIO(blob))
 
+    conn = get_conn()
     try:
-        conn = get_conn()
-        cur  = conn.cursor()
+        cur = conn.cursor()
         results = {}
 
         # ── 1) TEAMS (primero, para satisfacer FKs de matches/maps/economy) ──
+        _job_set(job, step='equipos')
         team_names = {}   # team_id -> team_name
         if 'vct_equipos' in files:
             results['teams'] = etl_teams(files['vct_equipos'], cur)
@@ -594,6 +604,7 @@ def run_etl():
             [(tid, name) for tid, name in team_names.items() if tid is not None], 2)
 
         # ── 2) PLAYERS (antes de player_stats/duels/multikills) ──
+        _job_set(job, step='jugadores')
         nick_to_pid = {}  # nickname -> player_id
         if 'vct_jugadores' in files:
             results['players'] = etl_players(files['vct_jugadores'], cur)
@@ -632,35 +643,102 @@ def run_etl():
             match_teams[int(r['match_id'])] = (ii(r.get('equipo_a_id')), ii(r.get('equipo_b_id')))
 
         # ── 3) RESTO DE TABLAS ──
+        _job_set(job, step='partidos')
         results['matches'] = etl_matches(files['vct_partidos'], cur)
 
         if 'vlr_mapas' in files:
+            _job_set(job, step='mapas')
             results['maps'] = etl_maps(files['vlr_mapas'], cur, match_teams)
 
         if 'vlr_rondas' in files:
+            _job_set(job, step='rondas')
             df_eco = files.get('vlr_economia_rondas')  # puede ser None
             results['rounds'] = etl_rounds(files['vlr_rondas'], df_eco, cur, team_names)
 
         if 'vlr_stats_players_sides' in files:
+            _job_set(job, step='stats de jugadores')
             results['player_stats'] = etl_stats(files['vlr_stats_players_sides'], cur)
 
         if 'vlr_economia_resumen' in files:
+            _job_set(job, step='economía')
             results['economy_summary'] = etl_economy_summary(files['vlr_economia_resumen'], cur)
 
         if 'vlr_enfrentamientos' in files:
+            _job_set(job, step='enfrentamientos')
             results['duels'] = etl_duels(files['vlr_enfrentamientos'], cur, nick_to_pid)
 
         if 'vlr_multikills_clutches' in files:
+            _job_set(job, step='multikills y clutches')
             results['multikills'] = etl_multikills(files['vlr_multikills_clutches'], cur, nick_to_pid)
 
         conn.commit()
         cur.close()
+        return results
+    except Exception:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    finally:
         release_conn(conn)
-        return jsonify({"ok": True, "inserted": results})
-    except Exception as e:
-        if 'conn' in locals(): conn.rollback(); release_conn(conn)
-        import traceback
-        return jsonify({"ok": False, "error": str(e), "trace": traceback.format_exc()}), 500
+
+
+@inicio_bp.route('/api/etl', methods=['POST'])
+def run_etl():
+    # Solo vct_partidos es obligatorio (es la "espina dorsal" de match_id)
+    # El resto son opcionales — útil para torneos con datos incompletos (ej. China)
+    all_files = [
+        'vct_partidos', 'vlr_mapas', 'vlr_rondas', 'vlr_economia_rondas',
+        'vlr_stats_players_sides', 'vlr_economia_resumen',
+        'vlr_enfrentamientos', 'vlr_multikills_clutches',
+        'vct_equipos', 'vct_jugadores'
+    ]
+
+    if not request.files.get('vct_partidos'):
+        return jsonify({"ok": False, "error": "vct_partidos.xlsx es obligatorio."}), 400
+
+    # Leer bytes (rápido) y delegar el parseo + ETL al hilo en segundo plano,
+    # para que la petición HTTP nunca supere el timeout del worker.
+    raw_files = {}
+    for name in all_files:
+        f = request.files.get(name)
+        if f:
+            raw_files[name] = f.read()
+
+    _prune_jobs()
+    job_id = uuid.uuid4().hex
+    job = {"id": job_id, "status": "running", "step": "subiendo",
+           "results": None, "error": None, "trace": None,
+           "started": time.time(), "finished": None}
+    with ETL_JOBS_LOCK:
+        ETL_JOBS[job_id] = job
+
+    def _worker():
+        try:
+            results = _process_etl(raw_files, job)
+            _job_set(job, status='done', results=results, step='completado', finished=time.time())
+        except Exception as e:
+            _job_set(job, status='error', error=str(e),
+                     trace=traceback.format_exc(), finished=time.time())
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return jsonify({"ok": True, "async": True, "job_id": job_id}), 202
+
+
+@inicio_bp.route('/api/etl-status/<job_id>', methods=['GET'])
+def etl_status(job_id):
+    job = ETL_JOBS.get(job_id)
+    if not job:
+        return jsonify({"ok": False, "error": "Trabajo no encontrado o expirado."}), 404
+    return jsonify({
+        "ok": True,
+        "status": job.get("status"),
+        "step": job.get("step"),
+        "inserted": job.get("results"),
+        "error": job.get("error"),
+        "trace": job.get("trace"),
+    })
 
 
 @inicio_bp.route('/api/status', methods=['GET'])
