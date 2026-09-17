@@ -30,6 +30,8 @@ const btnInit = document.getElementById('btnInit');
 const btnClear = document.getElementById('btnClear');
 const btnBulk = document.getElementById('btnBulk');
 const bulkInput = document.getElementById('bulkInput');
+const btnFolder = document.getElementById('btnFolder');
+const folderInput = document.getElementById('folderInput');
 const fileCount = document.getElementById('fileCount');
 const countRequired = document.getElementById('countRequired');
 const countOptional = document.getElementById('countOptional');
@@ -111,6 +113,73 @@ bulkInput.addEventListener('change', () => {
   if (unmatched.length) log(`  ⚠ No reconocidos: ${unmatched.join(', ')}`, 'warn');
   updateCounts();
   bulkInput.value = '';
+});
+
+// ─── SUBIR CARPETAS (varios torneos) ─────────────────────────────────────────
+function logBatchInserted(results) {
+  if (!results || typeof results !== 'object') return;
+  const names = Object.keys(results);
+  let ok = 0, err = 0;
+  const COUNT_KEYS = ['matches', 'maps', 'rounds', 'player_stats', 'economy_summary', 'duels', 'multikills'];
+  names.forEach(name => {
+    const r = results[name];
+    if (!r || r.error) { err++; log(`  ✕ ${name}: ${(r && r.error) || 'error'}`, 'error'); return; }
+    if (r.skipped) { log(`  ⚠ ${name}: ${r.skipped}`, 'warn'); return; }
+    ok++;
+    const total = COUNT_KEYS.reduce((a, k) => a + (r[k] || 0), 0);
+    const extra = r.orphan_matches ? ` (partidos huérfanos: ${r.orphan_matches})` : '';
+    log(`  ✓ ${name}: ${total} filas${extra}`, 'success');
+  });
+  log(`Torneos: ${ok} OK, ${err} con error`, err ? 'warn' : 'success');
+}
+
+btnFolder.addEventListener('click', () => folderInput.click());
+
+folderInput.addEventListener('change', async () => {
+  const all = Array.from(folderInput.files);
+  const xlsx = all.filter(f => f.name.toLowerCase().endsWith('.xlsx'));
+  if (!xlsx.length) return;
+
+  const carpetas = new Set();
+  xlsx.forEach(f => {
+    const parts = (f.webkitRelativePath || '').split('/');
+    if (parts.length > 1) carpetas.add(parts[parts.length - 2]);
+  });
+
+  log('─────────────────────────────────', 'info');
+  log(`Subida de carpetas: ${xlsx.length} Excel en ${carpetas.size} carpeta(s)`, 'accent');
+
+  const form = new FormData();
+  xlsx.forEach(f => form.append('files', f, f.webkitRelativePath || f.name));
+
+  btnRun.disabled = true; btnBulk.disabled = true; btnFolder.disabled = true;
+  setProgress(10, 'Subiendo carpetas...');
+
+  try {
+    setProgress(20, 'Iniciando proceso...');
+    const res = await fetch(`${API}/etl-batch`, { method: 'POST', body: form });
+    const data = await res.json();
+    if (!data.ok || !data.job_id) throw new Error(data.error || `Respuesta inesperada del servidor (${res.status})`);
+
+    log(`Procesando ${data.torneos} torneo(s) en segundo plano...`, 'accent');
+    const final = await waitForEtl(data.job_id);
+
+    setProgress(100, 'Carga completada.');
+    log('─────────────────────────────────', 'info');
+    log('✓ Carga masiva completada.', 'success');
+    logBatchInserted(final.inserted);
+    log('─────────────────────────────────', 'info');
+    checkStatus(); hideProgress();
+  } catch (e) {
+    setProgress(0, 'Error en carga masiva.');
+    log(`✕ ${e.message}`, 'error');
+    if (e.trace) log(String(e.trace).split('\n').slice(-3).join(' '), 'error');
+    hideProgress();
+  } finally {
+    folderInput.value = '';
+    btnRun.disabled = !state.files['vct_partidos'];
+    btnBulk.disabled = false; btnFolder.disabled = false;
+  }
 });
 
 // ─── CONTADORES ──────────────────────────────────────────────────────────────
@@ -200,7 +269,11 @@ async function waitForEtl(jobId) {
       err.trace = data.trace;
       throw err;
     }
-    pct = Math.min(90, pct + 5);
+    if (data.progress && data.progress.total) {
+      pct = 25 + Math.round(65 * data.progress.done / data.progress.total);
+    } else {
+      pct = Math.min(90, pct + 5);
+    }
     setProgress(pct, data.step ? `Procesando: ${data.step}...` : 'Procesando ETL...');
   }
 }

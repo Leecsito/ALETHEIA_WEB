@@ -64,6 +64,31 @@ def build_raw_files(folder, common):
     return raw
 
 
+def torneo_cargado(conn, folder):
+    """True si TODOS los match_id de vct_partidos ya están en la tabla matches."""
+    import pandas as pd
+    path = os.path.join(folder, 'vct_partidos.xlsx')
+    if not os.path.exists(path):
+        return False
+    try:
+        df = pd.read_excel(path)
+    except Exception:
+        return False
+    mids = sorted({int(x) for x in df['match_id'].dropna()})
+    if not mids:
+        return False
+    cur = conn.cursor()
+    try:
+        q = ','.join('?' * len(mids))
+        cur.execute(f'SELECT COUNT(DISTINCT match_id) FROM matches WHERE match_id IN ({q})', mids)
+        n = cur.fetchone()[0]
+    except Exception:
+        return False
+    finally:
+        cur.close()
+    return n >= len(mids)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Carga masiva de torneos ALETHEIA (ETL).')
     parser.add_argument('--data', default='output_data',
@@ -74,6 +99,10 @@ def main():
                         help='Procesar como máximo N torneos')
     parser.add_argument('--reset', action='store_true',
                         help='Vaciar todas las tablas antes de cargar (¡cuidado!)')
+    parser.add_argument('--skip-existing', action='store_true',
+                        help='Omitir torneos cuyos partidos ya estén cargados (reanudable)')
+    parser.add_argument('--retries', type=int, default=3,
+                        help='Reintentos por torneo ante fallos de red (default: 3)')
     parser.add_argument('--local', action='store_true',
                         help='Usar SQLite local en vez de Turso')
     parser.add_argument('--yes', action='store_true',
@@ -159,10 +188,22 @@ def main():
         print('Globales: (no encontrados) — se derivarán de partidos/stats')
 
     # ── Procesar torneo por torneo ──
-    totals, ok, fail = {}, 0, 0
+    check_conn = None
+    if args.skip_existing:
+        try:
+            check_conn = etl.get_conn()
+        except Exception as e:
+            print(f'⚠ No se pudo abrir conexión de comprobación: {e}')
+
+    totals, ok, fail, omitidos = {}, 0, 0, 0
     t_inicio = time.time()
     for i, nombre in enumerate(torneos, 1):
         carpeta = os.path.join(base, nombre)
+        if check_conn is not None and torneo_cargado(check_conn, carpeta):
+            print(f'[{i:>2}/{len(torneos)}] = {nombre}: ya cargado, se omite')
+            omitidos += 1
+            continue
+
         raw = build_raw_files(carpeta, common)
         if 'vct_partidos' not in raw:
             print(f'[{i:>2}/{len(torneos)}] ⚠ {nombre}: sin vct_partidos.xlsx, se omite')
@@ -170,21 +211,34 @@ def main():
 
         print(f'[{i:>2}/{len(torneos)}] ▶ {nombre} ... ', end='', flush=True)
         t0 = time.time()
-        try:
-            res = etl._process_etl(raw, {})
-            dt = time.time() - t0
-            for k, v in res.items():
-                totals[k] = totals.get(k, 0) + v
-            print(f'✓ {dt:.1f}s  (' + ', '.join(f'{k}={v}' for k, v in res.items()) + ')')
-            ok += 1
-        except Exception as e:
-            dt = time.time() - t0
-            print(f'✕ {dt:.1f}s  {e}')
-            fail += 1
+        res = None
+        for intento in range(1, max(1, args.retries) + 1):
+            try:
+                res = etl._process_etl(raw, {})
+                break
+            except Exception as e:
+                if intento < max(1, args.retries):
+                    print(f'↻ reintento {intento}/{args.retries - 1} ({e}) ... ', end='', flush=True)
+                    time.sleep(3 * intento)
+                else:
+                    dt = time.time() - t0
+                    print(f'✕ {dt:.1f}s  {e}')
+                    fail += 1
+        if res is None:
+            continue
+        dt = time.time() - t0
+        for k, v in res.items():
+            totals[k] = totals.get(k, 0) + v
+        print(f'✓ {dt:.1f}s  (' + ', '.join(f'{k}={v}' for k, v in res.items()) + ')')
+        ok += 1
+
+    if check_conn is not None:
+        etl.release_conn(check_conn)
 
     # ── Resumen ──
     print('=' * 70)
-    print(f'  Listo en {time.time() - t_inicio:.1f}s — {ok} torneos OK, {fail} con error')
+    extra = f', {omitidos} omitidos (ya cargados)' if omitidos else ''
+    print(f'  Listo en {time.time() - t_inicio:.1f}s — {ok} torneos OK, {fail} con error{extra}')
     print('  Totales insertados:')
     for k in sorted(totals):
         print(f'    {k:<18} {totals[k]}')

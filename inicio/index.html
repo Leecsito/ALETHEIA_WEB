@@ -43,7 +43,13 @@
         SUBIR TODOS LOS EXCEL DE UNA VEZ
       </button>
       <input type="file" id="bulkInput" accept=".xlsx" multiple style="display:none" />
-      <div class="bulk-hint">Selecciona varios archivos a la vez — los asigna automáticamente por nombre</div>
+      <button class="btn-bulk" id="btnFolder">
+        <span class="bulk-icon">🗀</span>
+        SUBIR CARPETAS (VARIOS TORNEOS)
+      </button>
+      <input type="file" id="folderInput" webkitdirectory directory multiple style="display:none" />
+      <div class="bulk-hint">Archivos sueltos: asigna por nombre. Carpeta: elige <b>output_data</b> (o varios torneos) y
+        carga todos de una vez</div>
     </div>
 
     <!-- OBLIGATORIOS -->

@@ -6,6 +6,7 @@ Para agregar más rutas ETL, editá solo este archivo.
 
 from flask import Blueprint, request, jsonify
 import pandas as pd
+import os
 import re
 import io
 import threading
@@ -233,7 +234,7 @@ def run_migrations(conn):
     cur.close()
 
 # ─── HELPERS ETL ──────────────────────────────────────────────────────────────
-MAP_NAMES = {'abyss','bind','breeze','corrode','haven','pearl','split','lotus','icebox','fracture','sunset','ascent'}
+MAP_NAMES = {'abyss','bind','breeze','corrode','haven','pearl','split','lotus','icebox','fracture','sunset','ascent','summit'}
 SIDES     = {'attack','defense'}
 
 ABBREV_MAP = {
@@ -349,12 +350,13 @@ def normalize_winner(name):
     return ABBREV_MAP.get(upper, str(name).strip())
 
 def resolve_map_row(pick_a, pick_b):
-    a = str(pick_a).lower().strip()
-    b = str(pick_b).lower().strip()
+    a_raw, b_raw = ss(pick_a), ss(pick_b)
+    a = a_raw.lower() if a_raw else ''
+    b = b_raw.lower() if b_raw else ''
     if a == 'decider': return 'decider', None, None
-    if a in MAP_NAMES: return 'a', pick_a.capitalize(), b if b in SIDES else None
-    if a in SIDES:     return 'b', pick_b.capitalize(), a if a in SIDES else None
-    return 'unknown', pick_a, pick_b
+    if a in MAP_NAMES: return 'a', a_raw.capitalize(), (b if b in SIDES else None)
+    if a in SIDES:     return 'b', (b_raw.capitalize() if b_raw else None), (a if a in SIDES else None)
+    return 'unknown', a_raw, (b if b in SIDES else None)
 
 def safe_nan(v):
     if v is None: return None
@@ -756,10 +758,82 @@ def etl_status(job_id):
         "ok": True,
         "status": job.get("status"),
         "step": job.get("step"),
+        "progress": job.get("progress"),
         "inserted": job.get("results"),
         "error": job.get("error"),
         "trace": job.get("trace"),
     })
+
+
+@inicio_bp.route('/api/etl-batch', methods=['POST'])
+def run_etl_batch():
+    """
+    Recibe archivos con su ruta relativa (subida de carpetas vía webkitdirectory),
+    los agrupa por carpeta de torneo y ejecuta el ETL de cada uno.
+    Los archivos .xlsx en la raíz son globales (equipos / jugadores).
+    """
+    uploaded = request.files.getlist('files')
+    if not uploaded:
+        return jsonify({"ok": False, "error": "No se recibieron archivos."}), 400
+
+    globales = {}
+    carpetas = {}
+    for f in uploaded:
+        rel = (f.filename or '').replace('\\', '/').strip()
+        if not rel.lower().endswith('.xlsx'):
+            continue
+        parts = [p for p in rel.split('/') if p not in ('', '.', '..')]
+        if not parts:
+            continue
+        base = os.path.splitext(parts[-1])[0].lower()
+        if len(parts) <= 2:
+            # Archivo directamente bajo la carpeta raíz seleccionada -> global
+            globales[base] = f.read()
+        else:
+            # Archivo dentro de una subcarpeta (torneo) -> su carpeta inmediata
+            carpetas.setdefault(parts[-2], {})[base] = f.read()
+
+    # Si el usuario seleccionó una sola carpeta de torneo (archivos en la raíz)
+    if not carpetas and 'vct_partidos' in globales:
+        carpetas['torneo'] = globales
+        globales = {}
+
+    if not carpetas:
+        return jsonify({"ok": False, "error": "No se detectaron subcarpetas de torneos."}), 400
+
+    _prune_jobs()
+    job_id = uuid.uuid4().hex
+    job = {"id": job_id, "status": "running", "step": "preparando",
+           "progress": {"done": 0, "total": len(carpetas)},
+           "results": None, "error": None, "trace": None,
+           "started": time.time(), "finished": None}
+    with ETL_JOBS_LOCK:
+        ETL_JOBS[job_id] = job
+
+    def _worker():
+        try:
+            total = len(carpetas)
+            out = {}
+            for i, (nombre, archivos) in enumerate(sorted(carpetas.items()), 1):
+                raw = dict(globales)
+                raw.update(archivos)
+                _job_set(job, step=f'torneo {i}/{total}: {nombre}',
+                         progress={"done": i - 1, "total": total})
+                if 'vct_partidos' not in raw:
+                    out[nombre] = {"skipped": "sin vct_partidos.xlsx"}
+                    continue
+                try:
+                    out[nombre] = _process_etl(raw, None)
+                except Exception as e:
+                    out[nombre] = {"error": str(e)}
+            _job_set(job, status='done', results=out, step='completado',
+                     progress={"done": total, "total": total}, finished=time.time())
+        except Exception as e:
+            _job_set(job, status='error', error=str(e),
+                     trace=traceback.format_exc(), finished=time.time())
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return jsonify({"ok": True, "async": True, "job_id": job_id, "torneos": len(carpetas)}), 202
 
 
 @inicio_bp.route('/api/status', methods=['GET'])
