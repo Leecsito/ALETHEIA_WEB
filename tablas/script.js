@@ -22,6 +22,7 @@ const reportSummary = document.getElementById('reportSummary');
 const reportGlobal = document.getElementById('reportGlobal');
 const reportList = document.getElementById('reportList');
 const reportCopy = document.getElementById('reportCopy');
+const reportTxt = document.getElementById('reportTxt');
 const reportReload = document.getElementById('reportReload');
 
 // ─── LOADING ─────────────────────────────────────────────────────────────────
@@ -208,6 +209,7 @@ function renderPagination(page, pages, total) {
 
 // ─── REPORTE DE CALIDAD ───────────────────────────────────────────────────────
 let lastReportText = '';
+let lastReport = null;
 
 async function showReport() {
     currentTable = null;
@@ -232,6 +234,7 @@ async function showReport() {
 }
 
 function renderReport(r) {
+    lastReport = r;
     lastReportText = r.texto || '';
     const filasTotales = Object.values(r.tablas || {}).reduce((a, b) => a + b, 0);
     reportSummary.innerHTML = `
@@ -271,6 +274,23 @@ reportCopy.addEventListener('click', async () => {
         reportCopy.textContent = '✗ ERROR';
     }
     setTimeout(() => reportCopy.textContent = 'COPIAR', 1500);
+});
+
+// Descarga un .txt con SOLO las URLs (vlr.gg/<match_id>), sin repetir.
+reportTxt.addEventListener('click', () => {
+    const urls = (lastReport && lastReport.por_partido ? lastReport.por_partido : [])
+        .map(p => `vlr.gg/${p.match_id}`);
+    const unicas = [...new Set(urls)];
+    const contenido = unicas.join('\n');
+
+    const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'reporte_vlrgg.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
 });
 
 // ─── EVENTOS ─────────────────────────────────────────────────────────────────
