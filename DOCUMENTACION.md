@@ -115,6 +115,8 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 - `GET /api/etl-status/<job_id>`: Consulta el estado de un ETL asíncrono (`status`, `step`, `progress`, `inserted`, `error`).
 - `GET /api/status`: Retorna el conteo de filas de cada una de las 10 tablas.
 
+> **Reimportación idempotente:** al cargar un torneo, el ETL **borra y reinserta** los datos de sus `match_id` (hijos primero por FK: `rounds`, `player_stats`, `economy_summary`, `duels`, `multikills_clutches`, `match_veto`, `maps`, `matches`). Esto permite **re-subir un torneo para corregir datos sin duplicar filas**. Los jugadores se actualizan con `UPSERT` (rellena `team_id`/`team_name` si faltaban).
+
 ### 4.2. Módulo Tablas (`tablas_bp`)
 - `GET /api/tablas`: Lista el nombre de las tablas permitidas y su total de filas.
 - `GET /api/tabla/<nombre>`: Retorna los datos paginados de la tabla solicitada (acepta query params `page`, `limit`, `search`).

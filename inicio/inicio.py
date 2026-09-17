@@ -629,8 +629,12 @@ def _process_etl(raw_files, job=None):
                 seen.add(pid)
                 player_rows.append((pid, nick, ii(r.get('team_id')), ss(r.get('team_name'))))
             exec_batch(cur,
-                "INSERT OR IGNORE INTO players (player_id,nickname,team_id,team_name) VALUES ",
-                player_rows, 4)
+                """INSERT INTO players (player_id,nickname,team_id,team_name) VALUES """,
+                player_rows, 4,
+                suffix=""" ON CONFLICT(player_id) DO UPDATE SET
+                       nickname  = COALESCE(excluded.nickname, players.nickname),
+                       team_id   = COALESCE(excluded.team_id, players.team_id),
+                       team_name = COALESCE(excluded.team_name, players.team_name)""")
 
         # Mapa nickname -> player_id (fuente principal: stats; refuerzo: vct_jugadores)
         if 'vlr_stats_players_sides' in files:
@@ -649,8 +653,7 @@ def _process_etl(raw_files, job=None):
         for _, r in files['vct_partidos'].iterrows():
             match_teams[int(r['match_id'])] = (ii(r.get('equipo_a_id')), ii(r.get('equipo_b_id')))
 
-        # Partidos referenciados por otros archivos pero ausentes en vct_partidos:
-        # se crea un partido mínimo para no romper las FKs y no perder los datos.
+        # Partidos referenciados por otros archivos pero ausentes en vct_partidos
         referenciados = set()
         for key in ('vlr_mapas','vlr_stats_players_sides','vlr_economia_resumen',
                     'vlr_economia_rondas','vlr_enfrentamientos','vlr_multikills_clutches'):
@@ -661,6 +664,33 @@ def _process_etl(raw_files, job=None):
                     if mid is not None:
                         referenciados.add(mid)
         huerfanos = sorted(referenciados - set(match_teams.keys()))
+        results['orphan_matches'] = len(huerfanos)
+
+        # ── REEMPLAZO IDEMPOTENTE ─────────────────────────────────────────────
+        # Re-subir un torneo debe REFLEJAR los datos nuevos y NO duplicar filas.
+        # Se borran los datos previos de estos partidos (hijos primero, por FK)
+        # y luego se reinsertan desde cero.
+        ids = sorted(set(match_teams.keys()) | set(huerfanos))
+        if ids:
+            ph = ','.join('?' * len(ids))
+            delete_maps = 'vlr_mapas' in files
+            if 'vlr_rondas' in files or delete_maps:
+                cur.execute(f'DELETE FROM rounds WHERE map_id IN (SELECT map_id FROM maps WHERE match_id IN ({ph}))', ids)
+            if 'vlr_stats_players_sides' in files or delete_maps:
+                cur.execute(f'DELETE FROM player_stats WHERE match_id IN ({ph})', ids)
+            if 'vlr_economia_resumen' in files or delete_maps:
+                cur.execute(f'DELETE FROM economy_summary WHERE match_id IN ({ph})', ids)
+            if 'vlr_enfrentamientos' in files or delete_maps:
+                cur.execute(f'DELETE FROM duels WHERE match_id IN ({ph})', ids)
+            if 'vlr_multikills_clutches' in files or delete_maps:
+                cur.execute(f'DELETE FROM multikills_clutches WHERE match_id IN ({ph})', ids)
+            cur.execute(f'DELETE FROM match_veto WHERE match_id IN ({ph})', ids)
+            if delete_maps:
+                cur.execute(f'DELETE FROM maps WHERE match_id IN ({ph})', ids)
+                cur.execute(f'DELETE FROM matches WHERE match_id IN ({ph})', ids)
+            results['replaced_matches'] = len(ids)
+
+        # Crear partidos huérfanos (mínimos) para no romper FKs ni perder datos
         if huerfanos:
             torneo = ss(files['vct_partidos']['torneo'].iloc[0]) if len(files['vct_partidos']) else None
             exec_batch(cur,
@@ -668,7 +698,6 @@ def _process_etl(raw_files, job=None):
                 [(mid, torneo) for mid in huerfanos], 2)
             for mid in huerfanos:
                 match_teams.setdefault(mid, (None, None))
-        results['orphan_matches'] = len(huerfanos)
 
         # ── 3) RESTO DE TABLAS ──
         _job_set(job, step='partidos')
