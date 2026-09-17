@@ -1,9 +1,11 @@
 """
 ALETHEIA — Tablas API Blueprint
-Ruta: /api/tabla/<nombre>
-Permite ver el contenido raw de cualquier tabla de la BD con paginacion.
+Rutas: /api/tabla/<nombre>, /api/tablas, /api/tablas/reporte
+Permite ver el contenido raw de cualquier tabla de la BD con paginacion,
+y generar un reporte de calidad de datos por partido.
 """
 
+from collections import defaultdict
 from flask import Blueprint, request, jsonify
 try:
     from backend.conexion import get_conn, release_conn
@@ -102,3 +104,171 @@ def list_tablas():
         return jsonify({"ok": True, "data": result})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  REPORTE DE CALIDAD DE DATOS
+#  Cada chequeo es (tabla, alias, etiqueta legible, condicion SQL).
+#  Los de REPORT_CHECKS tienen match_id (se agrupan por partido).
+#  Los de GLOBAL_CHECKS son conteos sueltos de toda la tabla.
+# ═══════════════════════════════════════════════════════════════════════════════
+REPORT_CHECKS = [
+    # ── matches ──
+    ('matches', 'sin_equipo_id', 'Equipos sin id (team_a_id/team_b_id)', 'team_a_id IS NULL OR team_b_id IS NULL'),
+    ('matches', 'sin_equipos', 'Nombres de equipo vacíos', "team_a IS NULL OR team_a = '' OR team_b IS NULL OR team_b = ''"),
+    ('matches', 'sin_torneo', 'Torneo vacío', "tournament IS NULL OR tournament = ''"),
+    ('matches', 'sin_fase', 'Fase vacía', "phase IS NULL OR phase = ''"),
+    ('matches', 'sin_fecha', 'Fecha vacía', "match_date IS NULL OR match_date = ''"),
+    ('matches', 'sin_patch', 'Patch vacío', "patch IS NULL OR patch = ''"),
+    ('matches', 'ganador_invalido', 'Ganador vacío o no coincide con los equipos', "winner IS NULL OR winner = '' OR (winner <> team_a AND winner <> team_b)"),
+    ('matches', 'huerfano', 'Partido huérfano (sin datos de equipos)', 'team_a IS NULL AND team_b IS NULL'),
+    # ── match_veto ──
+    ('match_veto', 'equipo_sin_id', 'Veto de un equipo sin team_id', "team IN ('a','b') AND team_id IS NULL"),
+    ('match_veto', 'mapa_vacio', 'Veto sin nombre de mapa', "map_name IS NULL OR map_name = ''"),
+    ('match_veto', 'accion_vacia', 'Veto sin acción', "action IS NULL OR action = ''"),
+    ('match_veto', 'orden_vacio', 'Veto sin orden', 'veto_order IS NULL OR veto_order = 0'),
+    # ── maps ──
+    ('maps', 'picker_desconocido', 'Mapa sin picker (unknown)', "picker = 'unknown'"),
+    ('maps', 'mapa_sin_nombre', 'Mapa sin nombre', "map_name IS NULL OR map_name = '' OR map_name = 'Unknown'"),
+    ('maps', 'lado_sin_elegir', 'Mapa elegido sin lado (side_chosen)', "picker IN ('a','b') AND (side_chosen IS NULL OR side_chosen = '')"),
+    ('maps', 'picker_sin_id', 'Picker sin team_id', "picker IN ('a','b') AND picker_id IS NULL"),
+    ('maps', 'inicio_lado_vacio', 'side_top_start vacío', "side_top_start IS NULL OR side_top_start = ''"),
+    ('maps', 'duracion_vacia', 'Duración vacía', "duration IS NULL OR duration = ''"),
+    ('maps', 'marcador_vacio', 'Marcador del mapa en cero', 'COALESCE(score_a_attack,0)+COALESCE(score_a_defense,0)+COALESCE(score_b_attack,0)+COALESCE(score_b_defense,0) = 0'),
+    # ── rounds ──
+    ('rounds', 'ganador_vacio', 'Ronda sin ganador', "winner IS NULL OR winner = ''"),
+    ('rounds', 'tipo_vacio', 'Ronda sin tipo de resultado', "result_type IS NULL OR result_type = ''"),
+    ('rounds', 'lado_vacio', 'Ronda sin bando ganador', "winning_side IS NULL OR winning_side = ''"),
+    ('rounds', 'equipos_vacios', 'Ronda sin equipos (team_top/team_bot)', "team_top IS NULL OR team_top = '' OR team_bot IS NULL OR team_bot = ''"),
+    ('rounds', 'categoria_vacia', 'Ronda sin categoría económica', "category_top IS NULL OR category_top = '' OR category_bot IS NULL OR category_bot = ''"),
+    # ── player_stats ──
+    ('player_stats', 'jugador_sin_id', 'Jugador sin player_id', 'player_id IS NULL'),
+    ('player_stats', 'equipo_sin_id', 'Jugador sin team_id', 'team_id IS NULL'),
+    ('player_stats', 'nombre_vacio', 'Jugador sin nombre', "player_name IS NULL OR player_name = ''"),
+    ('player_stats', 'agente_vacio', 'Jugador sin agente', "agent IS NULL OR agent = ''"),
+    ('player_stats', 'lado_invalido', 'Lado inválido (no attack/defense)', "side IS NULL OR side = '' OR side NOT IN ('attack','defense')"),
+    ('player_stats', 'rating_cero', 'Rating en cero', 'COALESCE(rating,0) = 0'),
+    ('player_stats', 'acs_cero', 'ACS en cero', 'COALESCE(acs,0) = 0'),
+    ('player_stats', 'stats_nulos', 'KAST/ADR/HS nulos', 'kast IS NULL OR adr IS NULL OR hs_percent IS NULL'),
+    # ── economy_summary ──
+    ('economy_summary', 'equipo_sin_id', 'Economía sin team_id', 'team_id IS NULL'),
+    ('economy_summary', 'equipo_vacio', 'Economía sin nombre de equipo', "team IS NULL OR team = ''"),
+    ('economy_summary', 'sin_rondas', 'Economía sin rondas registradas', 'COALESCE(eco_played,0)+COALESCE(semi_eco_played,0)+COALESCE(semi_buy_played,0)+COALESCE(full_buy_played,0) = 0'),
+    # ── duels ──
+    ('duels', 'jugador_a_sin_id', 'Duelo: jugador A sin id', 'player_a_id IS NULL'),
+    ('duels', 'jugador_b_sin_id', 'Duelo: jugador B sin id', 'player_b_id IS NULL'),
+    ('duels', 'kills_nulos', 'Duelo sin kills', 'kills_a IS NULL OR kills_b IS NULL'),
+    # ── multikills_clutches ──
+    ('multikills_clutches', 'jugador_sin_id', 'Multikill sin player_id', 'player_id IS NULL'),
+    ('multikills_clutches', 'agente_vacio', 'Multikill sin agente', "agent IS NULL OR agent = ''"),
+    ('multikills_clutches', 'sin_eventos', 'Multikill sin eventos (k/v/plant/defuse en cero)',
+     'COALESCE(k2,0)+COALESCE(k3,0)+COALESCE(k4,0)+COALESCE(k5,0)+COALESCE(v1,0)+COALESCE(v2,0)+COALESCE(v3,0)+COALESCE(v4,0)+COALESCE(v5,0)+COALESCE(plants,0)+COALESCE(defuses,0) = 0'),
+]
+
+GLOBAL_CHECKS = [
+    ('players', 'sin_team_id', 'Jugador sin team_id', 'team_id IS NULL'),
+    ('players', 'sin_real_name', 'Jugador sin nombre real', "real_name IS NULL OR real_name = ''"),
+    ('teams', 'sin_region', 'Equipo sin región', "region IS NULL OR region = ''"),
+    ('teams', 'sin_url', 'Equipo sin URL', "url IS NULL OR url = ''"),
+]
+
+
+def build_reporte(conn):
+    cur = conn.cursor()
+
+    incidencias = defaultdict(list)          # match_id -> [ {tabla, campo, etiqueta, filas} ]
+    total_campo = defaultdict(int)           # "tabla.campo" -> filas
+    afectados_por_tabla = defaultdict(set)   # tabla -> {match_id}
+
+    # ── Chequeos agrupados por partido (una sola query por tabla) ──
+    tablas_orden = []
+    for t, *_ in REPORT_CHECKS:
+        if t not in tablas_orden:
+            tablas_orden.append(t)
+
+    for tabla in tablas_orden:
+        checks = [(a, l, c) for (tt, a, l, c) in REPORT_CHECKS if tt == tabla]
+        sums = ", ".join([f"SUM(CASE WHEN {c} THEN 1 ELSE 0 END) AS c{i}" for i, (a, l, c) in enumerate(checks)])
+        # rounds no tiene match_id: se obtiene vía maps
+        if tabla == 'rounds':
+            from_clause, mid_expr = 'rounds JOIN maps ON rounds.map_id = maps.map_id', 'maps.match_id'
+        else:
+            from_clause, mid_expr = tabla, 'match_id'
+        cur.execute(f"SELECT {mid_expr} AS mid, {sums} FROM {from_clause} GROUP BY {mid_expr}")
+        for row in cur.fetchall():
+            mid = row[0]
+            for i, (alias, etiqueta, cond) in enumerate(checks):
+                cnt = row[i + 1] or 0
+                if cnt:
+                    incidencias[mid].append({'tabla': tabla, 'campo': alias, 'etiqueta': etiqueta, 'filas': cnt})
+                    total_campo[f'{tabla}.{alias}'] += cnt
+                    afectados_por_tabla[tabla].add(mid)
+
+    # ── Info de partidos ──
+    cur.execute('SELECT match_id, tournament, team_a, team_b FROM matches')
+    partidos = {r[0]: {'tournament': r[1], 'team_a': r[2], 'team_b': r[3]} for r in cur.fetchall()}
+    cur.execute('SELECT COUNT(*) FROM matches')
+    total_partidos = cur.fetchone()[0]
+
+    # ── Conteos globales ──
+    globales = []
+    for tabla, alias, etiqueta, cond in GLOBAL_CHECKS:
+        try:
+            cur.execute(f"SELECT COUNT(*) FROM {tabla} WHERE {cond}")
+            n = cur.fetchone()[0]
+        except Exception:
+            n = 0
+        if n:
+            globales.append({'tabla': tabla, 'campo': alias, 'etiqueta': etiqueta, 'filas': n})
+
+    # ── Conteo de filas por tabla ──
+    tablas_conteo = {}
+    for t in TABLAS_PERMITIDAS:
+        try:
+            cur.execute(f"SELECT COUNT(*) FROM {t}")
+            tablas_conteo[t] = cur.fetchone()[0]
+        except Exception:
+            tablas_conteo[t] = 0
+
+    cur.close()
+
+    # ── Agrupar por partido + texto ──
+    por_partido = []
+    lineas = []
+    for mid in sorted(incidencias):
+        info = partidos.get(mid, {})
+        incs = incidencias[mid]
+        por_partido.append({
+            'match_id': mid,
+            'url': f'https://www.vlr.gg/{mid}',
+            'tournament': info.get('tournament'),
+            'team_a': info.get('team_a'),
+            'team_b': info.get('team_b'),
+            'incidencias': incs,
+        })
+        lineas.append(f'vlr.gg/{mid}')
+        for inc in incs:
+            lineas.append(f"  - [{inc['tabla']}] {inc['etiqueta']} ({inc['filas']})")
+
+    return {
+        'total_partidos': total_partidos,
+        'partidos_con_problemas': len(por_partido),
+        'total_incidencias': sum(total_campo.values()) + sum(g['filas'] for g in globales),
+        'tablas': tablas_conteo,
+        'global': globales,
+        'por_partido': por_partido,
+        'texto': "\n".join(lineas),
+    }
+
+
+@tablas_bp.route('/api/tablas/reporte', methods=['GET'])
+def reporte_tablas():
+    try:
+        conn = get_conn()
+        try:
+            data = build_reporte(conn)
+        finally:
+            release_conn(conn)
+        return jsonify({'ok': True, 'reporte': data})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500

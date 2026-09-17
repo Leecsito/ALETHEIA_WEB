@@ -28,6 +28,7 @@
 
         <!-- ── SIDEBAR ── -->
         <aside class="sidebar">
+            <div class="report-btn" id="reportBtn">⚠ REPORTE DE CALIDAD</div>
             <div class="sidebar-label">TABLAS</div>
             <div class="table-list" id="tableList">
                 <div class="table-list-loading">Cargando...</div>
@@ -40,6 +41,20 @@
             <div class="empty-state" id="emptyState">
                 <div class="empty-icon">⬡</div>
                 <div class="empty-text">Selecciona una tabla del panel izquierdo</div>
+            </div>
+
+            <!-- ── REPORTE DE CALIDAD ── -->
+            <div class="report-panel" id="reportPanel" style="display:none">
+                <div class="report-head">
+                    <div class="report-title">REPORTE DE CALIDAD DE DATOS</div>
+                    <div class="report-actions">
+                        <button class="btn-nav" id="reportCopy">COPIAR</button>
+                        <button class="btn-nav" id="reportReload">↻ ACTUALIZAR</button>
+                    </div>
+                </div>
+                <div class="report-summary" id="reportSummary"></div>
+                <div class="report-global" id="reportGlobal"></div>
+                <div class="report-list" id="reportList"></div>
             </div>
 
             <div class="table-panel" id="tablePanel" style="display:none">

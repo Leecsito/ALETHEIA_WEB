@@ -110,12 +110,15 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 
 ### 4.1. Módulo ETL / Inicio (`inicio_bp`)
 - `POST /api/init-db`: Crea las tablas de la base de datos si no existen y ejecuta migraciones.
-- `POST /api/etl`: Recibe archivos Excel (`vct_partidos`, `vlr_mapas`, `vlr_rondas`, etc.) y procesa la inserción masiva de datos en la BD.
+- `POST /api/etl`: Recibe archivos Excel (`vct_partidos`, `vlr_mapas`, `vlr_rondas`, etc.) y procesa la inserción masiva. Responde `202` con un `job_id`; el ETL corre en segundo plano.
+- `POST /api/etl-batch`: Recibe múltiples archivos con su ruta relativa (subida de carpetas por torneo) y ejecuta el ETL de cada torneo. Responde `202` con `job_id`.
+- `GET /api/etl-status/<job_id>`: Consulta el estado de un ETL asíncrono (`status`, `step`, `progress`, `inserted`, `error`).
 - `GET /api/status`: Retorna el conteo de filas de cada una de las 10 tablas.
 
 ### 4.2. Módulo Tablas (`tablas_bp`)
 - `GET /api/tablas`: Lista el nombre de las tablas permitidas y su total de filas.
 - `GET /api/tabla/<nombre>`: Retorna los datos paginados de la tabla solicitada (acepta query params `page`, `limit`, `search`).
+- `GET /api/tablas/reporte`: Genera un reporte de calidad de datos: incidencias por partido (agrupadas por `match_id`, con URL `vlr.gg/<match_id>`), problemas globales por tabla y un texto plano listo para copiar.
 
 ### 4.3. Módulo Visualizar (`visualizar_bp`)
 - `GET /api/matches`: Métricas agregadas de partidos jugados.

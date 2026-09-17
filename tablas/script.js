@@ -16,6 +16,13 @@ const pagination = document.getElementById('pagination');
 const searchInput = document.getElementById('searchInput');
 const limitSelect = document.getElementById('limitSelect');
 const loadingBar = document.getElementById('loadingBar');
+const reportBtn = document.getElementById('reportBtn');
+const reportPanel = document.getElementById('reportPanel');
+const reportSummary = document.getElementById('reportSummary');
+const reportGlobal = document.getElementById('reportGlobal');
+const reportList = document.getElementById('reportList');
+const reportCopy = document.getElementById('reportCopy');
+const reportReload = document.getElementById('reportReload');
 
 // ─── LOADING ─────────────────────────────────────────────────────────────────
 function startLoad() {
@@ -60,10 +67,12 @@ function selectTable(nombre) {
     document.querySelectorAll('.table-item').forEach(i => {
         i.classList.toggle('active', i.dataset.table === nombre);
     });
+    reportBtn.classList.remove('active');
 
     tableTitle.textContent = nombre.toUpperCase();
     tableTitle.classList.add('active');
     emptyState.style.display = 'none';
+    reportPanel.style.display = 'none';
     tablePanel.style.display = 'flex';
 
     fetchTable();
@@ -130,8 +139,9 @@ function renderBody(rows, columns) {
             const val = row[col];
 
             if (val === null || val === undefined || val === '') {
-                td.textContent = 'null';
+                td.textContent = '';
                 td.className = 'null-val';
+                td.title = 'vacío';
             } else if (typeof val === 'boolean') {
                 td.textContent = val ? 'true' : 'false';
                 td.className = val ? 'bool-true' : 'bool-false';
@@ -195,6 +205,73 @@ function renderPagination(page, pages, total) {
     info.textContent = `Página ${page} de ${pages}`;
     pagination.appendChild(info);
 }
+
+// ─── REPORTE DE CALIDAD ───────────────────────────────────────────────────────
+let lastReportText = '';
+
+async function showReport() {
+    currentTable = null;
+    document.querySelectorAll('.table-item').forEach(i => i.classList.remove('active'));
+    reportBtn.classList.add('active');
+    tableTitle.textContent = 'REPORTE DE CALIDAD';
+    tableTitle.classList.add('active');
+    emptyState.style.display = 'none';
+    tablePanel.style.display = 'none';
+    reportPanel.style.display = 'flex';
+
+    startLoad();
+    try {
+        const res = await fetch(`${API}/tablas/reporte`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'Error al generar el reporte');
+        renderReport(data.reporte);
+    } catch (e) {
+        reportList.innerHTML = `<div style="padding:20px;color:var(--accent2)">Error: ${e.message}</div>`;
+    }
+    endLoad();
+}
+
+function renderReport(r) {
+    lastReportText = r.texto || '';
+    const filasTotales = Object.values(r.tablas || {}).reduce((a, b) => a + b, 0);
+    reportSummary.innerHTML = `
+        <div class="report-stat"><b>${r.total_partidos.toLocaleString()}</b><span>Partidos</span></div>
+        <div class="report-stat"><b>${r.partidos_con_problemas.toLocaleString()}</b><span>Con problemas</span></div>
+        <div class="report-stat"><b>${r.total_incidencias.toLocaleString()}</b><span>Incidencias</span></div>
+        <div class="report-stat"><b>${filasTotales.toLocaleString()}</b><span>Filas en BD</span></div>
+    `;
+
+    reportGlobal.innerHTML = (r.global && r.global.length)
+        ? r.global.map(g => `<div class="g-item">[${g.tabla}] ${g.etiqueta}: <b>${g.filas.toLocaleString()}</b></div>`).join('')
+        : '<div class="g-item" style="border-color:var(--green)">Sin problemas globales</div>';
+
+    if (!r.por_partido.length) {
+        reportList.innerHTML = '<div style="padding:20px;color:var(--green)">Sin incidencias por partido 🎉</div>';
+        return;
+    }
+
+    reportList.innerHTML = r.por_partido.map(p => `
+        <div class="report-match">
+            <a href="${p.url}" target="_blank" rel="noopener">vlr.gg/${p.match_id}</a>
+            <span class="rmeta">${p.team_a || '?'} vs ${p.team_b || '?'}</span>
+            <ul>${p.incidencias.map(i => `<li><span class="tag">[${i.tabla}]</span> ${i.etiqueta} (${i.filas})</li>`).join('')}</ul>
+        </div>
+    `).join('');
+}
+
+reportBtn.addEventListener('click', showReport);
+
+reportReload.addEventListener('click', showReport);
+
+reportCopy.addEventListener('click', async () => {
+    try {
+        await navigator.clipboard.writeText(lastReportText);
+        reportCopy.textContent = '✓ COPIADO';
+    } catch {
+        reportCopy.textContent = '✗ ERROR';
+    }
+    setTimeout(() => reportCopy.textContent = 'COPIAR', 1500);
+});
 
 // ─── EVENTOS ─────────────────────────────────────────────────────────────────
 searchInput.addEventListener('input', () => {

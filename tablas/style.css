@@ -448,3 +448,47 @@ td.bool-false {
     transform: scaleX(1);
     transition: transform .1s;
 }
+/* ── REPORTE DE CALIDAD ── */
+.report-btn {
+    margin: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--accent2);
+    color: var(--accent2);
+    font-family: var(--display);
+    letter-spacing: 2px;
+    font-size: 14px;
+    cursor: pointer;
+    text-align: center;
+    transition: all .2s;
+}
+
+.report-btn:hover { background: rgba(255, 71, 87, .08); }
+.report-btn.active { background: rgba(255, 71, 87, .16); }
+
+.report-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 18px;
+    gap: 14px;
+    overflow: hidden;
+}
+
+.report-head { display: flex; justify-content: space-between; align-items: center; }
+.report-title { font-family: var(--display); font-size: 22px; letter-spacing: 3px; color: var(--accent2); }
+.report-actions { display: flex; gap: 8px; }
+.report-summary { display: flex; gap: 12px; flex-wrap: wrap; }
+.report-stat { border: 1px solid var(--border); background: var(--surface); padding: 10px 14px; min-width: 120px; }
+.report-stat b { display: block; font-size: 22px; color: var(--accent); font-family: var(--display); letter-spacing: 2px; }
+.report-stat span { color: var(--dim); font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.report-global { display: flex; flex-direction: column; gap: 6px; }
+.report-global .g-item { border-left: 2px solid var(--accent2); padding: 4px 8px; color: var(--text); }
+.report-list { flex: 1; overflow: auto; border: 1px solid var(--border); background: var(--surface); }
+.report-match { border-bottom: 1px solid var(--border); padding: 8px 12px; }
+.report-match a { color: var(--accent); text-decoration: none; font-weight: 500; }
+.report-match a:hover { text-decoration: underline; }
+.report-match .rmeta { color: var(--dim); margin-left: 8px; }
+.report-match ul { list-style: none; margin: 4px 0 0 0; }
+.report-match li { color: var(--text); padding-left: 14px; position: relative; font-size: 11px; }
+.report-match li::before { content: '-'; position: absolute; left: 0; color: var(--accent2); }
+.report-match .tag { color: var(--dim); }

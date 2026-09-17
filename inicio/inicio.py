@@ -416,8 +416,13 @@ def etl_maps(df, cur, match_teams):
         picker, map_name, side_chosen = resolve_map_row(r['pick_a'], r['pick_b'])
         ah1, ah2 = parse_score_half(r['score_a'])
         bh1, bh2 = parse_score_half(r['score_b'])
-        if not map_name:
-            map_name = str(round_id).split('_')[1].capitalize() if '_' in str(round_id) else None
+        # El round_id (map_id) SIEMPRE contiene el nombre real del mapa (ej: 542200_corrode).
+        sufijo = str(round_id).split('_', 1)[1] if '_' in str(round_id) else ''
+        m = re.match(r'[A-Za-z]+', sufijo)
+        if m:
+            map_name = m.group(0).capitalize()
+        elif not map_name:
+            map_name = None
         raw_side = safe_nan(r.get('side_top_start', None))
         side_top_start = str(raw_side).strip() or None if raw_side is not None else None
         a_id, b_id = match_teams.get(int(mid), (None, None))
