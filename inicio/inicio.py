@@ -642,6 +642,27 @@ def _process_etl(raw_files, job=None):
         for _, r in files['vct_partidos'].iterrows():
             match_teams[int(r['match_id'])] = (ii(r.get('equipo_a_id')), ii(r.get('equipo_b_id')))
 
+        # Partidos referenciados por otros archivos pero ausentes en vct_partidos:
+        # se crea un partido mínimo para no romper las FKs y no perder los datos.
+        referenciados = set()
+        for key in ('vlr_mapas','vlr_stats_players_sides','vlr_economia_resumen',
+                    'vlr_economia_rondas','vlr_enfrentamientos','vlr_multikills_clutches'):
+            df = files.get(key)
+            if df is not None and 'match_id' in df.columns:
+                for v in df['match_id'].dropna():
+                    mid = ii(v)
+                    if mid is not None:
+                        referenciados.add(mid)
+        huerfanos = sorted(referenciados - set(match_teams.keys()))
+        if huerfanos:
+            torneo = ss(files['vct_partidos']['torneo'].iloc[0]) if len(files['vct_partidos']) else None
+            exec_batch(cur,
+                "INSERT OR IGNORE INTO matches (match_id,tournament) VALUES ",
+                [(mid, torneo) for mid in huerfanos], 2)
+            for mid in huerfanos:
+                match_teams.setdefault(mid, (None, None))
+        results['orphan_matches'] = len(huerfanos)
+
         # ── 3) RESTO DE TABLAS ──
         _job_set(job, step='partidos')
         results['matches'] = etl_matches(files['vct_partidos'], cur)
