@@ -492,3 +492,24 @@ td.bool-false {
 .report-match li { color: var(--text); padding-left: 14px; position: relative; font-size: 11px; }
 .report-match li::before { content: '-'; position: absolute; left: 0; color: var(--accent2); }
 .report-match .tag { color: var(--dim); }
+
+.report-note { color: var(--dim); font-size: 11px; }
+.report-note b { color: var(--accent); }
+.report-checks {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 6px;
+    max-height: 150px;
+    overflow: auto;
+}
+.report-check {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 4px 8px;
+    font-size: 11px;
+}
+.report-check .rc-name { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report-check .rc-val { color: var(--accent); white-space: nowrap; }

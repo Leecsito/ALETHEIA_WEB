@@ -20,6 +20,7 @@ const reportBtn = document.getElementById('reportBtn');
 const reportPanel = document.getElementById('reportPanel');
 const reportSummary = document.getElementById('reportSummary');
 const reportGlobal = document.getElementById('reportGlobal');
+const reportChecks = document.getElementById('reportChecks');
 const reportList = document.getElementById('reportList');
 const reportCopy = document.getElementById('reportCopy');
 const reportTxt = document.getElementById('reportTxt');
@@ -247,6 +248,12 @@ function renderReport(r) {
     reportGlobal.innerHTML = (r.global && r.global.length)
         ? r.global.map(g => `<div class="g-item">[${g.tabla}] ${g.etiqueta}: <b>${g.filas.toLocaleString()}</b></div>`).join('')
         : '<div class="g-item" style="border-color:var(--green)">Sin problemas globales</div>';
+
+    reportChecks.innerHTML = (r.por_chequeo && r.por_chequeo.length)
+        ? r.por_chequeo.map(c =>
+            `<div class="report-check"><span class="rc-name" title="[${c.tabla}] ${c.etiqueta}">[${c.tabla}] ${c.etiqueta}</span><span class="rc-val">${c.filas.toLocaleString()} · ${c.partidos} part.</span></div>`
+        ).join('')
+        : '';
 
     if (!r.por_partido.length) {
         reportList.innerHTML = '<div style="padding:20px;color:var(--green)">Sin incidencias por partido 🎉</div>';

@@ -134,26 +134,24 @@ REPORT_CHECKS = [
     ('maps', 'picker_sin_id', 'Picker sin team_id', "picker IN ('a','b') AND picker_id IS NULL"),
     ('maps', 'inicio_lado_vacio', 'side_top_start vacío', "side_top_start IS NULL OR side_top_start = ''"),
     ('maps', 'duracion_vacia', 'Duración vacía', "duration IS NULL OR duration = ''"),
-    ('maps', 'marcador_vacio', 'Marcador del mapa en cero', 'COALESCE(score_a_attack,0)+COALESCE(score_a_defense,0)+COALESCE(score_b_attack,0)+COALESCE(score_b_defense,0) = 0'),
+    # NOTA: un marcador/valor en 0 NO es un error (puede ser legítimo: pocas rondas, sin clutch, etc.)
     # ── rounds ──
     ('rounds', 'ganador_vacio', 'Ronda sin ganador', "winner IS NULL OR winner = ''"),
     ('rounds', 'tipo_vacio', 'Ronda sin tipo de resultado', "result_type IS NULL OR result_type = ''"),
     ('rounds', 'lado_vacio', 'Ronda sin bando ganador', "winning_side IS NULL OR winning_side = ''"),
-    ('rounds', 'equipos_vacios', 'Ronda sin equipos (team_top/team_bot)', "team_top IS NULL OR team_top = '' OR team_bot IS NULL OR team_bot = ''"),
-    ('rounds', 'categoria_vacia', 'Ronda sin categoría económica', "category_top IS NULL OR category_top = '' OR category_bot IS NULL OR category_bot = ''"),
+    # NOTA: team_top/team_bot/category vacíos NO se marcan como error:
+    # hay torneos (ej. China) que no traen archivos de economía, así que es esperado.
     # ── player_stats ──
     ('player_stats', 'jugador_sin_id', 'Jugador sin player_id', 'player_id IS NULL'),
     ('player_stats', 'equipo_sin_id', 'Jugador sin team_id', 'team_id IS NULL'),
     ('player_stats', 'nombre_vacio', 'Jugador sin nombre', "player_name IS NULL OR player_name = ''"),
     ('player_stats', 'agente_vacio', 'Jugador sin agente', "agent IS NULL OR agent = ''"),
     ('player_stats', 'lado_invalido', 'Lado inválido (no attack/defense)', "side IS NULL OR side = '' OR side NOT IN ('attack','defense')"),
-    ('player_stats', 'rating_cero', 'Rating en cero', 'COALESCE(rating,0) = 0'),
-    ('player_stats', 'acs_cero', 'ACS en cero', 'COALESCE(acs,0) = 0'),
     ('player_stats', 'stats_nulos', 'KAST/ADR/HS nulos', 'kast IS NULL OR adr IS NULL OR hs_percent IS NULL'),
+    # NOTA: rating o ACS en 0 NO es un error.
     # ── economy_summary ──
     ('economy_summary', 'equipo_sin_id', 'Economía sin team_id', 'team_id IS NULL'),
     ('economy_summary', 'equipo_vacio', 'Economía sin nombre de equipo', "team IS NULL OR team = ''"),
-    ('economy_summary', 'sin_rondas', 'Economía sin rondas registradas', 'COALESCE(eco_played,0)+COALESCE(semi_eco_played,0)+COALESCE(semi_buy_played,0)+COALESCE(full_buy_played,0) = 0'),
     # ── duels ──
     ('duels', 'jugador_a_sin_id', 'Duelo: jugador A sin id', 'player_a_id IS NULL'),
     ('duels', 'jugador_b_sin_id', 'Duelo: jugador B sin id', 'player_b_id IS NULL'),
@@ -161,8 +159,7 @@ REPORT_CHECKS = [
     # ── multikills_clutches ──
     ('multikills_clutches', 'jugador_sin_id', 'Multikill sin player_id', 'player_id IS NULL'),
     ('multikills_clutches', 'agente_vacio', 'Multikill sin agente', "agent IS NULL OR agent = ''"),
-    ('multikills_clutches', 'sin_eventos', 'Multikill sin eventos (k/v/plant/defuse en cero)',
-     'COALESCE(k2,0)+COALESCE(k3,0)+COALESCE(k4,0)+COALESCE(k5,0)+COALESCE(v1,0)+COALESCE(v2,0)+COALESCE(v3,0)+COALESCE(v4,0)+COALESCE(v5,0)+COALESCE(plants,0)+COALESCE(defuses,0) = 0'),
+    # NOTA: no haber hecho 2k/clutch/plant/defuse NO es un error.
 ]
 
 GLOBAL_CHECKS = [
@@ -250,12 +247,26 @@ def build_reporte(conn):
         for inc in incs:
             lineas.append(f"  - [{inc['tabla']}] {inc['etiqueta']} ({inc['filas']})")
 
+    # ── Resumen por tipo de chequeo (magnitud) ──
+    agregado = defaultdict(lambda: {'filas': 0, 'partidos': 0})
+    for p in por_partido:
+        for inc in p['incidencias']:
+            key = (inc['tabla'], inc['campo'], inc['etiqueta'])
+            agregado[key]['filas'] += inc['filas']
+            agregado[key]['partidos'] += 1
+    por_chequeo = [
+        {'tabla': k[0], 'campo': k[1], 'etiqueta': k[2], 'filas': v['filas'], 'partidos': v['partidos']}
+        for k, v in agregado.items()
+    ]
+    por_chequeo.sort(key=lambda x: -x['filas'])
+
     return {
         'total_partidos': total_partidos,
         'partidos_con_problemas': len(por_partido),
         'total_incidencias': sum(total_campo.values()) + sum(g['filas'] for g in globales),
         'tablas': tablas_conteo,
         'global': globales,
+        'por_chequeo': por_chequeo,
         'por_partido': por_partido,
         'texto': "\n".join(lineas),
     }
