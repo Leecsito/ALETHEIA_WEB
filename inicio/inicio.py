@@ -162,14 +162,17 @@ CREATE_TABLES_SQL = [
         team_id     INTEGER PRIMARY KEY,
         team_name   TEXT,
         region      TEXT,
-        url         TEXT
+        url         TEXT,
+        tag         TEXT,
+        country     TEXT
     )""",
     """CREATE TABLE IF NOT EXISTS players (
         player_id   INTEGER PRIMARY KEY AUTOINCREMENT,
         nickname    TEXT,
         real_name   TEXT,
         team_id     INTEGER REFERENCES teams(team_id) ON DELETE SET NULL,
-        team_name   TEXT
+        team_name   TEXT,
+        country     TEXT
     )""",
 ]
 
@@ -229,6 +232,14 @@ def run_migrations(conn):
 
     # Columnas relacionales por id
     for table, column, decl in ID_COLUMNS:
+        ensure_column(cur, table, column, decl)
+
+    # Columnas nuevas de equipos / jugadores
+    for table, column, decl in (
+        ('teams', 'tag', 'TEXT'),
+        ('teams', 'country', 'TEXT'),
+        ('players', 'country', 'TEXT'),
+    ):
         ensure_column(cur, table, column, decl)
 
     cur.close()
@@ -528,30 +539,34 @@ def etl_multikills(df, cur, nick_to_pid):
 
 
 def etl_teams(df, cur):
-    rows = [(ii(r['team_id']), ss(r.get('team_name')), ss(r.get('region')), ss(r.get('url')))
+    rows = [(ii(r['team_id']), ss(r.get('team_name')), ss(r.get('region')), ss(r.get('url')),
+             ss(r.get('tag')), ss(r.get('country')))
             for _, r in df.iterrows() if ii(r.get('team_id')) is not None]
     exec_batch(cur,
-        "INSERT INTO teams (team_id,team_name,region,url) VALUES ",
-        rows, 4,
+        "INSERT INTO teams (team_id,team_name,region,url,tag,country) VALUES ",
+        rows, 6,
         suffix=""" ON CONFLICT(team_id) DO UPDATE SET
                team_name = COALESCE(excluded.team_name, teams.team_name),
                region    = COALESCE(excluded.region, teams.region),
-               url       = COALESCE(excluded.url, teams.url)""")
+               url       = COALESCE(excluded.url, teams.url),
+               tag       = COALESCE(excluded.tag, teams.tag),
+               country   = COALESCE(excluded.country, teams.country)""")
     return len(rows)
 
 
 def etl_players(df, cur):
     rows = [(ii(r['player_id']), ss(r.get('nickname')), ss(r.get('real_name')),
-             ii(r.get('team_id')), ss(r.get('team_name')))
+             ii(r.get('team_id')), ss(r.get('team_name')), ss(r.get('country')))
             for _, r in df.iterrows() if ii(r.get('player_id')) is not None]
     exec_batch(cur,
-        "INSERT INTO players (player_id,nickname,real_name,team_id,team_name) VALUES ",
-        rows, 5,
+        "INSERT INTO players (player_id,nickname,real_name,team_id,team_name,country) VALUES ",
+        rows, 6,
         suffix=""" ON CONFLICT(player_id) DO UPDATE SET
                nickname  = COALESCE(excluded.nickname, players.nickname),
                real_name = COALESCE(excluded.real_name, players.real_name),
                team_id   = COALESCE(excluded.team_id, players.team_id),
-               team_name = COALESCE(excluded.team_name, players.team_name)""")
+               team_name = COALESCE(excluded.team_name, players.team_name),
+               country   = COALESCE(excluded.country, players.country)""")
     return len(rows)
 
 

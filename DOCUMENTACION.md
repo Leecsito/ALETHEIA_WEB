@@ -100,9 +100,9 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 8. **`multikills_clutches`**: Bajas múltiples y situaciones límite.
    - `mk_id` (INTEGER, PK AUTO), `match_id` (FK matches), `map_id` (FK maps), `player_name` (TEXT), `agent` (TEXT), `k2`..`k5` (INTEGER), `v1`..`v5` (INTEGER), `econ_rating` (INTEGER), `plants` (INTEGER), `defuses` (INTEGER).
 9. **`teams`**: Información de equipos.
-   - `team_id` (INTEGER, PK), `team_name` (TEXT), `region` (TEXT), `url` (TEXT).
+   - `team_id` (INTEGER, PK), `team_name` (TEXT), `region` (TEXT), `url` (TEXT), `tag` (TEXT), `country` (TEXT).
 10. **`players`**: Registro de jugadores.
-    - `player_id` (INTEGER, PK AUTO), `nickname` (TEXT), `real_name` (TEXT), `team_id` (FK teams), `team_name` (TEXT).
+    - `player_id` (INTEGER, PK AUTO), `nickname` (TEXT), `real_name` (TEXT), `team_id` (FK teams), `team_name` (TEXT), `country` (TEXT).
 
 ---
 
