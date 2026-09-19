@@ -6,7 +6,7 @@ services:
     startCommand: gunicorn wsgi:app --worker-class gthread --workers 1 --threads 4 --timeout 300 --graceful-timeout 30
     envVars:
       - key: ALETHEIA_PREDICT_URL
-        value: https://aletheia-predict.onrender.com
+        value: https://snugly-encore-sweep.ngrok-free.dev
       - key: TURSO_DATABASE_URL
         value: libsql://aletheia-leecsito.aws-us-east-1.turso.io
       - key: TURSO_AUTH_TOKEN
