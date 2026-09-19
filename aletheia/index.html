@@ -75,16 +75,23 @@
                 <span class="pid-badge" id="matchIdBadge">SIN ID</span>
                 <button class="btn-asociar" id="btnAsociar" disabled>⇄ ASOCIAR ID</button>
                 <span class="model-badge" id="modelBadge"></span>
+                <span class="cache-badge" id="cacheBadge"></span>
             </div>
 
             <div class="mb-header">
                 <div class="mb-title-wrap">
                     <span class="mb-title">CONFIGURAR PARTIDO</span>
+                    <div class="fmt-btns" id="fmtBtns">
+                        <button class="fmt-btn" data-fmt="1">BO1</button>
+                        <button class="fmt-btn active" data-fmt="3">BO3</button>
+                        <button class="fmt-btn" data-fmt="5">BO5</button>
+                    </div>
                     <span class="mb-format" id="mbFormat">—</span>
                 </div>
                 <div class="mb-hint">
-                    Haz click en los mapas para añadirlos en orden. El último es el <strong>DECIDER</strong>.
-                    Elige el lado inicial de <span class="hint-a" id="hintTeamA">Equipo A</span> en cada mapa.
+                    Elige el formato y toca los mapas para llenar los slots en orden. El último es el
+                    <strong>DECIDER</strong>. Define el lado inicial de
+                    <span class="hint-a" id="hintTeamA">Equipo A</span> en cada mapa.
                 </div>
             </div>
             <div class="map-slots" id="mapSlots"></div>

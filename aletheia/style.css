@@ -419,6 +419,106 @@ main {
     letter-spacing: 2px;
 }
 
+/* Selector de formato de serie (BO1/BO3/BO5) */
+.fmt-btns {
+    display: flex;
+    gap: 4px;
+}
+
+.fmt-btn {
+    padding: 4px 12px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--dim);
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 2px;
+    cursor: pointer;
+    transition: all .15s;
+}
+
+.fmt-btn:hover {
+    border-color: var(--accent);
+    color: var(--text);
+}
+
+.fmt-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, .08);
+}
+
+/* Badge de caché (partido ya precomputado) */
+.cache-badge {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--dim);
+}
+
+.cache-badge.ok {
+    color: var(--green);
+    border: 1px solid rgba(74, 222, 128, .4);
+    padding: 2px 8px;
+}
+
+.cache-badge.partial {
+    color: var(--orange);
+    border: 1px solid var(--orange);
+    padding: 2px 8px;
+}
+
+.cache-badge.warn {
+    color: var(--red);
+    border: 1px solid rgba(255, 71, 87, .4);
+    padding: 2px 8px;
+}
+
+/* Slots vacíos y predicción inline en la cola de mapas */
+.map-queue-item.qi-empty {
+    border-style: dashed;
+    opacity: .7;
+}
+
+.qi-empty-txt {
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 1px;
+}
+
+.qi-pred {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: 10px;
+    padding-left: 10px;
+    border-left: 1px solid var(--border);
+    font-family: var(--display);
+    font-size: 14px;
+    letter-spacing: 1px;
+}
+
+.qi-pred-a {
+    color: var(--accent);
+}
+
+.qi-pred-b {
+    color: var(--blue);
+}
+
+.qi-pred-ot {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--orange);
+    letter-spacing: 0;
+}
+
+.qi-pred-none {
+    margin-left: 10px;
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 1px;
+}
+
 .mb-hint {
     font-size: 10px;
     color: var(--dim);

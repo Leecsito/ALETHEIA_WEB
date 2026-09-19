@@ -291,6 +291,15 @@ estas tablas). Endpoints adicionales del proxy:
    - **Campo de ID de partido:** input donde se pega la URL de vlr.gg o el número; se
      parsea el primer grupo de dígitos (`https://www.vlr.gg/753455/...` → `753455`) y
      se muestra como `PARTIDO #753455`. Puede quedar vacío (`0`) y asociarse luego.
+   - **ARMADOR DE SERIE (BO1/BO3/BO5):** el usuario elige el formato y se muestran
+     N slots (1/3/5) que se llenan tocando los mapas en orden (el último es el
+     DECIDER) y define ATK/DEF por mapa. Si el partido ya está en caché, cada slot
+     muestra la predicción inline (P(A)/P(B)/OT) sin re-preparar; `SIMULAR PARTIDO`
+     solo se habilita con todos los slots llenos.
+   - **DETECCIÓN DE CACHÉ:** al elegir equipos o `match_id` se leen las filas
+     existentes (`/api/predicciones`); un badge indica "ya predicho (N filas)" y el
+     botón pasa a "RE-PREPARAR", de modo que un partido ya predecido se usa sin
+     re-ejecutar el servicio.
    - **PREPARAR PARTIDO:** dispara `POST /api/precalcular` con
      `{equipo_a, equipo_b, n_sim, match_id}` (avisa "no cierres la pestaña" y muestra
      el tiempo transcurrido). Al **no** enviar `mapas`, el servicio calcula los **13

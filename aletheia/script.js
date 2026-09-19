@@ -15,6 +15,8 @@ const TEAM_ABBREV_CACHE = {};
 let availableMaps = [];    // mapas ofrecidos por el servicio ALETHEIA_PREDICT
 let mapsLoading = false;   // true mientras carga la lista de mapas
 let matchMaps = [];        // [{ map_name, lado_inicial_a }]
+let maxMapsSel = 3;        // slots del formato elegido (1/3/5)
+const TOTAL_COMBOS = 26;   // 13 mapas × 2 lados (lo que precomputa el servicio)
 
 // ─── ESTADO DEL CICLO PREPARAR → LEER → ASOCIAR → COMPARAR ────────────────────
 let matchId = 0;                 // id de vlr.gg parseado del input
@@ -50,6 +52,7 @@ const hintTeamA = document.getElementById('hintTeamA');
 const matchIdInput = document.getElementById('matchIdInput');
 const matchIdBadge = document.getElementById('matchIdBadge');
 const modelBadge = document.getElementById('modelBadge');
+const cacheBadge = document.getElementById('cacheBadge');
 const btnAsociar = document.getElementById('btnAsociar');
 const btnPreparar = document.getElementById('btnPreparar');
 const prepareTimer = document.getElementById('prepareTimer');
@@ -225,6 +228,17 @@ function inferFormat(n) {
     return `Bo${n}`;
 }
 
+// ─── FORMATO DE SERIE (BO1 / BO3 / BO5) ──────────────────────────────────────
+document.querySelectorAll('.fmt-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        maxMapsSel = parseInt(btn.dataset.fmt);
+        if (matchMaps.length > maxMapsSel) matchMaps = matchMaps.slice(0, maxMapsSel);
+        syncMatchBuilder();
+    });
+});
+
 // ─── MATCH BUILDER ────────────────────────────────────────────────────────────
 function updateHintTeam() {
     if (selectedA) hintTeamA.textContent = TEAM_ABBREV_CACHE[selectedA] || selectedA;
@@ -239,6 +253,7 @@ function syncMatchBuilder() {
         return;
     }
 
+    // ── Selector visual de mapas ──
     const pickerDiv = document.createElement('div');
     pickerDiv.className = 'map-quick-picker';
     if (!availableMaps.length) {
@@ -246,7 +261,7 @@ function syncMatchBuilder() {
     }
     availableMaps.forEach(m => {
         const used = matchMaps.some(mm => mm.map_name === m);
-        const full = matchMaps.length >= 5;
+        const full = matchMaps.length >= maxMapsSel;
         const tile = document.createElement('button');
         tile.className = `mqp-tile${used ? ' mqp-used' : ''}${(!used && full) ? ' mqp-full' : ''}`;
         tile.innerHTML = `
@@ -261,20 +276,44 @@ function syncMatchBuilder() {
     });
     mapSlots.appendChild(pickerDiv);
 
-    if (matchMaps.length > 0) {
-        const queueDiv = document.createElement('div');
-        queueDiv.className = 'map-queue';
-        const abbrevA = selectedA ? (TEAM_ABBREV_CACHE[selectedA] || selectedA) : 'A';
-        matchMaps.forEach((cfg, i) => {
-            const isDecider = i === matchMaps.length - 1 && matchMaps.length >= 2;
-            const item = document.createElement('div');
-            item.className = `map-queue-item${isDecider ? ' qi-decider-row' : ''}`;
+    // ── Slots del formato elegido (BO1/BO3/BO5): mapa + lado + predicción en caché ──
+    const queueDiv = document.createElement('div');
+    queueDiv.className = 'map-queue';
+    const abbrevA = selectedA ? (TEAM_ABBREV_CACHE[selectedA] || selectedA) : 'A';
+    for (let i = 0; i < maxMapsSel; i++) {
+        const cfg = matchMaps[i];
+        const isDecider = (i === maxMapsSel - 1) && maxMapsSel >= 2;
+        const item = document.createElement('div');
+
+        if (!cfg) {
+            item.className = `map-queue-item qi-empty${isDecider ? ' qi-decider-row' : ''}`;
             item.innerHTML = `
+        <div class="qi-left">
+          <span class="qi-num">0${i + 1}</span>
+          <span class="qi-empty-txt">Selecciona un mapa arriba</span>
+          ${isDecider ? '<span class="qi-decider-badge">DECIDER</span>' : ''}
+        </div>`;
+            queueDiv.appendChild(item);
+            continue;
+        }
+
+        const row = liveBulk ? liveBulk[`${cfg.map_name}|${cfg.lado_inicial_a}`] : null;
+        const pred = row
+            ? `<div class="qi-pred">
+                 <span class="qi-pred-a">${pct(row.prob_victoria_a)}%</span>
+                 <span class="qi-pred-b">${pct(row.prob_victoria_b)}%</span>
+                 <span class="qi-pred-ot">OT ${pct(row.prob_overtime)}%</span>
+               </div>`
+            : `<span class="qi-pred-none">sin caché</span>`;
+
+        item.className = `map-queue-item${isDecider ? ' qi-decider-row' : ''}`;
+        item.innerHTML = `
         <div class="qi-left">
           <span class="qi-num">0${i + 1}</span>
           <img class="qi-map-img" src="../multimedia/maps/${cfg.map_name.toUpperCase()}.avif" onerror="this.style.display='none'">
           <span class="qi-mapname">${cfg.map_name.toUpperCase()}</span>
           ${isDecider ? '<span class="qi-decider-badge">DECIDER</span>' : ''}
+          ${pred}
         </div>
         <div class="qi-side-group">
           <span class="qi-side-label">${abbrevA} empieza:</span>
@@ -282,10 +321,9 @@ function syncMatchBuilder() {
           <button class="qi-side-btn${cfg.lado_inicial_a === 'defense' ? ' qi-def-active' : ''}" data-idx="${i}" data-side="def">🛡 DEF</button>
         </div>
         <button class="qi-remove" data-idx="${i}" title="Quitar">✕</button>`;
-            queueDiv.appendChild(item);
-        });
-        mapSlots.appendChild(queueDiv);
+        queueDiv.appendChild(item);
     }
+    mapSlots.appendChild(queueDiv);
 
     mapSlots.querySelectorAll('.qi-side-btn').forEach(btn => {
         btn.addEventListener('click', e => {
@@ -305,9 +343,9 @@ function syncMatchBuilder() {
 
 function updateBuilderState() {
     const n = matchMaps.length;
-    mbFormat.textContent = n > 0 ? inferFormat(n) : '—';
-    bspCount.textContent = `${n} mapa${n !== 1 ? 's' : ''}`;
-    const ready = n > 0;
+    mbFormat.textContent = `${n > 0 ? inferFormat(n) : '—'} · ${n}/${maxMapsSel}`;
+    bspCount.textContent = `${n}/${maxMapsSel} mapas`;
+    const ready = n > 0 && n === maxMapsSel;
     btnSimPart.classList.toggle('ready', ready);
     btnSimPart.disabled = !ready;
     updateActionState();
@@ -368,6 +406,8 @@ async function loadLiveBulk() {
         liveBulk = {};
     }
     renderLiveMapPicker();
+    updateCacheBadge();
+    syncMatchBuilder();
     if (liveMap) fetchLive();
 }
 
@@ -584,6 +624,28 @@ function updateModelBadge() {
     } else {
         modelBadge.textContent = `modelo ${serviceModelVersion}`;
     }
+}
+
+// Indica si el partido ya está precomputado en caché (para no re-preparar).
+function updateCacheBadge() {
+    const bpText = btnPreparar.querySelector('.bp-text');
+    if (!selectedA || !selectedB) {
+        cacheBadge.className = 'cache-badge';
+        cacheBadge.textContent = '';
+        return;
+    }
+    const n = liveBulk ? Object.keys(liveBulk).length : 0;
+    if (n === 0) {
+        cacheBadge.className = 'cache-badge warn';
+        cacheBadge.textContent = '⚠ sin predicciones en caché';
+    } else if (n >= TOTAL_COMBOS) {
+        cacheBadge.className = 'cache-badge ok';
+        cacheBadge.textContent = `✓ ya predicho (${n} filas en caché)`;
+    } else {
+        cacheBadge.className = 'cache-badge partial';
+        cacheBadge.textContent = `${n}/${TOTAL_COMBOS} en caché`;
+    }
+    if (bpText) bpText.textContent = (n >= TOTAL_COMBOS) ? 'RE-PREPARAR' : 'PREPARAR PARTIDO';
 }
 
 // ─── PESTAÑAS ─────────────────────────────────────────────────────────────────
