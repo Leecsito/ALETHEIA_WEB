@@ -169,6 +169,13 @@ main {
     letter-spacing: 3px;
     transition: all .25s;
     background: var(--bg);
+    overflow: hidden;
+}
+
+.selected-team span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .selected-team.has-team {
@@ -240,6 +247,8 @@ main {
     font-family: var(--display);
     font-size: 14px;
     letter-spacing: 2px;
+    line-height: 1.15;
+    word-break: break-word;
 }
 
 .tc-maps {
@@ -1752,6 +1761,8 @@ main {
     font-family: var(--display);
     font-size: 22px;
     letter-spacing: 3px;
+    word-break: break-word;
+    line-height: 1.1;
 }
 
 .sb-pct {
@@ -2211,6 +2222,7 @@ main {
 .pm-abbrev {
     font-size: 9px;
     letter-spacing: 1px;
+    word-break: break-word;
 }
 
 .pm-pct-val {

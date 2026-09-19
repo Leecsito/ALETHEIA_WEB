@@ -51,9 +51,9 @@ ALETHEIA/
 │   ├── index.html
 │   ├── style.css
 │   └── script.js
-├── aletheia/                 # Componente Predictor Avanzado Monte Carlo (v3)
+├── aletheia/                 # Componente Predictor Avanzado (proxy hacia ALETHEIA_PREDICT)
 │   ├── __init__.py
-│   ├── aletheia.py           # Blueprint Flask (Simulación Halftime, Overtime, Operator, Star Player)
+│   ├── aletheia.py           # Blueprint Flask — proxy HTTP a ALETHEIA_PREDICT_URL (equipos, mapas, predecir)
 │   ├── index.html
 │   ├── style.css
 │   └── script.js
@@ -134,15 +134,63 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 - `GET /api/equipos-pred`: Lista los equipos disponibles en la base de datos con su número de mapas jugados y rating promedio.
 - `POST /api/predecir`: Ejecuta la simulación Monte Carlo (por defecto 10,000 iteraciones) utilizando 5 señales de rendimiento (WR histórico, habilidad, economía, clutch, H2H/veto) y decaimiento exponencial temporal.
 
-### 4.5. Módulo Predictor Avanzado v3 (`aletheia_bp`)
-- `GET /api/aletheia/equipos`: Lista de equipos para el módulo avanzado.
-- `POST /api/aletheia/predecir`: Simulación avanzada Monte Carlo que incluye:
-  - Simulación de Halftime con máquina de estados de economía real de Valorant.
-  - Perfil y tasa de victoria en Overtime / capacidad de cierre.
-  - Análisis de impacto del arma Operator por mapa.
-  - Evaluación del Jugador Estrella y riesgo de contra-estrategia.
-- `POST /api/aletheia/recalcular_mapa`: Re-simula un solo mapa especificando overrides de agentes seleccionados.
-- `POST /api/aletheia/recalcular_serie`: Recalcula la probabilidad global de serie (Bo1, Bo3, Bo5) con probabilidades de mapa actualizadas.
+### 4.5. Módulo Predictor Avanzado (`aletheia_bp`)
+
+Este módulo **no simula partidos**: es un **proxy HTTP** hacia el servicio externo
+**ALETHEIA_PREDICT** (repositorio independiente), cuyo motor es **Glicko-2 + regresión
+logística sobre `rating_diff` (P(mapa)) + Monte Carlo re-escalado** (marcador/economía)
+para estimar overtime. La URL base se lee de la variable de entorno
+`ALETHEIA_PREDICT_URL` (por defecto `http://localhost:8000`).
+
+Endpoints expuestos por ALETHEIA (todos reenvían al servicio externo):
+
+- `GET /api/aletheia/equipos` → proxy de `GET {BASE}/api/equipos`.
+  Adapta la respuesta para el grid del frontend:
+  `{"ok": true, "teams": [{"name", "abbrev", "maps_played": 0, "avg_rating": 0}]}`.
+  Como el servicio solo devuelve nombres, `abbrev = name` (decisión de diseño) y
+  las métricas `maps_played`/`avg_rating` quedan en 0 porque el servicio no las aporta.
+- `GET /api/aletheia/mapas` → proxy de `GET {BASE}/api/mapas`.
+  Devuelve `{"ok": true, "mapas": [...]}` (13 mapas, incluye `Summit`).
+- `POST /api/aletheia/predecir` → proxy de `POST {BASE}/api/predecir`.
+  Reenvía el body tal cual y devuelve la respuesta del servicio sin transformar.
+
+**Body de `/api/aletheia/predecir`:**
+```json
+{
+  "equipo_a": "Team Liquid",
+  "equipo_b": "Paper Rex",
+  "mapas": [
+    {"map_name": "Split", "lado_inicial_a": "attack"},
+    {"map_name": "Ascent", "lado_inicial_a": "defense"}
+  ],
+  "n_sim": 10000
+}
+```
+Reglas: `lado_inicial_a` se define **por mapa** (`"attack"` | `"defense"`); el
+formato se **infiere por cantidad** (1→bo1, 2-3→bo3, 4-5→bo5); `n_sim` se normaliza
+a `[1000, 50000]`.
+
+**Respuesta del servicio (proxy sin cambios):**
+```json
+{
+  "ok": true,
+  "equipo_a": "Team Liquid",
+  "equipo_b": "Paper Rex",
+  "n_sim": 10000,
+  "formato": "bo3",
+  "mapas_para_ganar": 2,
+  "mapas": [
+    {"map_name": "Split", "lado_inicial_a": "attack",
+     "prob_victoria_a": 0.4412, "prob_victoria_b": 0.5588, "prob_overtime": 0.164}
+  ],
+  "prob_serie_a": 0.6333,
+  "prob_serie_b": 0.3667
+}
+```
+
+Manejo de errores: timeout de 120 s (504 si expira) y 502 `{"ok": false, "error": "..."}`
+si el servicio no responde. Este módulo **no importa** `numpy`, `pandas` ni
+`backend.conexion`.
 
 ### 4.6. Módulo Exportar (`exportar_bp`)
 - `GET /api/export/tables`: Retorna metadatos de las 10 tablas (filas y lista de columnas).
@@ -186,6 +234,12 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 - **Servidor WSGI:** `gunicorn wsgi:app`
 - **Comando de Build:** `pip install -r requirements.txt`
 - **Archivo de Configuración:** `render.yaml` declara el servicio web Python con las variables de entorno necesarias para la conexión remota a Turso.
+- **Variables de Entorno:**
+  - `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`: conexión a la base de datos Turso.
+  - `ALETHEIA_PREDICT_URL`: URL base del servicio externo **ALETHEIA_PREDICT**
+    (motor de predicción). En local se define en el archivo `.env`
+    (`http://localhost:8000`); en Render se declara en `render.yaml`.
+    El módulo `aletheia/aletheia.py` actúa como proxy hacia esta URL.
 
 ---
 
