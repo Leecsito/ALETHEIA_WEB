@@ -51,9 +51,13 @@ ALETHEIA/
 │   ├── index.html
 │   ├── style.css
 │   └── script.js
-├── aletheia/                 # Componente Predictor Avanzado (proxy hacia ALETHEIA_PREDICT)
+├── aletheia/                 # Componente EN VIVO (predictor; proxy hacia ALETHEIA_PREDICT)
 │   ├── __init__.py
-│   ├── aletheia.py           # Blueprint Flask — proxy HTTP a ALETHEIA_PREDICT_URL (equipos, mapas, predecir)
+│   ├── aletheia.py           # Blueprint Flask — proxy HTTP a ALETHEIA_PREDICT_URL
+│   ├── index.html            # Página EN VIVO: lista de simulaciones + mapa/bando + armador de serie
+│   ├── style.css
+│   └── script.js
+├── aletheia_preparar/        # Componente PREPARAR PARTIDO (equipos + id + preparar/asociar + comparación)
 │   ├── index.html
 │   ├── style.css
 │   └── script.js
@@ -241,17 +245,32 @@ estas tablas). Endpoints adicionales del proxy:
   ```
   Clasificación: favorito = A si `p_a >= 0.5`; `max(p_a,p_b) < 0.55` → `incierto`;
   si ganó el favorito → `favorito_gano`; si no → `upset`.
+- `GET /api/aletheia/simulaciones[?equipo=&match_id=&limite=]` → proxy de
+  `GET {BASE}/api/simulaciones`. Lista los enfrentamientos ya preparados:
+  ```json
+  {
+    "ok": true, "modelo_version": "<hash>",
+    "simulaciones": [{"match_id": 753455, "equipo_a": "Team Liquid", "equipo_b": "Paper Rex",
+                      "mapas": 13, "filas": 26, "n_sim": 50000, "modelo_version": "<hash>",
+                      "vigente": true, "created_at": "...", "updated_at": "..."}]
+  }
+  ```
+  `match_id=0` = "sin id" (para leer sus filas usar `equipo_a`/`equipo_b`).
+- `POST /api/aletheia/serie` → proxy de `POST {BASE}/api/serie`. Probabilidad de
+  serie desde caché (sin Monte Carlo; no escribe en la DB). Body:
+  `{"match_id":753455,"equipo_a":...,"equipo_b":...,"mapas":[{map_name,lado_inicial_a},...]}`.
+  Respuesta: `{"ok":true,"formato":"bo3","mapas_para_ganar":2,"mapas":[{...,"fuente":"cache"}],"prob_serie_a":...,"prob_serie_b":...}`.
 
 **Flujo del ciclo (frontend → `PREDICT_DIRECTO` ngrok):**
-1. **PREPARAR PARTIDO**: `POST {PREDICT_DIRECTO}/api/precalcular` con el id de
-   vlr.gg (llamada larga, directa al servicio para no chocar con el timeout de
-   gunicorn). Se guarda el `modelo_version` con el que se preparó.
-2. **SELECCIÓN EN VIVO**: al cambiar mapa/lado, `GET /api/prediccion` lee la fila
-   cacheada (sin simular).
-3. **ASOCIAR ID**: si se preparó con id `0` o equivocado, `POST /api/asociar`
-   reasigna el `match_id` (usando `desde_match_id`).
-4. **COMPARACIÓN**: `GET /api/comparacion` contrasta lo predicho con el resultado
-   real del mismo `match_id`.
+1. **PREPARAR** (`/aletheia_preparar/`): `POST {PREDICT_DIRECTO}/api/precalcular`
+   con el id de vlr.gg (llamada larga, directa al servicio). Se guarda el
+   `modelo_version`. Luego **ASOCIAR ID** y **COMPARACIÓN**.
+2. **LISTAR/LEER** (`/aletheia/`, EN VIVO): `GET /api/simulaciones` lista lo
+   preparado (por defecto solo `vigente:true`); al elegir una se leen sus filas
+   UNA vez con `GET /api/predicciones` (caché).
+3. **MAPA/BANDO**: elegir mapa+lado muestra `prob_victoria_a/b` y `prob_overtime`
+   desde la caché local (solo consulta `/api/prediccion` si falta el dato).
+4. **ARMAR SERIE**: `POST /api/serie` da `prob_serie_a/b` al instante.
 5. Si `/api/modelo_version` cambia respecto al guardado, la web marca **RE-PREPARAR**.
 
 ### 4.6. Módulo Exportar (`exportar_bp`)
@@ -266,12 +285,13 @@ estas tablas). Endpoints adicionales del proxy:
 ## 5. Estructura y Reglas del Frontend
 
 1. **Rutas Estáticas de Navegación (`backend/app.py`):**
-   Las subcarpetas registradas en `FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'predecir', 'aletheia', 'exportar']` se sirven automáticamente en la raíz HTTP:
+   Las subcarpetas registradas en `FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'predecir', 'aletheia', 'aletheia_preparar', 'exportar']` se sirven automáticamente en la raíz HTTP:
    - `/inicio/` o `/inicio/index.html`
    - `/tablas/` o `/tablas/index.html`
    - `/visualizar/` o `/visualizar/index.html`
    - `/predecir/` o `/predecir/index.html`
-   - `/aletheia/` o `/aletheia/index.html`
+   - `/aletheia/` o `/aletheia/index.html` (**EN VIVO**)
+   - `/aletheia_preparar/` o `/aletheia_preparar/index.html` (**PREPARAR**)
    - `/exportar/` o `/exportar/index.html`
 
 2. **Configuración de Host API Dinámico:**
@@ -281,44 +301,36 @@ estas tablas). Endpoints adicionales del proxy:
    ```
    Esto garantiza que las peticiones se dirijan correctamente al mismo host tanto en entornos locales (`http://localhost:5000/api`) como en producción en Render (`https://tu-app.onrender.com/api`).
 
-3. **Servicio ALETHEIA_PREDICT (ngrok) y ciclo de partido (`aletheia/script.js`):**
+3. **Servicio ALETHEIA_PREDICT (ngrok) y las DOS páginas (`aletheia/` y `aletheia_preparar/`):**
    - El predictor externo corre en el PC del autor y se expone con ngrok en la
      constante `PREDICT_DIRECTO` (`https://snugly-encore-sweep.ngrok-free.dev`).
-     Todas las llamadas a ese host llevan el header `ngrok-skip-browser-warning: 1`.
-   - Las corridas **largas** (`/api/precalcular` y `/api/predecir`) se piden
-     **directo** a `PREDICT_DIRECTO` (no por el proxy de la web) para no chocar con
-     el timeout de gunicorn/Render. Equipos y mapas sí van por el proxy (son rápidos).
-   - **Campo de ID de partido:** input donde se pega la URL de vlr.gg o el número; se
-     parsea el primer grupo de dígitos (`https://www.vlr.gg/753455/...` → `753455`) y
-     se muestra como `PARTIDO #753455`. Puede quedar vacío (`0`) y asociarse luego.
-   - **ARMADOR DE SERIE (BO1/BO3/BO5):** el usuario elige el formato y se muestran
-     N slots (1/3/5) que se llenan tocando los mapas en orden (el último es el
-     DECIDER) y define ATK/DEF por mapa. Si el partido ya está en caché, cada slot
-     muestra la predicción inline (P(A)/P(B)/OT) sin re-preparar; `SIMULAR PARTIDO`
-     solo se habilita con todos los slots llenos.
-   - **DETECCIÓN DE CACHÉ:** al elegir equipos o `match_id` se leen las filas
-     existentes (`/api/predicciones`); un badge indica "ya predicho (N filas)" y el
-     botón pasa a "RE-PREPARAR", de modo que un partido ya predecido se usa sin
-     re-ejecutar el servicio.
-   - **PREPARAR PARTIDO:** dispara `POST /api/precalcular` con
-     `{equipo_a, equipo_b, n_sim, match_id}` (avisa "no cierres la pestaña" y muestra
-     el tiempo transcurrido). Al **no** enviar `mapas`, el servicio calcula los **13
-     mapas × 2 lados = 26 filas**; el usuario puede preparar sin elegir ningún mapa.
-     Al terminar guarda el `modelo_version`.
-   - **SELECCIÓN EN VIVO:** rejilla visual de los 13 mapas (mismo estilo de tiles que el
-     armador de serie) + toggle ATK/DEF de A. Al entrar o cambiar de lado se leen todas
-     las filas cacheadas con `GET /api/predicciones?match_id=..` y cada tile muestra la
-     P(A) y el OT del lado elegido; al tocar un mapa se pide el detalle exacto con
-     `GET /api/prediccion?match_id=..&map_name=..&lado_inicial_a=..` (prob_victoria_a,
-     prob_victoria_b, prob_overtime, fuente y `vigente`). Si no hay caché: "Aún no
-     precomputado"; si `vigente=false`: "vuelve a preparar".
-   - **ASOCIAR ID:** `POST /api/asociar` con
-     `{equipo_a, equipo_b, match_id, desde_match_id}` para reasignar el id; refresca la vista.
-   - **PESTAÑA COMPARACIÓN:** `GET /api/comparacion?match_id=..` muestra tarjetas resumen
-     (`n`, accuracy, brier, log-loss, favoritos_ok, upsets, inciertos) y una tabla de
-     detalle coloreada (verde = favorito ganó, rojo = upset, ámbar = incierto). Si el
-     partido aún no está en la DB: "sin resultado real todavía".
-   - Se muestra el `modelo_version`; si el del servicio cambia, la web marca **RE-PREPARAR**.
+     Todas las llamadas a ese host llevan el header `ngrok-skip-browser-warning: 1`
+     (helper `predictFetch`).
+   - Las corridas **largas** (`/api/precalcular`) se piden **directo** a
+     `PREDICT_DIRECTO` (no por el proxy de la web) para no chocar con el timeout de
+     gunicorn/Render. Equipos y mapas sí van por el proxy (son rápidos).
+   - **`/aletheia_preparar/` — PREPARAR:** selección de equipos (search+grids),
+     selector de simulaciones (5K/10K/25K/50K), campo de ID vlr.gg (parsea URL o
+     número), **PREPARAR PARTIDO** (async: `POST /api/precalcular` → `job_id` → poll
+     `/api/precalcular/estado`, con % y tiempo transcurrido), **ASOCIAR ID** y panel
+     **COMPARACIÓN** (`/api/comparacion`). Muestra badges de caché ("ya predicho") y
+     de `modelo_version`; "si cambia el modelo" marca RE-PREPARAR. Botón
+     **"IR A EN VIVO →"**.
+   - **`/aletheia/` — EN VIVO (nunca simula):**
+     - Al cargar, `GET /api/simulaciones` pinta la lista de preparadas
+       (`EQUIPO_A vs EQUIPO_B · #match_id · N mapas · n_sim · [vigente]`); por
+       defecto solo `vigente:true`, con toggle "mostrar no vigentes" (marcadas
+       "re-preparar").
+     - Al elegir una se leen sus filas **UNA vez** (`GET /api/predicciones`) y se
+       guardan en `liveBulk` (`map|side`).
+     - **MAPA / BANDO:** rejilla de los 13 mapas con P(A) y OT del bando elegido
+       (leídas de `liveBulk`; no llama al servicio en cada clic, solo si falta el
+       dato). Al tocar un mapa muestra `prob_victoria_a/b`, `prob_overtime` y `n_sim`.
+     - **ARMAR SERIE (BO1/BO3/BO5):** slots en orden (el último = DECIDER) con bando
+       por mapa; cada cambio hace `POST /api/serie` y muestra el banner
+       (`prob_serie_a/b`, formato, `mapas_para_ganar`) al instante.
+     - Botón **"← PREPARAR PARTIDO"**.
+   - Servicio apagado: cada llamada se maneja con avisos, sin romper la página.
 
 4. **Sistema de Diseño Visual:**
    - Estética oscura / Cyberpunk (`--bg-color: #0b0e14`, paneles con fondo translúcido y bordes luminosos).

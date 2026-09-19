@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ALETHEIA — Preparar Partido</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
+        rel="stylesheet" />
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <div class="bg-grid"></div>
+    <div class="scanlines"></div>
+
+    <header>
+        <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
+        <div class="header-title">
+            PREPARAR <span class="header-badge">PARTIDO</span>
+        </div>
+        <div class="header-nav">
+            <a href="../aletheia/index.html" class="btn-nav">IR A EN VIVO →</a>
+            <a href="../exportar/index.html" class="btn-nav">EXPORTAR 📥</a>
+            <a href="../inicio/index.html" class="btn-nav">ETL ↑</a>
+        </div>
+    </header>
+
+    <main>
+
+        <!-- ── SELECCIÓN DE EQUIPOS ── -->
+        <section class="selector-section">
+            <div class="team-panel" id="panelA">
+                <div class="team-panel-label">EQUIPO A</div>
+                <div class="selected-team" id="selectedA">
+                    <span class="sel-placeholder">Selecciona un equipo</span>
+                </div>
+                <input class="team-search" id="searchA" placeholder="Buscar equipo..." autocomplete="off" />
+                <div class="team-grid" id="teamGridA"></div>
+            </div>
+
+            <div class="vs-column">
+                <div class="vs-text">VS</div>
+                <div class="sim-options">
+                    <div class="sim-label">SIMULACIONES</div>
+                    <div class="sim-btns">
+                        <button class="sim-btn" data-n="5000">5K</button>
+                        <button class="sim-btn active" data-n="10000">10K</button>
+                        <button class="sim-btn" data-n="25000">25K</button>
+                        <button class="sim-btn" data-n="50000">50K</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="team-panel" id="panelB">
+                <div class="team-panel-label">EQUIPO B</div>
+                <div class="selected-team" id="selectedB">
+                    <span class="sel-placeholder">Selecciona un equipo</span>
+                </div>
+                <input class="team-search" id="searchB" placeholder="Buscar equipo..." autocomplete="off" />
+                <div class="team-grid" id="teamGridB"></div>
+            </div>
+        </section>
+
+        <!-- ── PANEL PREPARAR ── -->
+        <div class="match-builder" id="preparePanel" style="display:none">
+            <div class="partido-id-bar">
+                <div class="pid-label">PARTIDO (vlr.gg)</div>
+                <input class="pid-input" id="matchIdInput"
+                    placeholder="https://www.vlr.gg/753455/... o 753455" autocomplete="off" />
+                <span class="pid-badge" id="matchIdBadge">SIN ID</span>
+                <button class="btn-asociar" id="btnAsociar" disabled>⇄ ASOCIAR ID</button>
+                <span class="model-badge" id="modelBadge"></span>
+                <span class="cache-badge" id="cacheBadge"></span>
+            </div>
+
+            <div class="mb-actions">
+                <div class="prepare-hint">
+                    Se calculan los <strong>13 mapas × 2 lados = 26 combinaciones</strong>.
+                    No cierres esta pestaña mientras se prepara.
+                </div>
+                <div class="mb-spacer"></div>
+                <button class="btn-preparar" id="btnPreparar" disabled>
+                    <span class="bp-icon">⚙</span>
+                    <span class="bp-text">PREPARAR PARTIDO</span>
+                    <span class="bp-timer" id="prepareTimer"></span>
+                </button>
+            </div>
+            <div class="prepare-status" id="prepareStatus" style="display:none"></div>
+        </div>
+
+        <!-- ── COMPARACIÓN (predicho vs. real) ── -->
+        <section class="live-section" id="comparisonPanel" style="display:none">
+            <div class="live-tabs">
+                <div class="live-tab active">COMPARACIÓN (predicho vs. real)</div>
+            </div>
+            <div class="live-panel" id="panelComparacion">
+                <div class="cmp-summary" id="cmpSummary"></div>
+                <div class="cmp-table-wrap" id="cmpTableWrap"></div>
+                <div class="live-status" id="cmpStatus"></div>
+            </div>
+        </section>
+
+    </main>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

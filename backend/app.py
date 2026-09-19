@@ -28,7 +28,7 @@ from predecir  import predecir_bp
 from aletheia import aletheia_bp
 from exportar import exportar_bp
 
-FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'predecir', 'aletheia', 'exportar']
+FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'predecir', 'aletheia', 'aletheia_preparar', 'exportar']
 
 # static_folder=ROOT sirve automáticamente CSS/JS/imágenes desde la raíz del proyecto
 app = Flask(__name__, static_folder=ROOT, static_url_path='')

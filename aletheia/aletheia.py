@@ -210,3 +210,15 @@ def predicciones():
 def comparacion():
     """Proxy GET /api/comparacion (predicho vs. resultado real)."""
     return _passthrough_get('/api/comparacion')
+
+
+@aletheia_bp.route('/api/aletheia/simulaciones', methods=['GET'])
+def simulaciones():
+    """Proxy GET /api/simulaciones (enfrentamientos ya preparados)."""
+    return _passthrough_get('/api/simulaciones')
+
+
+@aletheia_bp.route('/api/aletheia/serie', methods=['POST'])
+def serie():
+    """Proxy POST /api/serie (probabilidad de serie desde caché, sin Monte Carlo)."""
+    return _passthrough_post('/api/serie')

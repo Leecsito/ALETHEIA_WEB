@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ALETHEIA — Predictor Avanzado</title>
+    <title>ALETHEIA — En Vivo</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
@@ -19,119 +19,54 @@
     <header>
         <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
         <div class="header-title">
-            PREDICTOR <span class="header-badge">AVANZADO</span>
+            EN VIVO <span class="header-badge">PREDICTOR</span>
         </div>
         <div class="header-nav">
+            <a href="../aletheia_preparar/index.html" class="btn-nav">← PREPARAR PARTIDO</a>
             <a href="../exportar/index.html" class="btn-nav">EXPORTAR 📥</a>
             <a href="../predecir/index.html" class="btn-nav">MC CLÁSICO</a>
-            <a href="../inicio/index.html" class="btn-nav">ETL ↑</a>
         </div>
     </header>
 
     <main>
 
-        <!-- ── SELECCIÓN DE EQUIPOS ── -->
-        <section class="selector-section">
-            <div class="team-panel" id="panelA">
-                <div class="team-panel-label">EQUIPO A</div>
-                <div class="selected-team" id="selectedA">
-                    <span class="sel-placeholder">Selecciona un equipo</span>
-                </div>
-                <input class="team-search" id="searchA" placeholder="Buscar equipo..." autocomplete="off" />
-                <div class="team-grid" id="teamGridA"></div>
+        <!-- ── LISTA DE SIMULACIONES PREPARADAS ── -->
+        <section class="sim-browser">
+            <div class="lb-head">
+                <div class="lb-title">SIMULACIONES PREPARADAS</div>
+                <label class="lb-stale-toggle">
+                    <input type="checkbox" id="chkShowStale" /> mostrar no vigentes
+                </label>
+                <div class="mb-spacer"></div>
+                <button class="btn-refresh" id="btnRefreshSims">↻ ACTUALIZAR</button>
             </div>
-
-            <div class="vs-column">
-                <div class="vs-text">VS</div>
-                <div class="sim-options">
-                    <div class="sim-label">SIMULACIONES</div>
-                    <div class="sim-btns">
-                        <button class="sim-btn" data-n="5000">5K</button>
-                        <button class="sim-btn active" data-n="10000">10K</button>
-                        <button class="sim-btn" data-n="25000">25K</button>
-                        <button class="sim-btn" data-n="50000">50K</button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="team-panel" id="panelB">
-                <div class="team-panel-label">EQUIPO B</div>
-                <div class="selected-team" id="selectedB">
-                    <span class="sel-placeholder">Selecciona un equipo</span>
-                </div>
-                <input class="team-search" id="searchB" placeholder="Buscar equipo..." autocomplete="off" />
-                <div class="team-grid" id="teamGridB"></div>
-            </div>
+            <div class="sim-list" id="simList"></div>
+            <div class="live-status" id="simListStatus"></div>
         </section>
 
-        <!-- ── CONFIGURADOR DE PARTIDO ── -->
-        <div class="match-builder" id="matchBuilder" style="display:none">
-
-            <!-- ID de partido (vlr.gg) -->
-            <div class="partido-id-bar">
-                <div class="pid-label">PARTIDO (vlr.gg)</div>
-                <input class="pid-input" id="matchIdInput"
-                    placeholder="https://www.vlr.gg/753455/... o 753455" autocomplete="off" />
-                <span class="pid-badge" id="matchIdBadge">SIN ID</span>
-                <button class="btn-asociar" id="btnAsociar" disabled>⇄ ASOCIAR ID</button>
-                <span class="model-badge" id="modelBadge"></span>
-                <span class="cache-badge" id="cacheBadge"></span>
-            </div>
-
-            <div class="mb-header">
-                <div class="mb-title-wrap">
-                    <span class="mb-title">CONFIGURAR PARTIDO</span>
-                    <div class="fmt-btns" id="fmtBtns">
-                        <button class="fmt-btn" data-fmt="1">BO1</button>
-                        <button class="fmt-btn active" data-fmt="3">BO3</button>
-                        <button class="fmt-btn" data-fmt="5">BO5</button>
-                    </div>
-                    <span class="mb-format" id="mbFormat">—</span>
-                </div>
-                <div class="mb-hint">
-                    Elige el formato y toca los mapas para llenar los slots en orden. El último es el
-                    <strong>DECIDER</strong>. Define el lado inicial de
-                    <span class="hint-a" id="hintTeamA">Equipo A</span> en cada mapa.
-                </div>
-            </div>
-            <div class="map-slots" id="mapSlots"></div>
-            <div class="mb-actions">
-                <button class="btn-add-map" id="btnAddMap"><span>✕</span> LIMPIAR</button>
-                <div class="mb-spacer"></div>
-                <button class="btn-preparar" id="btnPreparar" disabled>
-                    <span class="bp-icon">⚙</span>
-                    <span class="bp-text">PREPARAR PARTIDO</span>
-                    <span class="bp-timer" id="prepareTimer"></span>
-                </button>
-                <button class="btn-sim-partido" id="btnSimPartido" disabled>
-                    <span class="bsp-icon">◈</span>
-                    <span class="bsp-text">SIMULAR PARTIDO</span>
-                    <span class="bsp-count" id="bspCount">0 mapas</span>
-                </button>
-            </div>
-            <div class="prepare-status" id="prepareStatus" style="display:none"></div>
-        </div>
-
-        <!-- ── SELECCIÓN EN VIVO / COMPARACIÓN ── -->
+        <!-- ── DETALLE EN VIVO ── -->
         <section class="live-section" id="liveSection" style="display:none">
+            <div class="sel-sim-head" id="selSimHead"></div>
+
             <div class="live-tabs">
-                <button class="live-tab active" data-tab="vivo">SELECCIÓN EN VIVO</button>
-                <button class="live-tab" data-tab="comparacion">COMPARACIÓN</button>
+                <button class="live-tab active" data-tab="mapa">MAPA / BANDO</button>
+                <button class="live-tab" data-tab="serie">ARMAR SERIE</button>
             </div>
 
-            <!-- Panel: leer predicción cacheada -->
-            <div class="live-panel" id="panelVivo">
+            <!-- Tab: mapa / bando (lee de la caché, sin simular) -->
+            <div class="live-panel" id="panelMapa">
                 <div class="live-controls">
                     <div class="live-ctl">
-                        <span class="live-ctl-label">MAPA</span>
-                        <span class="live-hint">Toca un mapa para ver el detalle · P(A) según el lado elegido</span>
+                        <span class="live-ctl-label">BANDO INICIAL <span id="liveTeamALabel"
+                                class="pm-team-a-label"></span></span>
+                        <div class="live-side-toggle">
+                            <button class="qi-side-btn qi-atk-active" id="liveSideAtk">⚔ ATK</button>
+                            <button class="qi-side-btn" id="liveSideDef">🛡 DEF</button>
+                        </div>
                     </div>
                     <div class="live-ctl">
-                        <span class="live-ctl-label">INICIO <span id="liveTeamALabel" class="pm-team-a-label"></span></span>
-                        <div class="live-side-toggle">
-                            <button class="qi-side-btn qi-atk-active" id="liveSideAtk" data-side="atk">⚔ ATK</button>
-                            <button class="qi-side-btn" id="liveSideDef" data-side="def">🛡 DEF</button>
-                        </div>
+                        <span class="live-ctl-label">MAPA</span>
+                        <span class="live-hint">Toca un mapa · P(A) y OT según el bando elegido</span>
                     </div>
                 </div>
                 <div class="map-quick-picker live-map-picker" id="liveMapPicker"></div>
@@ -140,34 +75,27 @@
                 <div class="live-status" id="liveStatus"></div>
             </div>
 
-            <!-- Panel: comparación predicho vs. real -->
-            <div class="live-panel" id="panelComparacion" style="display:none">
-                <div class="cmp-summary" id="cmpSummary"></div>
-                <div class="cmp-table-wrap" id="cmpTableWrap"></div>
-                <div class="live-status" id="cmpStatus"></div>
+            <!-- Tab: armar serie (POST /api/serie, instantáneo) -->
+            <div class="live-panel" id="panelSerie" style="display:none">
+                <div class="mb-header">
+                    <div class="mb-title-wrap">
+                        <span class="mb-title">ARMAR SERIE</span>
+                        <div class="fmt-btns" id="fmtBtns">
+                            <button class="fmt-btn" data-fmt="1">BO1</button>
+                            <button class="fmt-btn active" data-fmt="3">BO3</button>
+                            <button class="fmt-btn" data-fmt="5">BO5</button>
+                        </div>
+                        <span class="mb-format" id="mbFormat">—</span>
+                    </div>
+                    <div class="mb-hint">
+                        Elige el formato y toca los mapas para llenar los slots en orden. El último es el
+                        <strong>DECIDER</strong>. El bando se elige por mapa.
+                    </div>
+                </div>
+                <div class="map-slots" id="serieSlots"></div>
+                <div class="series-banner" id="seriesBanner"></div>
+                <div class="methodology-note" id="serieNote"></div>
             </div>
-        </section>
-
-        <!-- ── LOADING ── -->
-        <div class="sim-progress" id="simProgress" style="display:none">
-            <div class="sim-progress-bar" id="simProgressBar"></div>
-            <div class="sim-progress-label" id="simProgressLabel">Consultando el motor de predicción...</div>
-            <div class="sim-particles" id="simParticles"></div>
-        </div>
-
-        <!-- ── RESULTADOS PARTIDO ── -->
-        <section class="partido-results" id="partidoResults" style="display:none">
-
-            <div class="series-banner" id="seriesBanner"></div>
-
-            <div class="partido-maps-header">
-                <div class="pm-col-map">MAPA</div>
-                <div class="pm-col-side">INICIO <span id="pmTeamAName" class="pm-team-a-label"></span></div>
-                <div class="pm-col-prob">PROBABILIDAD</div>
-            </div>
-            <div class="partido-maps-list" id="partidoMapsList"></div>
-
-            <div class="methodology-note" id="partidoMethodNote"></div>
         </section>
 
     </main>
