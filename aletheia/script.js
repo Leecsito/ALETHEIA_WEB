@@ -23,6 +23,7 @@ let preparedModelVersion = null; // hash del modelo con el que se preparó
 let serviceModelVersion = null;  // hash del modelo vigente en el servicio
 let liveSide = 'attack';         // lado inicial de A en el panel en vivo
 let liveMap = null;              // mapa seleccionado en el panel en vivo
+let liveBulk = null;             // cache de todas las filas del match: 'Split|attack' -> fila
 let prepareBusy = false;
 let cmpVisible = false;          // true si la pestaña comparación está activa
 
@@ -57,7 +58,8 @@ const prepareStatus = document.getElementById('prepareStatus');
 const liveSection = document.getElementById('liveSection');
 const panelVivo = document.getElementById('panelVivo');
 const panelComparacion = document.getElementById('panelComparacion');
-const liveMapSelect = document.getElementById('liveMapSelect');
+const liveMapPicker = document.getElementById('liveMapPicker');
+const liveDetailTitle = document.getElementById('liveDetailTitle');
 const liveTeamALabel = document.getElementById('liveTeamALabel');
 const liveSideAtk = document.getElementById('liveSideAtk');
 const liveSideDef = document.getElementById('liveSideDef');
@@ -176,8 +178,7 @@ function showBuilder() {
     liveSection.style.display = ready ? 'block' : 'none';
     if (ready) {
         updateLiveTeamLabel();
-        populateLiveMaps();
-        fetchLive();
+        loadLiveBulk();
     }
 }
 
@@ -192,8 +193,7 @@ async function loadAvailableMaps() {
     } catch { }
     mapsLoading = false;
     syncMatchBuilder();
-    populateLiveMaps();
-    fetchLive();
+    loadLiveBulk();
 }
 
 function filterTeams(q, side) {
@@ -336,7 +336,7 @@ matchIdInput.addEventListener('input', () => {
 
 // Al confirmar el id (blur/enter) refrescar las vistas que dependen de él.
 matchIdInput.addEventListener('change', () => {
-    fetchLive();
+    loadLiveBulk();
     if (cmpVisible) fetchComparacion();
 });
 
@@ -345,28 +345,68 @@ function updateLiveTeamLabel() {
     liveTeamALabel.textContent = selectedA || '';
 }
 
-function populateLiveMaps() {
-    const prev = liveMapSelect.value;
-    liveMapSelect.innerHTML = '';
-    (availableMaps || []).forEach(m => {
-        const o = document.createElement('option');
-        o.value = m;
-        o.textContent = m.toUpperCase();
-        liveMapSelect.appendChild(o);
-    });
-    if (prev && (availableMaps || []).includes(prev)) liveMapSelect.value = prev;
-    liveMap = liveMapSelect.value || null;
+// Carga TODAS las filas cacheadas del partido y dibuja el selector visual de mapas.
+async function loadLiveBulk() {
+    if (!selectedA || !selectedB) return;
+    const params = new URLSearchParams();
+    if (matchId > 0) {
+        params.set('match_id', matchId);
+    } else {
+        params.set('equipo_a', selectedA);
+        params.set('equipo_b', selectedB);
+    }
+    try {
+        const res = await predictFetch(`/api/predicciones?${params.toString()}`);
+        const data = await res.json();
+        liveBulk = {};
+        if (data.ok && Array.isArray(data.predicciones)) {
+            data.predicciones.forEach(p => {
+                if (p && p.map_name) liveBulk[`${p.map_name}|${p.lado_inicial_a}`] = p;
+            });
+        }
+    } catch {
+        liveBulk = {};
+    }
+    renderLiveMapPicker();
+    if (liveMap) fetchLive();
 }
 
-liveMapSelect.addEventListener('change', () => {
-    liveMap = liveMapSelect.value;
-    fetchLive();
-});
+// Selector visual de mapas (mismo estilo de tiles que el armador de serie).
+function renderLiveMapPicker() {
+    if (!availableMaps.length) {
+        liveMapPicker.innerHTML = '<div class="live-hint" style="padding:12px">Cargando mapas...</div>';
+        return;
+    }
+    if (!liveMap || !availableMaps.includes(liveMap)) liveMap = availableMaps[0];
+
+    liveMapPicker.innerHTML = '';
+    availableMaps.forEach(m => {
+        const row = liveBulk ? liveBulk[`${m}|${liveSide}`] : null;
+        const pa = row ? row.prob_victoria_a : null;
+        const ot = row ? row.prob_overtime : null;
+        const meta = pa != null
+            ? `<span class="mqp-prob">${pct(pa)}%</span><span class="mqp-ot">OT ${pct(ot)}%</span>`
+            : `<span class="mqp-prob">—</span>`;
+        const tile = document.createElement('button');
+        tile.className = 'mqp-tile' + (m === liveMap ? ' mqp-selected' : '');
+        tile.innerHTML = `
+      <img class="mqp-img" src="../multimedia/maps/${m.toUpperCase()}.avif" alt="${m}" onerror="this.style.display='none'">
+      <span class="mqp-name">${m.toUpperCase()}</span>
+      ${meta}`;
+        tile.addEventListener('click', () => {
+            liveMap = m;
+            renderLiveMapPicker();
+            fetchLive();
+        });
+        liveMapPicker.appendChild(tile);
+    });
+}
 
 function setLiveSide(side) {
     liveSide = side;
     liveSideAtk.classList.toggle('qi-atk-active', side === 'attack');
     liveSideDef.classList.toggle('qi-def-active', side === 'defense');
+    renderLiveMapPicker();
     fetchLive();
 }
 liveSideAtk.addEventListener('click', () => setLiveSide('attack'));
@@ -407,6 +447,10 @@ function renderLive(data) {
     const p = data.prediccion || {};
     const vigente = data.vigente !== false;
     const fuente = p.fuente || data.fuente || 'cache';
+
+    liveDetailTitle.textContent = liveMap
+        ? `${liveMap.toUpperCase()} · ${liveSide === 'attack' ? 'ATK' : 'DEF'}`
+        : '';
 
     liveCards.innerHTML = `
     <div class="live-card">
@@ -633,7 +677,7 @@ async function prepararPartido() {
             ` · ${data.computados != null ? data.computados + ' computadas, ' : ''}` +
             `${data.desde_cache != null ? data.desde_cache + ' desde caché' : ''}` +
             ` · modelo ${preparedModelVersion || '—'}`;
-        fetchLive();
+        loadLiveBulk();
         finish();
         return;
     }
@@ -689,7 +733,7 @@ async function prepararPartido() {
             updateModelBadge();
             prepareStatus.className = 'prepare-status ok';
             prepareStatus.textContent = `✓ ${total} combinaciones listas en ${secs}s · ${job.computados != null ? job.computados : 0} computadas · ${job.desde_cache != null ? job.desde_cache : 0} desde caché · modelo ${job.modelo_version}`;
-            fetchLive();
+            loadLiveBulk();
             finish();
             return;
         }
@@ -735,7 +779,7 @@ async function asociarId() {
         preparedMatchId = matchId;
         prepareStatus.className = 'prepare-status ok';
         prepareStatus.textContent = `✓ ${data.filas_actualizadas != null ? data.filas_actualizadas : 0} filas asociadas a #${matchId}.`;
-        fetchLive();
+        loadLiveBulk();
         if (cmpVisible) fetchComparacion();
     } catch (e) {
         prepareStatus.className = 'prepare-status err';

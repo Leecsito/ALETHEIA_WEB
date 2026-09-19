@@ -2693,6 +2693,56 @@ main {
     gap: 6px;
 }
 
+.live-hint {
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 1px;
+}
+
+/* Selector visual de mapas del panel en vivo (reusa .mqp-tile) */
+.live-map-picker {
+    margin-bottom: 18px;
+}
+
+.mqp-tile.mqp-selected {
+    border-color: var(--accent);
+    opacity: 1;
+    box-shadow: 0 0 0 1px var(--accent) inset, 0 0 18px rgba(232, 255, 71, .22);
+}
+
+.mqp-tile.mqp-selected .mqp-img {
+    opacity: .7;
+}
+
+.mqp-prob {
+    position: relative;
+    z-index: 1;
+    font-family: var(--display);
+    font-size: 14px;
+    letter-spacing: 1px;
+    color: var(--accent);
+    text-shadow: 0 1px 4px #000;
+    line-height: 1.1;
+}
+
+.mqp-ot {
+    position: relative;
+    z-index: 1;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: .5px;
+    color: var(--orange);
+    text-shadow: 0 1px 4px #000;
+}
+
+.live-detail-title {
+    font-family: var(--display);
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: var(--text);
+    margin-bottom: 10px;
+}
+
 .live-cards {
     display: grid;
     grid-template-columns: repeat(4, 1fr);

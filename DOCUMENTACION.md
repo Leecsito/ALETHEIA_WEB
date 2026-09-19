@@ -293,11 +293,16 @@ estas tablas). Endpoints adicionales del proxy:
      se muestra como `PARTIDO #753455`. Puede quedar vacío (`0`) y asociarse luego.
    - **PREPARAR PARTIDO:** dispara `POST /api/precalcular` con
      `{equipo_a, equipo_b, n_sim, match_id}` (avisa "no cierres la pestaña" y muestra
-     el tiempo transcurrido). Al terminar guarda el `modelo_version`.
-   - **SELECCIÓN EN VIVO:** `<select>` de mapas (de `/api/mapas`) + toggle ATK/DEF de A.
-     Al cambiar, `GET /api/prediccion?match_id=..&map_name=..&lado_inicial_a=..` muestra
-     `prob_victoria_a`, `prob_victoria_b`, `prob_overtime`, fuente y `vigente` al instante.
-     Si no hay caché: "Aún no precomputado"; si `vigente=false`: "vuelve a preparar".
+     el tiempo transcurrido). Al **no** enviar `mapas`, el servicio calcula los **13
+     mapas × 2 lados = 26 filas**; el usuario puede preparar sin elegir ningún mapa.
+     Al terminar guarda el `modelo_version`.
+   - **SELECCIÓN EN VIVO:** rejilla visual de los 13 mapas (mismo estilo de tiles que el
+     armador de serie) + toggle ATK/DEF de A. Al entrar o cambiar de lado se leen todas
+     las filas cacheadas con `GET /api/predicciones?match_id=..` y cada tile muestra la
+     P(A) y el OT del lado elegido; al tocar un mapa se pide el detalle exacto con
+     `GET /api/prediccion?match_id=..&map_name=..&lado_inicial_a=..` (prob_victoria_a,
+     prob_victoria_b, prob_overtime, fuente y `vigente`). Si no hay caché: "Aún no
+     precomputado"; si `vigente=false`: "vuelve a preparar".
    - **ASOCIAR ID:** `POST /api/asociar` con
      `{equipo_a, equipo_b, match_id, desde_match_id}` para reasignar el id; refresca la vista.
    - **PESTAÑA COMPARACIÓN:** `GET /api/comparacion?match_id=..` muestra tarjetas resumen
