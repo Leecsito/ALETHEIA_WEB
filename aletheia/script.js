@@ -1,5 +1,11 @@
 const API = `${window.location.origin}/api`;
 
+// ALETHEIA_PREDICT corre en el PC del usuario y se expone con ngrok.
+// Las predicciones se piden DIRECTO a este servicio (no via el proxy de la
+// web) para que las corridas largas (25K/50K) no las corte el timeout de
+// gunicorn/Render. Equipos y mapas sí van por el proxy (son rápidos).
+const PREDICT_DIRECTO = 'https://snugly-encore-sweep.ngrok-free.dev';
+
 let teams = [];
 let selectedA = null;
 let selectedB = null;
@@ -260,9 +266,12 @@ async function runPartido() {
     }, 700);
 
     try {
-        const res = await fetch(`${API}/aletheia/predecir`, {
+        const res = await fetch(`${PREDICT_DIRECTO}/api/predecir`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': '1',
+            },
             body: JSON.stringify({
                 equipo_a: selectedA,
                 equipo_b: selectedB,
