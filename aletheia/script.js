@@ -576,6 +576,21 @@ async function prepararPartido() {
         prepareTimer.textContent = `${Math.floor((Date.now() - t0) / 1000)}s`;
     }, 250);
 
+    const finish = () => {
+        clearInterval(timer);
+        prepareTimer.textContent = '';
+        prepareBusy = false;
+        btnPreparar.classList.remove('running');
+        updateActionState();
+    };
+
+    const failDisponible = () => {
+        prepareStatus.className = 'prepare-status err';
+        prepareStatus.textContent = 'Servicio no disponible, reintenta.';
+        finish();
+    };
+
+    let data;
     try {
         const res = await predictFetch('/api/precalcular', {
             method: 'POST',
@@ -587,39 +602,106 @@ async function prepararPartido() {
                 match_id: matchId,
             }),
         });
-        clearInterval(timer);
-        const data = await res.json();
+        if (res.status === 502 || res.status === 504) {
+            failDisponible();
+            return;
+        }
+        data = await res.json();
+    } catch (e) {
+        prepareStatus.className = 'prepare-status err';
+        prepareStatus.textContent = `Servicio de predicción no disponible: ${e.message}. Reintenta.`;
+        finish();
+        return;
+    }
 
+    // Fallback: respuesta síncrona antigua (sin job_id).
+    if (!data.job_id) {
         if (!data.ok) {
             prepareStatus.className = 'prepare-status err';
             prepareStatus.textContent = `Error: ${data.error || 'no se pudo precomputar'}`;
+            finish();
             return;
         }
-
         const secs = data.tiempo_s != null ? data.tiempo_s : ((Date.now() - t0) / 1000).toFixed(1);
         preparedMatchId = matchId;
         if (data.modelo_version) preparedModelVersion = data.modelo_version;
         await refreshModelVersion();
         if (!preparedModelVersion) preparedModelVersion = serviceModelVersion;
         updateModelBadge();
-
         prepareStatus.className = 'prepare-status ok';
         prepareStatus.innerHTML = `✓ ${data.total || 26} combinaciones listas en <strong>${secs}s</strong>` +
             ` · ${data.computados != null ? data.computados + ' computadas, ' : ''}` +
             `${data.desde_cache != null ? data.desde_cache + ' desde caché' : ''}` +
             ` · modelo ${preparedModelVersion || '—'}`;
         fetchLive();
-    } catch (e) {
-        clearInterval(timer);
-        prepareStatus.className = 'prepare-status err';
-        prepareStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
-    } finally {
-        clearInterval(timer);
-        prepareTimer.textContent = '';
-        prepareBusy = false;
-        btnPreparar.classList.remove('running');
-        updateActionState();
+        finish();
+        return;
     }
+
+    // Asíncrono: el POST devolvió {job_id, total}. Poll cada 2 s.
+    const jobId = data.job_id;
+    const totalCombinaciones = data.total || 26;
+    prepareStatus.innerHTML = `⏳ ${data.estado || 'en_proceso'} · 0% · mapa 0/${totalCombinaciones / 2}. <strong>No cierres esta pestaña.</strong>`;
+
+    const poll = setInterval(async () => {
+        let jd;
+        try {
+            const r = await predictFetch(`/api/precalcular/estado?job_id=${encodeURIComponent(jobId)}`);
+            if (r.status === 404) {
+                clearInterval(poll);
+                failDisponible();
+                return;
+            }
+            jd = await r.json();
+        } catch (e) {
+            clearInterval(poll);
+            prepareStatus.className = 'prepare-status err';
+            prepareStatus.textContent = `Servicio de predicción no disponible: ${e.message}. Reintenta.`;
+            finish();
+            return;
+        }
+
+        if (!jd.ok || !jd.job) {
+            clearInterval(poll);
+            prepareStatus.className = 'prepare-status err';
+            prepareStatus.textContent = `Error: ${(jd && jd.error) || 'job no encontrado'}.`;
+            finish();
+            return;
+        }
+
+        const job = jd.job;
+        const total = job.total || totalCombinaciones;
+        const elapsed = Math.floor((Date.now() - t0) / 1000);
+
+        if (job.estado === 'en_proceso') {
+            const progreso = Math.round((job.progreso || 0) * 100);
+            prepareStatus.className = 'prepare-status running';
+            prepareStatus.innerHTML = `⏳ ${progreso}% · mapa ${job.mapas_hechos || 0}/${total / 2} · ${elapsed}s. <strong>No cierres esta pestaña.</strong>`;
+            return;
+        }
+
+        if (job.estado === 'listo') {
+            clearInterval(poll);
+            const secs = job.tiempo_s != null ? job.tiempo_s : elapsed;
+            preparedMatchId = matchId;
+            preparedModelVersion = job.modelo_version;
+            await refreshModelVersion();
+            updateModelBadge();
+            prepareStatus.className = 'prepare-status ok';
+            prepareStatus.textContent = `✓ ${total} combinaciones listas en ${secs}s · ${job.computados != null ? job.computados : 0} computadas · ${job.desde_cache != null ? job.desde_cache : 0} desde caché · modelo ${job.modelo_version}`;
+            fetchLive();
+            finish();
+            return;
+        }
+
+        if (job.estado === 'error') {
+            clearInterval(poll);
+            prepareStatus.className = 'prepare-status err';
+            prepareStatus.textContent = `Error: ${job.error || 'no se pudo precomputar'}`;
+            finish();
+            return;
+        }
+    }, 2000);
 }
 
 // ─── ASOCIAR ID ───────────────────────────────────────────────────────────────
