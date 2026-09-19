@@ -17,7 +17,9 @@ tablas_bp = Blueprint('tablas', __name__)
 TABLAS_PERMITIDAS = [
     'matches', 'match_veto', 'maps', 'rounds',
     'player_stats', 'economy_summary', 'duels', 'multikills_clutches',
-    'teams', 'players'
+    'teams', 'players',
+    # Tablas del servicio ALETHEIA_PREDICT (solo consulta/muestra).
+    'predicciones_mapa', 'predicciones_serie',
 ]
 
 @tablas_bp.route('/api/tabla/<nombre>', methods=['GET'])

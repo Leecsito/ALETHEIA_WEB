@@ -6,9 +6,15 @@ servicio externo ALETHEIA_PREDICT (motor Glicko-2 + regresión logística +
 Monte Carlo), cuya URL se toma de la variable de entorno ALETHEIA_PREDICT_URL.
 
 Endpoints expuestos (proxy):
-    GET  /api/aletheia/equipos   -> GET  {BASE}/api/equipos
-    GET  /api/aletheia/mapas     -> GET  {BASE}/api/mapas
-    POST /api/aletheia/predecir  -> POST {BASE}/api/predecir  (reenvía el body)
+    GET  /api/aletheia/equipos         -> GET  {BASE}/api/equipos
+    GET  /api/aletheia/mapas           -> GET  {BASE}/api/mapas
+    POST /api/aletheia/predecir        -> POST {BASE}/api/predecir
+    GET  /api/aletheia/modelo_version  -> GET  {BASE}/api/modelo_version
+    POST /api/aletheia/precalcular     -> POST {BASE}/api/precalcular
+    POST /api/aletheia/asociar         -> POST {BASE}/api/asociar
+    GET  /api/aletheia/prediccion      -> GET  {BASE}/api/prediccion
+    GET  /api/aletheia/predicciones    -> GET  {BASE}/api/predicciones
+    GET  /api/aletheia/comparacion     -> GET  {BASE}/api/comparacion
 
 Decisiones de diseño:
     · El servicio externo devuelve solo NOMBRES de equipo. Para no romper el
@@ -16,8 +22,14 @@ Decisiones de diseño:
       {"ok": true, "teams": [{"name", "abbrev": name, "maps_played": 0,
       "avg_rating": 0}]} (abbrev = nombre; el servicio no aporta abreviaturas
       ni estadísticas de mapa/rating).
+    · Los endpoints de lectura reenvían los query params recibidos (match_id,
+      map_name, lado_inicial_a, equipo_a, equipo_b, limite, ...).
     · Si el servicio no responde se devuelve 502 {"ok": false, "error": ...};
       si tarda más de TIMEOUT segundos, 504.
+
+NOTA: las corridas largas (precalcular / predecir con 25K-50K) se piden
+DIRECTO desde el frontend a PREDICT_DIRECTO (ngrok), no por este proxy, para
+no chocar con el timeout de gunicorn.
 """
 
 import os
@@ -61,16 +73,20 @@ TIMEOUT = 120  # segundos
 
 
 # ─── HELPERS DE PROXY ─────────────────────────────────────────────────────────
-def _request_service(method, path, payload=None):
+def _request_service(method, path, payload=None, params=None):
     """Llama al servicio externo y devuelve (respuesta, None) o (None, error).
 
     `error` es un dict {'error': mensaje, 'status': código}. El llamador lo
     convierte en respuesta JSON con `_error_response`.
     """
     url = f"{BASE_URL}{path}"
-    kwargs = {'timeout': TIMEOUT}
+    # El header de ngrok es inocuo para URLs locales y evita la página de aviso
+    # si ALETHEIA_PREDICT_URL apunta al túnel de ngrok en producción.
+    kwargs = {'timeout': TIMEOUT, 'headers': {'ngrok-skip-browser-warning': '1'}}
     if payload is not None:
         kwargs['json'] = payload
+    if params:
+        kwargs['params'] = params
     try:
         resp = requests.request(method, url, **kwargs)
     except requests.exceptions.Timeout:
@@ -100,6 +116,31 @@ def _error_response(err):
     return jsonify({'ok': False, 'error': err['error']}), err['status']
 
 
+def _passthrough_get(service_path):
+    """GET al servicio reenviando los query params; devuelve la respuesta tal cual."""
+    resp, err = _request_service('GET', service_path, params=request.args.to_dict())
+    if err:
+        return _error_response(err)
+    data, err = _json_or_error(resp)
+    if err:
+        return _error_response(err)
+    return jsonify(data), resp.status_code
+
+
+def _passthrough_post(service_path):
+    """POST al servicio reenviando el body JSON; devuelve la respuesta tal cual."""
+    body = request.get_json(silent=True)
+    if body is None:
+        return jsonify({'ok': False, 'error': 'Body JSON inválido o vacío.'}), 400
+    resp, err = _request_service('POST', service_path, payload=body)
+    if err:
+        return _error_response(err)
+    data, err = _json_or_error(resp)
+    if err:
+        return _error_response(err)
+    return jsonify(data), resp.status_code
+
+
 # ─── RUTAS (PROXY) ────────────────────────────────────────────────────────────
 @aletheia_bp.route('/api/aletheia/equipos', methods=['GET'])
 def equipos():
@@ -126,26 +167,46 @@ def equipos():
 @aletheia_bp.route('/api/aletheia/mapas', methods=['GET'])
 def mapas():
     """Proxy GET /api/mapas (devuelve la lista tal cual, incluido 'Summit')."""
-    resp, err = _request_service('GET', '/api/mapas')
-    if err:
-        return _error_response(err)
-    data, err = _json_or_error(resp)
-    if err:
-        return _error_response(err)
-    return jsonify(data), resp.status_code
+    return _passthrough_get('/api/mapas')
 
 
 @aletheia_bp.route('/api/aletheia/predecir', methods=['POST'])
 def predecir():
     """Proxy POST /api/predecir. Reenvía el body y devuelve la respuesta tal cual."""
-    body = request.get_json(silent=True)
-    if body is None:
-        return jsonify({'ok': False, 'error': 'Body JSON inválido o vacío.'}), 400
+    return _passthrough_post('/api/predecir')
 
-    resp, err = _request_service('POST', '/api/predecir', body)
-    if err:
-        return _error_response(err)
-    data, err = _json_or_error(resp)
-    if err:
-        return _error_response(err)
-    return jsonify(data), resp.status_code
+
+@aletheia_bp.route('/api/aletheia/modelo_version', methods=['GET'])
+def modelo_version():
+    """Proxy GET /api/modelo_version (hash + fecha del modelo vigente)."""
+    return _passthrough_get('/api/modelo_version')
+
+
+@aletheia_bp.route('/api/aletheia/precalcular', methods=['POST'])
+def precalcular():
+    """Proxy POST /api/precalcular (precomputa 13 mapas x 2 lados = 26 filas)."""
+    return _passthrough_post('/api/precalcular')
+
+
+@aletheia_bp.route('/api/aletheia/asociar', methods=['POST'])
+def asociar():
+    """Proxy POST /api/asociar (reasigna el match_id de las predicciones)."""
+    return _passthrough_post('/api/asociar')
+
+
+@aletheia_bp.route('/api/aletheia/prediccion', methods=['GET'])
+def prediccion():
+    """Proxy GET /api/prediccion (lee una fila cacheada; instantáneo)."""
+    return _passthrough_get('/api/prediccion')
+
+
+@aletheia_bp.route('/api/aletheia/predicciones', methods=['GET'])
+def predicciones():
+    """Proxy GET /api/predicciones (todas las filas de un partido/equipos)."""
+    return _passthrough_get('/api/predicciones')
+
+
+@aletheia_bp.route('/api/aletheia/comparacion', methods=['GET'])
+def comparacion():
+    """Proxy GET /api/comparacion (predicho vs. resultado real)."""
+    return _passthrough_get('/api/comparacion')

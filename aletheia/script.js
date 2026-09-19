@@ -5,6 +5,7 @@ const API = `${window.location.origin}/api`;
 // web) para que las corridas largas (25K/50K) no las corte el timeout de
 // gunicorn/Render. Equipos y mapas sí van por el proxy (son rápidos).
 const PREDICT_DIRECTO = 'https://snugly-encore-sweep.ngrok-free.dev';
+const NGROK_HEADER = { 'ngrok-skip-browser-warning': '1' };
 
 let teams = [];
 let selectedA = null;
@@ -14,6 +15,16 @@ const TEAM_ABBREV_CACHE = {};
 let availableMaps = [];    // mapas ofrecidos por el servicio ALETHEIA_PREDICT
 let mapsLoading = false;   // true mientras carga la lista de mapas
 let matchMaps = [];        // [{ map_name, lado_inicial_a }]
+
+// ─── ESTADO DEL CICLO PREPARAR → LEER → ASOCIAR → COMPARAR ────────────────────
+let matchId = 0;                 // id de vlr.gg parseado del input
+let preparedMatchId = 0;         // id usado en el último PREPARAR (para desde_match_id)
+let preparedModelVersion = null; // hash del modelo con el que se preparó
+let serviceModelVersion = null;  // hash del modelo vigente en el servicio
+let liveSide = 'attack';         // lado inicial de A en el panel en vivo
+let liveMap = null;              // mapa seleccionado en el panel en vivo
+let prepareBusy = false;
+let cmpVisible = false;          // true si la pestaña comparación está activa
 
 // ─── DOM ──────────────────────────────────────────────────────────────────────
 const gridA = document.getElementById('teamGridA');
@@ -35,11 +46,64 @@ const bspCount = document.getElementById('bspCount');
 const mbFormat = document.getElementById('mbFormat');
 const hintTeamA = document.getElementById('hintTeamA');
 
+const matchIdInput = document.getElementById('matchIdInput');
+const matchIdBadge = document.getElementById('matchIdBadge');
+const modelBadge = document.getElementById('modelBadge');
+const btnAsociar = document.getElementById('btnAsociar');
+const btnPreparar = document.getElementById('btnPreparar');
+const prepareTimer = document.getElementById('prepareTimer');
+const prepareStatus = document.getElementById('prepareStatus');
+
+const liveSection = document.getElementById('liveSection');
+const panelVivo = document.getElementById('panelVivo');
+const panelComparacion = document.getElementById('panelComparacion');
+const liveMapSelect = document.getElementById('liveMapSelect');
+const liveTeamALabel = document.getElementById('liveTeamALabel');
+const liveSideAtk = document.getElementById('liveSideAtk');
+const liveSideDef = document.getElementById('liveSideDef');
+const liveCards = document.getElementById('liveCards');
+const liveStatus = document.getElementById('liveStatus');
+const cmpSummary = document.getElementById('cmpSummary');
+const cmpTableWrap = document.getElementById('cmpTableWrap');
+const cmpStatus = document.getElementById('cmpStatus');
+
 // ─── PARTÍCULAS LOADING ───────────────────────────────────────────────────────
 for (let i = 0; i < 5; i++) {
     const p = document.createElement('div');
     p.className = 'particle';
     simParticles.appendChild(p);
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+const pct = v => Math.round((v || 0) * 100);
+
+// fetch directo al servicio (siempre con el header de ngrok)
+function predictFetch(path, options = {}) {
+    const headers = Object.assign({}, NGROK_HEADER, options.headers || {});
+    return fetch(`${PREDICT_DIRECTO}${path}`, Object.assign({}, options, { headers }));
+}
+
+// Parsea la URL o el número de vlr.gg -> primer grupo de dígitos.
+function parseMatchId(raw) {
+    const m = String(raw || '').match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+}
+
+function fmtRatio(v) {
+    if (v == null || isNaN(v)) return '—';
+    const n = Number(v);
+    return `${(n <= 1 ? n * 100 : n).toFixed(1)}%`;
+}
+
+function fmtNum(v, d = 4) {
+    if (v == null || isNaN(v)) return '—';
+    return Number(v).toFixed(d);
+}
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
 }
 
 // ─── CARGAR EQUIPOS ───────────────────────────────────────────────────────────
@@ -96,17 +160,25 @@ function selectTeam(team, side) {
     }
     renderTeamGrids(filterTeams('', side));
     updateHintTeam();
-    showBuilder();
     if (selectedA && selectedB) {
         availableMaps = [];
         mapsLoading = true;
-        syncMatchBuilder();
+    }
+    showBuilder();
+    if (selectedA && selectedB) {
         loadAvailableMaps();
     }
 }
 
 function showBuilder() {
-    matchBuilder.style.display = (selectedA && selectedB) ? 'block' : 'none';
+    const ready = !!(selectedA && selectedB);
+    matchBuilder.style.display = ready ? 'block' : 'none';
+    liveSection.style.display = ready ? 'block' : 'none';
+    if (ready) {
+        updateLiveTeamLabel();
+        populateLiveMaps();
+        fetchLive();
+    }
 }
 
 async function loadAvailableMaps() {
@@ -120,6 +192,8 @@ async function loadAvailableMaps() {
     } catch { }
     mapsLoading = false;
     syncMatchBuilder();
+    populateLiveMaps();
+    fetchLive();
 }
 
 function filterTeams(q, side) {
@@ -138,6 +212,7 @@ document.querySelectorAll('.sim-btn').forEach(btn => {
         document.querySelectorAll('.sim-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         nSim = parseInt(btn.dataset.n);
+        updateActionState();
     });
 });
 
@@ -235,11 +310,361 @@ function updateBuilderState() {
     const ready = n > 0;
     btnSimPart.classList.toggle('ready', ready);
     btnSimPart.disabled = !ready;
+    updateActionState();
+}
+
+// Habilita/deshabilita PREPARAR y ASOCIAR según equipos + id.
+function updateActionState() {
+    const ready = !!(selectedA && selectedB);
+    btnPreparar.disabled = !ready || prepareBusy;
+    updateAssociarState();
+}
+
+function updateAssociarState() {
+    btnAsociar.disabled = !(matchId > 0 && selectedA && selectedB) || prepareBusy;
 }
 
 btnAddMap.addEventListener('click', () => { matchMaps = []; syncMatchBuilder(); });
 
-// ─── SIMULAR PARTIDO ──────────────────────────────────────────────────────────
+// ─── ID DE PARTIDO (vlr.gg) ───────────────────────────────────────────────────
+matchIdInput.addEventListener('input', () => {
+    matchId = parseMatchId(matchIdInput.value);
+    matchIdBadge.textContent = matchId > 0 ? `PARTIDO #${matchId}` : 'SIN ID';
+    matchIdBadge.classList.toggle('has-id', matchId > 0);
+    updateAssociarState();
+});
+
+// Al confirmar el id (blur/enter) refrescar las vistas que dependen de él.
+matchIdInput.addEventListener('change', () => {
+    fetchLive();
+    if (cmpVisible) fetchComparacion();
+});
+
+// ─── PANEL EN VIVO ────────────────────────────────────────────────────────────
+function updateLiveTeamLabel() {
+    liveTeamALabel.textContent = selectedA || '';
+}
+
+function populateLiveMaps() {
+    const prev = liveMapSelect.value;
+    liveMapSelect.innerHTML = '';
+    (availableMaps || []).forEach(m => {
+        const o = document.createElement('option');
+        o.value = m;
+        o.textContent = m.toUpperCase();
+        liveMapSelect.appendChild(o);
+    });
+    if (prev && (availableMaps || []).includes(prev)) liveMapSelect.value = prev;
+    liveMap = liveMapSelect.value || null;
+}
+
+liveMapSelect.addEventListener('change', () => {
+    liveMap = liveMapSelect.value;
+    fetchLive();
+});
+
+function setLiveSide(side) {
+    liveSide = side;
+    liveSideAtk.classList.toggle('qi-atk-active', side === 'attack');
+    liveSideDef.classList.toggle('qi-def-active', side === 'defense');
+    fetchLive();
+}
+liveSideAtk.addEventListener('click', () => setLiveSide('attack'));
+liveSideDef.addEventListener('click', () => setLiveSide('defense'));
+
+async function fetchLive() {
+    if (!selectedA || !selectedB || !liveMap) return;
+    liveStatus.className = 'live-status';
+    liveStatus.textContent = 'Consultando...';
+    liveCards.innerHTML = '';
+
+    const params = new URLSearchParams();
+    if (matchId > 0) {
+        params.set('match_id', matchId);
+    } else {
+        params.set('equipo_a', selectedA);
+        params.set('equipo_b', selectedB);
+    }
+    params.set('map_name', liveMap);
+    params.set('lado_inicial_a', liveSide);
+
+    try {
+        const res = await predictFetch(`/api/prediccion?${params.toString()}`);
+        const data = await res.json();
+        if (res.status === 404 || !data.ok) {
+            liveStatus.className = 'live-status warn';
+            liveStatus.textContent = 'Aún no precomputado (usa PREPARAR PARTIDO).';
+            return;
+        }
+        renderLive(data);
+    } catch (e) {
+        liveStatus.className = 'live-status err';
+        liveStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
+    }
+}
+
+function renderLive(data) {
+    const p = data.prediccion || {};
+    const vigente = data.vigente !== false;
+    const fuente = p.fuente || data.fuente || 'cache';
+
+    liveCards.innerHTML = `
+    <div class="live-card">
+      <div class="live-card-label" style="color:var(--accent)">${escapeHtml(p.equipo_a || selectedA)}</div>
+      <div class="live-card-val live-a">${pct(p.prob_victoria_a)}%</div>
+    </div>
+    <div class="live-card">
+      <div class="live-card-label" style="color:var(--blue)">${escapeHtml(p.equipo_b || selectedB)}</div>
+      <div class="live-card-val live-b">${pct(p.prob_victoria_b)}%</div>
+    </div>
+    <div class="live-card">
+      <div class="live-card-label">OVERTIME</div>
+      <div class="live-card-val live-ot">${pct(p.prob_overtime)}%</div>
+    </div>
+    <div class="live-card">
+      <div class="live-card-label">MUESTRAS</div>
+      <div class="live-card-val">${p.n_sim ? Number(p.n_sim).toLocaleString() : '—'}</div>
+    </div>
+  `;
+
+    if (!vigente) {
+        liveStatus.className = 'live-status warn';
+        liveStatus.textContent = `⚠ Predicciones desactualizadas (modelo ${data.modelo_version || '—'}); vuelve a PREPARAR PARTIDO.`;
+    } else {
+        const sinDatos = Number(p.con_datos) === 0;
+        liveStatus.className = 'live-status ok';
+        liveStatus.textContent = `✓ fuente: ${fuente} · vigente · modelo ${data.modelo_version || '—'}${sinDatos ? ' · sin datos históricos para este mapa' : ''}`;
+    }
+}
+
+// ─── COMPARACIÓN ──────────────────────────────────────────────────────────────
+async function fetchComparacion() {
+    if (!selectedA || !selectedB) return;
+    cmpStatus.className = 'live-status';
+    cmpStatus.textContent = 'Consultando comparación...';
+    cmpSummary.innerHTML = '';
+    cmpTableWrap.innerHTML = '';
+
+    const params = new URLSearchParams();
+    if (matchId > 0) {
+        params.set('match_id', matchId);
+    } else {
+        params.set('equipo_a', selectedA);
+        params.set('equipo_b', selectedB);
+    }
+    params.set('limite', '100');
+
+    try {
+        const res = await predictFetch(`/api/comparacion?${params.toString()}`);
+        const data = await res.json();
+        if (!data.ok || !data.resumen || !data.resumen.n) {
+            cmpStatus.className = 'live-status warn';
+            cmpStatus.textContent = 'Sin resultado real todavía (el partido no está en la DB).';
+            return;
+        }
+        renderComparison(data);
+    } catch (e) {
+        cmpStatus.className = 'live-status err';
+        cmpStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
+    }
+}
+
+function renderComparison(data) {
+    const r = data.resumen || {};
+    const cards = [
+        { label: 'N', val: r.n },
+        { label: 'ACCURACY', val: fmtRatio(r.accuracy) },
+        { label: 'BRIER', val: fmtNum(r.brier) },
+        { label: 'LOG-LOSS', val: fmtNum(r.log_loss) },
+        { label: 'FAVORITOS OK', val: r.favoritos_ok },
+        { label: 'UPSETS', val: r.upsets },
+        { label: 'INCIERTOS', val: r.inciertos },
+    ];
+    cmpSummary.innerHTML = cards.map(c => `
+    <div class="cmp-card">
+      <div class="cmp-card-label">${c.label}</div>
+      <div class="cmp-card-val">${c.val == null ? '—' : c.val}</div>
+    </div>`).join('');
+
+    const tipoClass = t => t === 'favorito_gano' ? 'cmp-fav' : t === 'upset' ? 'cmp-upset' : 'cmp-unc';
+    const tipoLabel = t => t === 'favorito_gano' ? 'favorito ganó' : t === 'upset' ? 'UPSET' : 'incierto';
+
+    const rows = (data.detalle || []).map(d => {
+        const ganador = d.gano_a_real ? (d.equipo_a || 'A') : (d.equipo_b || 'B');
+        return `
+      <tr class="cmp-row ${tipoClass(d.tipo)}">
+        <td>${escapeHtml(d.map_name)}</td>
+        <td>${d.lado_inicial_a === 'attack' ? 'ATK' : 'DEF'}</td>
+        <td class="cmp-a">${pct(d.prob_victoria_a)}%</td>
+        <td class="cmp-b">${pct(d.prob_victoria_b)}%</td>
+        <td>${pct(d.prob_overtime)}%</td>
+        <td>${escapeHtml(ganador)}</td>
+        <td>${tipoLabel(d.tipo)}</td>
+        <td>${d.resultado === 'acierto' ? '✓' : '✕'} ${escapeHtml(d.resultado)}</td>
+      </tr>`;
+    }).join('');
+
+    cmpTableWrap.innerHTML = `
+    <table class="cmp-table">
+      <thead>
+        <tr>
+          <th>MAPA</th><th>LADO</th><th>P(A)</th><th>P(B)</th><th>OT</th>
+          <th>GANÓ (REAL)</th><th>TIPO</th><th>RESULTADO</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+    cmpStatus.className = 'live-status ok';
+    cmpStatus.textContent = `✓ comparación con modelo ${data.modelo_version || '—'}`;
+}
+
+// ─── MODELO / VERSIÓN ─────────────────────────────────────────────────────────
+async function refreshModelVersion() {
+    try {
+        const res = await predictFetch('/api/modelo_version');
+        const data = await res.json();
+        if (data.ok) serviceModelVersion = data.modelo_version;
+    } catch { }
+    updateModelBadge();
+}
+
+function updateModelBadge() {
+    if (!serviceModelVersion) { modelBadge.textContent = ''; modelBadge.className = 'model-badge'; return; }
+    const stale = !!(preparedModelVersion && preparedModelVersion !== serviceModelVersion);
+    modelBadge.className = 'model-badge' + (stale ? ' stale' : '');
+    if (stale) {
+        modelBadge.textContent = `⚠ modelo ${serviceModelVersion} — RE-PREPARAR`;
+    } else if (preparedModelVersion) {
+        modelBadge.textContent = `modelo ${serviceModelVersion} · preparado`;
+    } else {
+        modelBadge.textContent = `modelo ${serviceModelVersion}`;
+    }
+}
+
+// ─── PESTAÑAS ─────────────────────────────────────────────────────────────────
+document.querySelectorAll('.live-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.live-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        const tab = btn.dataset.tab;
+        cmpVisible = tab === 'comparacion';
+        panelVivo.style.display = tab === 'vivo' ? 'block' : 'none';
+        panelComparacion.style.display = tab === 'comparacion' ? 'block' : 'none';
+        refreshModelVersion();
+        if (cmpVisible) fetchComparacion();
+        else fetchLive();
+    });
+});
+
+// ─── PREPARAR PARTIDO (precalcular, DIRECTO y largo) ─────────────────────────
+btnPreparar.addEventListener('click', prepararPartido);
+
+async function prepararPartido() {
+    if (!selectedA || !selectedB || prepareBusy) return;
+    prepareBusy = true;
+    btnPreparar.disabled = true;
+    btnPreparar.classList.add('running');
+    updateAssociarState();
+
+    const t0 = Date.now();
+    prepareStatus.style.display = 'block';
+    prepareStatus.className = 'prepare-status running';
+    prepareStatus.innerHTML = `⏳ Precomputando 13 mapas × 2 lados (${nSim.toLocaleString()} sims) con match_id <strong>#${matchId || 0}</strong>. <strong>No cierres esta pestaña.</strong>`;
+
+    const timer = setInterval(() => {
+        prepareTimer.textContent = `${Math.floor((Date.now() - t0) / 1000)}s`;
+    }, 250);
+
+    try {
+        const res = await predictFetch('/api/precalcular', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                equipo_a: selectedA,
+                equipo_b: selectedB,
+                n_sim: nSim,
+                match_id: matchId,
+            }),
+        });
+        clearInterval(timer);
+        const data = await res.json();
+
+        if (!data.ok) {
+            prepareStatus.className = 'prepare-status err';
+            prepareStatus.textContent = `Error: ${data.error || 'no se pudo precomputar'}`;
+            return;
+        }
+
+        const secs = data.tiempo_s != null ? data.tiempo_s : ((Date.now() - t0) / 1000).toFixed(1);
+        preparedMatchId = matchId;
+        if (data.modelo_version) preparedModelVersion = data.modelo_version;
+        await refreshModelVersion();
+        if (!preparedModelVersion) preparedModelVersion = serviceModelVersion;
+        updateModelBadge();
+
+        prepareStatus.className = 'prepare-status ok';
+        prepareStatus.innerHTML = `✓ ${data.total || 26} combinaciones listas en <strong>${secs}s</strong>` +
+            ` · ${data.computados != null ? data.computados + ' computadas, ' : ''}` +
+            `${data.desde_cache != null ? data.desde_cache + ' desde caché' : ''}` +
+            ` · modelo ${preparedModelVersion || '—'}`;
+        fetchLive();
+    } catch (e) {
+        clearInterval(timer);
+        prepareStatus.className = 'prepare-status err';
+        prepareStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
+    } finally {
+        clearInterval(timer);
+        prepareTimer.textContent = '';
+        prepareBusy = false;
+        btnPreparar.classList.remove('running');
+        updateActionState();
+    }
+}
+
+// ─── ASOCIAR ID ───────────────────────────────────────────────────────────────
+btnAsociar.addEventListener('click', asociarId);
+
+async function asociarId() {
+    if (!selectedA || !selectedB || matchId <= 0 || prepareBusy) return;
+    btnAsociar.disabled = true;
+    btnAsociar.classList.add('running');
+    prepareStatus.style.display = 'block';
+    prepareStatus.className = 'prepare-status running';
+    prepareStatus.textContent = `Asociando predicciones a #${matchId}...`;
+
+    try {
+        const res = await predictFetch('/api/asociar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                equipo_a: selectedA,
+                equipo_b: selectedB,
+                match_id: matchId,
+                desde_match_id: preparedMatchId || 0,
+            }),
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            prepareStatus.className = 'prepare-status err';
+            prepareStatus.textContent = `Error: ${data.error || 'no se pudo asociar'}`;
+            return;
+        }
+        preparedMatchId = matchId;
+        prepareStatus.className = 'prepare-status ok';
+        prepareStatus.textContent = `✓ ${data.filas_actualizadas != null ? data.filas_actualizadas : 0} filas asociadas a #${matchId}.`;
+        fetchLive();
+        if (cmpVisible) fetchComparacion();
+    } catch (e) {
+        prepareStatus.className = 'prepare-status err';
+        prepareStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
+    } finally {
+        btnAsociar.classList.remove('running');
+        updateAssociarState();
+    }
+}
+
+// ─── SIMULAR PARTIDO (serie) ──────────────────────────────────────────────────
 btnSimPart.addEventListener('click', runPartido);
 
 async function runPartido() {
@@ -266,18 +691,18 @@ async function runPartido() {
     }, 700);
 
     try {
-        const res = await fetch(`${PREDICT_DIRECTO}/api/predecir`, {
+        const body = {
+            equipo_a: selectedA,
+            equipo_b: selectedB,
+            mapas: matchMaps.map(m => ({ map_name: m.map_name, lado_inicial_a: m.lado_inicial_a })),
+            n_sim: nSim,
+        };
+        if (matchId > 0) body.match_id = matchId;
+
+        const res = await predictFetch('/api/predecir', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'ngrok-skip-browser-warning': '1',
-            },
-            body: JSON.stringify({
-                equipo_a: selectedA,
-                equipo_b: selectedB,
-                mapas: matchMaps.map(m => ({ map_name: m.map_name, lado_inicial_a: m.lado_inicial_a })),
-                n_sim: nSim,
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
         });
         clearInterval(lInterval);
         const data = await res.json();
@@ -288,6 +713,7 @@ async function runPartido() {
             return;
         }
 
+        if (data.modelo_version) { serviceModelVersion = data.modelo_version; updateModelBadge(); }
         simProgress.style.display = 'none';
         renderPartidoResults(data);
 
@@ -302,9 +728,7 @@ async function runPartido() {
     }
 }
 
-// ─── RENDER RESULTADOS ────────────────────────────────────────────────────────
-const pct = v => Math.round((v || 0) * 100);
-
+// ─── RENDER RESULTADOS (serie) ────────────────────────────────────────────────
 function renderSeriesBanner(data) {
     const pa = data.prob_serie_a || 0;
     const pb = data.prob_serie_b || 0;
@@ -322,6 +746,7 @@ function renderSeriesBanner(data) {
       <div class="sb-format">${(data.formato || '').toUpperCase()}</div>
       <div class="sb-sims">${(data.n_sim || nSim).toLocaleString()}<br>SIMULACIONES</div>
       <div style="font-size:10px;color:var(--dim);letter-spacing:1px;margin-top:4px">GANAR ${data.mapas_para_ganar}</div>
+      ${data.match_id ? `<div style="font-size:9px;color:var(--dim);letter-spacing:1px;margin-top:4px">PARTIDO #${data.match_id}</div>` : ''}
     </div>
     <div class="sb-team ${favB}" style="text-align:right;align-items:flex-end">
       <div class="sb-name">EQUIPO B</div>
@@ -347,11 +772,14 @@ function buildMapRowHtml(m, i, data) {
              <span class="pse-ot ${otPct >= 20 ? 'pse-ot-high' : ''}">OT ${otPct}%</span>
            </div>`
         : '';
+    const fuente = m.fuente
+        ? `<span class="pm-fuente">${m.fuente}</span>`
+        : '';
 
     return `
     <div class="pm-num">0${i + 1}</div>
     <div class="pm-map-info">
-      <div class="pm-map-name">${m.map_name.toUpperCase()}</div>
+      <div class="pm-map-name">${m.map_name.toUpperCase()} ${fuente}</div>
       <div class="pm-start-side">${sideLabel}</div>
       ${otHtml}
     </div>
@@ -399,3 +827,4 @@ function renderPartidoResults(data) {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 loadTeams();
+refreshModelVersion();

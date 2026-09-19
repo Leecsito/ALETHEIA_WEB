@@ -81,7 +81,9 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 - `TURSO_AUTH_TOKEN`: Token JWT de autenticación para Turso.
 - `DATABASE_PATH`: Ruta al archivo SQLite local de respaldo (por defecto: `backend/aletheia.db`).
 
-### Esquema de las 10 Tablas de la Base de Datos:
+### Esquema de las Tablas de la Base de Datos
+
+**10 tablas del ETL** (creadas/gestionadas por ALETHEIA):
 
 1. **`matches`**: Partidos jugados.
    - `match_id` (INTEGER, PK), `tournament` (TEXT), `phase` (TEXT), `match_date` (TEXT), `team_a` (TEXT), `team_b` (TEXT), `score_a` (INTEGER), `score_b` (INTEGER), `winner` (TEXT), `patch` (TEXT).
@@ -104,6 +106,14 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 10. **`players`**: Registro de jugadores.
     - `player_id` (INTEGER, PK AUTO), `nickname` (TEXT), `real_name` (TEXT), `team_id` (FK teams), `team_name` (TEXT), `country` (TEXT).
 
+**2 tablas del servicio ALETHEIA_PREDICT** (ALETHEIA **solo las consulta/muestra**; las crea y escribe el servicio externo). `match_id` es el id del partido de **vlr.gg** (ej. `753455`) y es el mismo para todo el partido.
+
+11. **`predicciones_mapa`**: predicción cacheada por mapa y lado.
+    - `id`, `match_id`, `equipo_a`, `equipo_b`, `map_name`, `lado_inicial_a`, `prob_victoria_a`, `prob_victoria_b`, `prob_overtime`, `n_sim`, `con_datos`, `modelo_version`, `created_at`, `updated_at`.
+    - `UNIQUE(match_id, equipo_a, equipo_b, map_name, lado_inicial_a)`.
+12. **`predicciones_serie`**: predicción cacheada de la serie.
+    - `id`, `match_id`, `equipo_a`, `equipo_b`, `formato`, `mapas_json`, `prob_serie_a`, `prob_serie_b`, `n_sim`, `modelo_version`, `created_at`.
+
 ---
 
 ## 4. Catálogo de Rutas API (Backend)
@@ -118,7 +128,7 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 > **Reimportación idempotente:** al cargar un torneo, el ETL **borra y reinserta** los datos de sus `match_id` (hijos primero por FK: `rounds`, `player_stats`, `economy_summary`, `duels`, `multikills_clutches`, `match_veto`, `maps`, `matches`). Esto permite **re-subir un torneo para corregir datos sin duplicar filas**. Los jugadores se actualizan con `UPSERT` (rellena `team_id`/`team_name` si faltaban).
 
 ### 4.2. Módulo Tablas (`tablas_bp`)
-- `GET /api/tablas`: Lista el nombre de las tablas permitidas y su total de filas.
+- `GET /api/tablas`: Lista el nombre de las tablas permitidas y su total de filas. La allowlist (`TABLAS_PERMITIDAS`) incluye las 10 tablas del ETL **más** `predicciones_mapa` y `predicciones_serie` (estas dos las escribe el servicio ALETHEIA_PREDICT; aquí solo se consultan/muestran).
 - `GET /api/tabla/<nombre>`: Retorna los datos paginados de la tabla solicitada (acepta query params `page`, `limit`, `search`).
 - `GET /api/tablas/reporte`: Genera un reporte de calidad de datos: incidencias por partido (agrupadas por `match_id`, con URL `vlr.gg/<match_id>`), problemas globales por tabla y un texto plano listo para copiar.
 
@@ -192,6 +202,58 @@ Manejo de errores: timeout de 120 s (504 si expira) y 502 `{"ok": false, "error"
 si el servicio no responde. Este módulo **no importa** `numpy`, `pandas` ni
 `backend.conexion`.
 
+#### Ciclo precomputar → asociar → leer → comparar
+
+`match_id` es el id del partido de **vlr.gg** (ej. `753455`) y es el mismo para
+todo el partido. La DB Turso es compartida con el servicio (ALETHEIA no crea
+estas tablas). Endpoints adicionales del proxy:
+
+- `GET /api/aletheia/modelo_version` → proxy de `GET {BASE}/api/modelo_version`.
+  Devuelve `{"ok": true, "modelo_version": "<hash>", "fecha": "<iso>"}`.
+- `POST /api/aletheia/precalcular` → proxy de `POST {BASE}/api/precalcular`.
+  Body: `{"equipo_a", "equipo_b", "n_sim": 50000, "match_id": 753455, "mapas": [...]?}`.
+  Calcula los 13 mapas × 2 lados (26 filas) y hace UPSERT en `predicciones_mapa`
+  con ese `match_id`. Responde `{"ok": true, ..., "total": 26, "computados": X, "desde_cache": Y, "tiempo_s": Z}`.
+- `POST /api/aletheia/asociar` → proxy de `POST {BASE}/api/asociar`.
+  Body: `{"equipo_a", "equipo_b", "match_id": 753455, "desde_match_id": 0}`.
+  Reasigna el `match_id` de predicciones ya calculadas. Responde
+  `{"ok": true, "filas_actualizadas": N, "match_id": 753455}`.
+- `GET /api/aletheia/prediccion?match_id=753455&map_name=Split&lado_inicial_a=attack`
+  (o `?equipo_a=&equipo_b=`) → proxy de `GET {BASE}/api/prediccion`. Lee la fila
+  cacheada (instantáneo). Responde `{"ok": true, "prediccion": {...}, "modelo_version": "<hash>", "vigente": true}`
+  o `404 {"ok": false, "error": "Sin predicción cacheada."}`.
+- `GET /api/aletheia/predicciones?match_id=753455` (o `?equipo_a=&equipo_b=`) →
+  proxy de `GET {BASE}/api/predicciones`.
+- `GET /api/aletheia/comparacion?match_id=753455&limite=100` (o `?equipo_a=&equipo_b=`) →
+  proxy de `GET {BASE}/api/comparacion`. Compara lo predicho (`predicciones_mapa`)
+  con el resultado real (`matches` + `maps`) del mismo `match_id`:
+  ```json
+  {
+    "ok": true,
+    "resumen": {"n": 5, "accuracy": 0.8, "brier": 0.13, "log_loss": 0.42,
+                "favoritos_ok": 4, "upsets": 1, "inciertos": 0},
+    "detalle": [{"equipo_a": "Team Liquid", "equipo_b": "Paper Rex", "map_name": "Split",
+                 "lado_inicial_a": "attack", "prob_victoria_a": 0.4412,
+                 "prob_victoria_b": 0.5588, "prob_overtime": 0.164,
+                 "gano_a_real": 1, "resultado": "acierto", "tipo": "favorito_gano",
+                 "match_id": 753455, "created_at": "..."}]
+  }
+  ```
+  Clasificación: favorito = A si `p_a >= 0.5`; `max(p_a,p_b) < 0.55` → `incierto`;
+  si ganó el favorito → `favorito_gano`; si no → `upset`.
+
+**Flujo del ciclo (frontend → `PREDICT_DIRECTO` ngrok):**
+1. **PREPARAR PARTIDO**: `POST {PREDICT_DIRECTO}/api/precalcular` con el id de
+   vlr.gg (llamada larga, directa al servicio para no chocar con el timeout de
+   gunicorn). Se guarda el `modelo_version` con el que se preparó.
+2. **SELECCIÓN EN VIVO**: al cambiar mapa/lado, `GET /api/prediccion` lee la fila
+   cacheada (sin simular).
+3. **ASOCIAR ID**: si se preparó con id `0` o equivocado, `POST /api/asociar`
+   reasigna el `match_id` (usando `desde_match_id`).
+4. **COMPARACIÓN**: `GET /api/comparacion` contrasta lo predicho con el resultado
+   real del mismo `match_id`.
+5. Si `/api/modelo_version` cambia respecto al guardado, la web marca **RE-PREPARAR**.
+
 ### 4.6. Módulo Exportar (`exportar_bp`)
 - `GET /api/export/tables`: Retorna metadatos de las 10 tablas (filas y lista de columnas).
 - `GET /api/export/csv/<nombre>`: Descarga la tabla seleccionada en formato `.csv`.
@@ -219,7 +281,32 @@ si el servicio no responde. Este módulo **no importa** `numpy`, `pandas` ni
    ```
    Esto garantiza que las peticiones se dirijan correctamente al mismo host tanto en entornos locales (`http://localhost:5000/api`) como en producción en Render (`https://tu-app.onrender.com/api`).
 
-3. **Sistema de Diseño Visual:**
+3. **Servicio ALETHEIA_PREDICT (ngrok) y ciclo de partido (`aletheia/script.js`):**
+   - El predictor externo corre en el PC del autor y se expone con ngrok en la
+     constante `PREDICT_DIRECTO` (`https://snugly-encore-sweep.ngrok-free.dev`).
+     Todas las llamadas a ese host llevan el header `ngrok-skip-browser-warning: 1`.
+   - Las corridas **largas** (`/api/precalcular` y `/api/predecir`) se piden
+     **directo** a `PREDICT_DIRECTO` (no por el proxy de la web) para no chocar con
+     el timeout de gunicorn/Render. Equipos y mapas sí van por el proxy (son rápidos).
+   - **Campo de ID de partido:** input donde se pega la URL de vlr.gg o el número; se
+     parsea el primer grupo de dígitos (`https://www.vlr.gg/753455/...` → `753455`) y
+     se muestra como `PARTIDO #753455`. Puede quedar vacío (`0`) y asociarse luego.
+   - **PREPARAR PARTIDO:** dispara `POST /api/precalcular` con
+     `{equipo_a, equipo_b, n_sim, match_id}` (avisa "no cierres la pestaña" y muestra
+     el tiempo transcurrido). Al terminar guarda el `modelo_version`.
+   - **SELECCIÓN EN VIVO:** `<select>` de mapas (de `/api/mapas`) + toggle ATK/DEF de A.
+     Al cambiar, `GET /api/prediccion?match_id=..&map_name=..&lado_inicial_a=..` muestra
+     `prob_victoria_a`, `prob_victoria_b`, `prob_overtime`, fuente y `vigente` al instante.
+     Si no hay caché: "Aún no precomputado"; si `vigente=false`: "vuelve a preparar".
+   - **ASOCIAR ID:** `POST /api/asociar` con
+     `{equipo_a, equipo_b, match_id, desde_match_id}` para reasignar el id; refresca la vista.
+   - **PESTAÑA COMPARACIÓN:** `GET /api/comparacion?match_id=..` muestra tarjetas resumen
+     (`n`, accuracy, brier, log-loss, favoritos_ok, upsets, inciertos) y una tabla de
+     detalle coloreada (verde = favorito ganó, rojo = upset, ámbar = incierto). Si el
+     partido aún no está en la DB: "sin resultado real todavía".
+   - Se muestra el `modelo_version`; si el del servicio cambia, la web marca **RE-PREPARAR**.
+
+4. **Sistema de Diseño Visual:**
    - Estética oscura / Cyberpunk (`--bg-color: #0b0e14`, paneles con fondo translúcido y bordes luminosos).
    - Tipografías principales desde Google Fonts:
      - Titulares y Badges: `'Bebas Neue', sans-serif`
