@@ -40,6 +40,11 @@ const seriesBanner = document.getElementById('seriesBanner');
 const serieNote = document.getElementById('serieNote');
 const mbFormat = document.getElementById('mbFormat');
 
+const panelComparacion = document.getElementById('panelComparacion');
+const cmpSummary = document.getElementById('cmpSummary');
+const cmpTableWrap = document.getElementById('cmpTableWrap');
+const cmpStatus = document.getElementById('cmpStatus');
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const pct = v => Math.round((v || 0) * 100);
 
@@ -52,6 +57,23 @@ function escapeHtml(s) {
     return String(s == null ? '' : s)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
+}
+
+// Parsea la URL o el número de vlr.gg -> primer grupo de dígitos.
+function parseMatchId(raw) {
+    const m = String(raw || '').match(/(\d+)/);
+    return m ? parseInt(m[1], 10) : 0;
+}
+
+function fmtRatio(v) {
+    if (v == null || isNaN(v)) return '—';
+    const n = Number(v);
+    return `${(n <= 1 ? n * 100 : n).toFixed(1)}%`;
+}
+
+function fmtNum(v, d = 4) {
+    if (v == null || isNaN(v)) return '—';
+    return Number(v).toFixed(d);
 }
 
 function inferFormat(n) {
@@ -118,10 +140,68 @@ function renderSimList() {
         const mid = s.match_id ? `#${s.match_id}` : 'sin id';
         item.innerHTML = `
       <div class="si-teams">${escapeHtml(s.equipo_a)} <span class="si-vs">vs</span> ${escapeHtml(s.equipo_b)}</div>
-      <div class="si-meta">${mid} · ${s.mapas != null ? s.mapas : '?'} mapas · ${(s.n_sim || 0).toLocaleString()} sims${vigente ? '' : ' · ⚠ re-preparar'}</div>`;
+      <div class="si-meta">${mid} · ${s.mapas != null ? s.mapas : '?'} mapas · ${(s.n_sim || 0).toLocaleString()} sims${vigente ? '' : ' · ⚠ re-preparar'}</div>
+      <div class="si-actions">
+        <button class="si-btn" data-act="id" title="Asignar/corregir el ID de vlr.gg">✎ ID</button>
+        <button class="si-btn danger" data-act="del" title="Borrar estas predicciones">🗑 BORRAR</button>
+      </div>`;
         item.addEventListener('click', () => selectSim(s));
+        item.querySelector('[data-act="id"]').addEventListener('click', e => { e.stopPropagation(); asignarId(s); });
+        item.querySelector('[data-act="del"]').addEventListener('click', e => { e.stopPropagation(); borrarSim(s); });
         simList.appendChild(item);
     });
+}
+
+// Asigna/corrige el match_id (id de vlr.gg) de un enfrentamiento ya preparado.
+async function asignarId(sim) {
+    const actual = sim.match_id || 0;
+    const raw = window.prompt(
+        `ID de vlr.gg para ${sim.equipo_a} vs ${sim.equipo_b}\n(puedes pegar la URL o el número):`,
+        actual ? String(actual) : ''
+    );
+    if (raw == null) return;
+    const nuevo = parseMatchId(raw);
+    if (!nuevo) { window.alert('ID inválido.'); return; }
+    try {
+        const res = await predictFetch('/api/asociar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                equipo_a: sim.equipo_a, equipo_b: sim.equipo_b,
+                match_id: nuevo, desde_match_id: actual,
+            }),
+        });
+        const data = await res.json();
+        if (!data.ok) { window.alert(`Error: ${data.error || 'no se pudo asociar'}`); return; }
+        window.alert(`✓ ${data.filas_actualizadas != null ? data.filas_actualizadas : 0} filas reasignadas a #${nuevo}.`);
+        await loadSimulaciones();
+    } catch (e) {
+        window.alert(`Sin conexión con ALETHEIA_PREDICT: ${e.message}`);
+    }
+}
+
+// Borra las predicciones (mapa + serie) de un enfrentamiento.
+async function borrarSim(sim) {
+    const mid = sim.match_id || 0;
+    const etiqueta = `${sim.equipo_a} vs ${sim.equipo_b} (${mid ? '#' + mid : 'sin id'})`;
+    if (!window.confirm(`¿Borrar las predicciones de ${etiqueta}? Esta acción no se puede deshacer.`)) return;
+    try {
+        const res = await predictFetch('/api/borrar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ equipo_a: sim.equipo_a, equipo_b: sim.equipo_b, match_id: mid }),
+        });
+        const data = await res.json();
+        if (!data.ok) { window.alert(`Error: ${data.error || 'no se pudo borrar'}`); return; }
+        window.alert(`✓ ${data.filas_borradas != null ? data.filas_borradas : 0} filas borradas.`);
+        if (sameSim(current, sim)) {
+            current = null;
+            liveSection.style.display = 'none';
+        }
+        await loadSimulaciones();
+    } catch (e) {
+        window.alert(`Sin conexión con ALETHEIA_PREDICT: ${e.message}`);
+    }
 }
 
 // ─── SELECCIÓN DE SIMULACIÓN ──────────────────────────────────────────────────
@@ -143,6 +223,7 @@ async function selectSim(s) {
     renderLiveDetail();
     syncSerieBuilder();
     updateSerie();
+    if (panelComparacion && panelComparacion.style.display !== 'none') fetchComparacion();
     renderSimList();
 }
 
@@ -464,6 +545,88 @@ function renderSerieBanner(data) {
     serieNote.innerHTML = `<strong>Serie desde caché</strong> (sin Monte Carlo). Formato <strong>${(data.formato || '').toUpperCase()}</strong> — necesario ganar <strong>${data.mapas_para_ganar}</strong> mapa(s).`;
 }
 
+// ─── COMPARACIÓN (predicho vs. real) ─────────────────────────────────────────
+async function fetchComparacion() {
+    if (!current) return;
+    cmpStatus.className = 'live-status';
+    cmpStatus.textContent = 'Consultando comparación...';
+    cmpSummary.innerHTML = '';
+    cmpTableWrap.innerHTML = '';
+
+    const params = new URLSearchParams();
+    if (current.match_id > 0) {
+        params.set('match_id', current.match_id);
+    } else {
+        params.set('equipo_a', current.equipo_a);
+        params.set('equipo_b', current.equipo_b);
+    }
+    params.set('limite', '100');
+
+    try {
+        const res = await predictFetch(`/api/comparacion?${params.toString()}`);
+        const data = await res.json();
+        if (!data.ok || !data.resumen || !data.resumen.n) {
+            cmpStatus.className = 'live-status warn';
+            cmpStatus.textContent = 'Sin resultado real todavía (el partido no está en la DB).';
+            return;
+        }
+        renderComparison(data);
+    } catch (e) {
+        cmpStatus.className = 'live-status err';
+        cmpStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
+    }
+}
+
+function renderComparison(data) {
+    const r = data.resumen || {};
+    const cards = [
+        { label: 'N', val: r.n },
+        { label: 'ACCURACY', val: fmtRatio(r.accuracy) },
+        { label: 'BRIER', val: fmtNum(r.brier) },
+        { label: 'LOG-LOSS', val: fmtNum(r.log_loss) },
+        { label: 'FAVORITOS OK', val: r.favoritos_ok },
+        { label: 'UPSETS', val: r.upsets },
+        { label: 'INCIERTOS', val: r.inciertos },
+    ];
+    cmpSummary.innerHTML = cards.map(c => `
+    <div class="cmp-card">
+      <div class="cmp-card-label">${c.label}</div>
+      <div class="cmp-card-val">${c.val == null ? '—' : c.val}</div>
+    </div>`).join('');
+
+    const tipoClass = t => t === 'favorito_gano' ? 'cmp-fav' : t === 'upset' ? 'cmp-upset' : 'cmp-unc';
+    const tipoLabel = t => t === 'favorito_gano' ? 'favorito ganó' : t === 'upset' ? 'UPSET' : 'incierto';
+
+    const rows = (data.detalle || []).map(d => {
+        const ganador = d.gano_a_real ? (d.equipo_a || 'A') : (d.equipo_b || 'B');
+        return `
+      <tr class="cmp-row ${tipoClass(d.tipo)}">
+        <td>${escapeHtml(d.map_name)}</td>
+        <td>${d.lado_inicial_a === 'attack' ? 'ATK' : 'DEF'}</td>
+        <td class="cmp-a">${pct(d.prob_victoria_a)}%</td>
+        <td class="cmp-b">${pct(d.prob_victoria_b)}%</td>
+        <td>${pct(d.prob_overtime)}%</td>
+        <td>${escapeHtml(ganador)}</td>
+        <td>${tipoLabel(d.tipo)}</td>
+        <td>${d.resultado === 'acierto' ? '✓' : '✕'} ${escapeHtml(d.resultado)}</td>
+      </tr>`;
+    }).join('');
+
+    cmpTableWrap.innerHTML = `
+    <table class="cmp-table">
+      <thead>
+        <tr>
+          <th>MAPA</th><th>LADO</th><th>P(A)</th><th>P(B)</th><th>OT</th>
+          <th>GANÓ (REAL)</th><th>TIPO</th><th>RESULTADO</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+
+    cmpStatus.className = 'live-status ok';
+    cmpStatus.textContent = `✓ comparación con modelo ${data.modelo_version || '—'}`;
+}
+
 // ─── PESTAÑAS ─────────────────────────────────────────────────────────────────
 document.querySelectorAll('.live-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -472,12 +635,15 @@ document.querySelectorAll('.live-tab').forEach(btn => {
         const tab = btn.dataset.tab;
         panelMapa.style.display = tab === 'mapa' ? 'block' : 'none';
         panelSerie.style.display = tab === 'serie' ? 'block' : 'none';
+        panelComparacion.style.display = tab === 'comparacion' ? 'block' : 'none';
         if (tab === 'mapa') {
             renderLiveMapPicker();
             renderLiveDetail();
-        } else {
+        } else if (tab === 'serie') {
             syncSerieBuilder();
             updateSerie();
+        } else {
+            fetchComparacion();
         }
     });
 });

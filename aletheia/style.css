@@ -3118,6 +3118,34 @@ main {
     margin-top: 4px;
 }
 
+.si-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.si-btn {
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all .15s;
+}
+
+.si-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.si-btn.danger:hover {
+    border-color: var(--red);
+    color: var(--red);
+}
+
 .sel-sim-head {
     padding: 14px 24px;
     border-bottom: 1px solid var(--border);
@@ -3194,4 +3222,21 @@ main {
     color: var(--dim);
     letter-spacing: 1px;
     line-height: 1.6;
+}
+
+/* Botón "cancelar espera" del polling de precalcular */
+.link-cancel {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-decoration: underline;
+    cursor: pointer;
+    margin-left: 8px;
+}
+
+.link-cancel:hover {
+    color: var(--red);
 }

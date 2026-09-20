@@ -19,6 +19,7 @@ let preparedMatchId = 0;         // id usado en el último PREPARAR (para desde_
 let preparedModelVersion = null; // hash del modelo con el que se preparó
 let serviceModelVersion = null;  // hash del modelo vigente en el servicio
 let prepareBusy = false;
+let jobStopped = false;          // permite cancelar la espera del job
 
 // ─── DOM ──────────────────────────────────────────────────────────────────────
 const gridA = document.getElementById('teamGridA');
@@ -38,13 +39,9 @@ const btnPreparar = document.getElementById('btnPreparar');
 const prepareTimer = document.getElementById('prepareTimer');
 const prepareStatus = document.getElementById('prepareStatus');
 
-const comparisonPanel = document.getElementById('comparisonPanel');
-const cmpSummary = document.getElementById('cmpSummary');
-const cmpTableWrap = document.getElementById('cmpTableWrap');
-const cmpStatus = document.getElementById('cmpStatus');
-
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const pct = v => Math.round((v || 0) * 100);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function predictFetch(path, options = {}) {
     const headers = Object.assign({}, NGROK_HEADER, options.headers || {});
@@ -54,23 +51,6 @@ function predictFetch(path, options = {}) {
 function parseMatchId(raw) {
     const m = String(raw || '').match(/(\d+)/);
     return m ? parseInt(m[1], 10) : 0;
-}
-
-function fmtRatio(v) {
-    if (v == null || isNaN(v)) return '—';
-    const n = Number(v);
-    return `${(n <= 1 ? n * 100 : n).toFixed(1)}%`;
-}
-
-function fmtNum(v, d = 4) {
-    if (v == null || isNaN(v)) return '—';
-    return Number(v).toFixed(d);
-}
-
-function escapeHtml(s) {
-    return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
 }
 
 // ─── CARGAR EQUIPOS ───────────────────────────────────────────────────────────
@@ -130,11 +110,9 @@ function selectTeam(team, side) {
 function showPrepare() {
     const ready = !!(selectedA && selectedB);
     preparePanel.style.display = ready ? 'block' : 'none';
-    comparisonPanel.style.display = ready ? 'block' : 'none';
     updateActionState();
     if (ready) {
         loadCacheSummary();
-        fetchComparacion();
     }
 }
 
@@ -168,7 +146,6 @@ matchIdInput.addEventListener('input', () => {
 
 matchIdInput.addEventListener('change', () => {
     loadCacheSummary();
-    fetchComparacion();
 });
 
 // ─── ESTADO / BOTONES ─────────────────────────────────────────────────────────
@@ -251,90 +228,13 @@ function updateModelBadge() {
     }
 }
 
-// ─── COMPARACIÓN ──────────────────────────────────────────────────────────────
-async function fetchComparacion() {
-    if (!selectedA || !selectedB) return;
-    cmpStatus.className = 'live-status';
-    cmpStatus.textContent = 'Consultando comparación...';
-    cmpSummary.innerHTML = '';
-    cmpTableWrap.innerHTML = '';
-
-    const params = new URLSearchParams();
-    if (matchId > 0) {
-        params.set('match_id', matchId);
-    } else {
-        params.set('equipo_a', selectedA);
-        params.set('equipo_b', selectedB);
-    }
-    params.set('limite', '100');
-
-    try {
-        const res = await predictFetch(`/api/comparacion?${params.toString()}`);
-        const data = await res.json();
-        if (!data.ok || !data.resumen || !data.resumen.n) {
-            cmpStatus.className = 'live-status warn';
-            cmpStatus.textContent = 'Sin resultado real todavía (el partido no está en la DB).';
-            return;
-        }
-        renderComparison(data);
-    } catch (e) {
-        cmpStatus.className = 'live-status err';
-        cmpStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
-    }
-}
-
-function renderComparison(data) {
-    const r = data.resumen || {};
-    const cards = [
-        { label: 'N', val: r.n },
-        { label: 'ACCURACY', val: fmtRatio(r.accuracy) },
-        { label: 'BRIER', val: fmtNum(r.brier) },
-        { label: 'LOG-LOSS', val: fmtNum(r.log_loss) },
-        { label: 'FAVORITOS OK', val: r.favoritos_ok },
-        { label: 'UPSETS', val: r.upsets },
-        { label: 'INCIERTOS', val: r.inciertos },
-    ];
-    cmpSummary.innerHTML = cards.map(c => `
-    <div class="cmp-card">
-      <div class="cmp-card-label">${c.label}</div>
-      <div class="cmp-card-val">${c.val == null ? '—' : c.val}</div>
-    </div>`).join('');
-
-    const tipoClass = t => t === 'favorito_gano' ? 'cmp-fav' : t === 'upset' ? 'cmp-upset' : 'cmp-unc';
-    const tipoLabel = t => t === 'favorito_gano' ? 'favorito ganó' : t === 'upset' ? 'UPSET' : 'incierto';
-
-    const rows = (data.detalle || []).map(d => {
-        const ganador = d.gano_a_real ? (d.equipo_a || 'A') : (d.equipo_b || 'B');
-        return `
-      <tr class="cmp-row ${tipoClass(d.tipo)}">
-        <td>${escapeHtml(d.map_name)}</td>
-        <td>${d.lado_inicial_a === 'attack' ? 'ATK' : 'DEF'}</td>
-        <td class="cmp-a">${pct(d.prob_victoria_a)}%</td>
-        <td class="cmp-b">${pct(d.prob_victoria_b)}%</td>
-        <td>${pct(d.prob_overtime)}%</td>
-        <td>${escapeHtml(ganador)}</td>
-        <td>${tipoLabel(d.tipo)}</td>
-        <td>${d.resultado === 'acierto' ? '✓' : '✕'} ${escapeHtml(d.resultado)}</td>
-      </tr>`;
-    }).join('');
-
-    cmpTableWrap.innerHTML = `
-    <table class="cmp-table">
-      <thead>
-        <tr>
-          <th>MAPA</th><th>LADO</th><th>P(A)</th><th>P(B)</th><th>OT</th>
-          <th>GANÓ (REAL)</th><th>TIPO</th><th>RESULTADO</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>`;
-
-    cmpStatus.className = 'live-status ok';
-    cmpStatus.textContent = `✓ comparación con modelo ${data.modelo_version || '—'}`;
-}
-
 // ─── PREPARAR PARTIDO (precalcular async, DIRECTO) ───────────────────────────
 btnPreparar.addEventListener('click', prepararPartido);
+
+// Botón "cancelar espera" que aparece si el túnel/PC no responde.
+prepareStatus.addEventListener('click', e => {
+    if (e.target && e.target.id === 'btnCancelPrepare') jobStopped = true;
+});
 
 async function prepararPartido() {
     if (!selectedA || !selectedB || prepareBusy) return;
@@ -385,7 +285,7 @@ async function prepararPartido() {
         data = await res.json();
     } catch (e) {
         prepareStatus.className = 'prepare-status err';
-        prepareStatus.textContent = `Servicio de predicción no disponible: ${e.message}. Reintenta.`;
+        prepareStatus.textContent = `Sin conexión con ALETHEIA_PREDICT (túnel/PC): ${e.message}. Reintenta.`;
         finish();
         return;
     }
@@ -414,37 +314,73 @@ async function prepararPartido() {
         return;
     }
 
-    // Asíncrono: poll cada 2 s.
+    // Asíncrono: el POST devolvió {job_id}. Poll resiliente: sobrevive a caídas
+    // temporales del túnel/PC y a que el navegador esté en segundo plano.
     const jobId = data.job_id;
     const totalCombinaciones = data.total || 26;
     prepareStatus.innerHTML = `⏳ ${data.estado || 'en_proceso'} · 0% · mapa 0/${totalCombinaciones / 2}. <strong>No cierres esta pestaña.</strong>`;
 
-    const poll = setInterval(async () => {
+    const result = await pollPrecalcularJob(jobId, t0, totalCombinaciones);
+
+    if (result.status === 'listo') {
+        const secs = result.job.tiempo_s != null ? result.job.tiempo_s : result.elapsed;
+        preparedMatchId = matchId;
+        preparedModelVersion = result.job.modelo_version;
+        await refreshModelVersion();
+        updateModelBadge();
+        prepareStatus.className = 'prepare-status ok';
+        prepareStatus.textContent = `✓ ${result.total} combinaciones listas en ${secs}s · ${result.job.computados != null ? result.job.computados : 0} computadas · ${result.job.desde_cache != null ? result.job.desde_cache : 0} desde caché · modelo ${result.job.modelo_version}`;
+        loadCacheSummary();
+    } else if (result.status === 'lost') {
+        prepareStatus.className = 'prepare-status err';
+        prepareStatus.textContent = 'El servicio se reinició y perdió el job. Vuelve a PREPARAR PARTIDO.';
+    } else if (result.status === 'error') {
+        prepareStatus.className = 'prepare-status err';
+        prepareStatus.textContent = `Error: ${result.error || 'no se pudo precomputar'}`;
+    } else {
+        prepareStatus.className = 'prepare-status err';
+        prepareStatus.textContent = 'Espera cancelada.';
+    }
+    finish();
+}
+
+// Poll con reintentos: NUNCA aborta por un fallo de red transitorio
+// (ERR_PROXY_CONNECTION_FAILED, PC dormido, pestaña en segundo plano...).
+async function pollPrecalcularJob(jobId, t0, totalCombinaciones) {
+    jobStopped = false;
+    let fails = 0;
+    while (!jobStopped) {
+        let r;
+        try {
+            r = await predictFetch(`/api/precalcular/estado?job_id=${encodeURIComponent(jobId)}`);
+        } catch (e) {
+            fails++;
+            const elapsed = Math.floor((Date.now() - t0) / 1000);
+            prepareStatus.className = 'prepare-status running';
+            prepareStatus.innerHTML = `⚠ Sin conexión con ALETHEIA_PREDICT (túnel/PC caído). Reintentando #${fails} · ${elapsed}s. ` +
+                `Puedes dejarlo abierto. <button id="btnCancelPrepare" class="link-cancel">cancelar espera</button>`;
+            await sleep(Math.min(2000 + fails * 500, 10000));
+            continue;
+        }
+
+        if (r.status === 404) {
+            return { status: 'lost' };
+        }
+
         let jd;
         try {
-            const r = await predictFetch(`/api/precalcular/estado?job_id=${encodeURIComponent(jobId)}`);
-            if (r.status === 404) {
-                clearInterval(poll);
-                failDisponible();
-                return;
-            }
             jd = await r.json();
-        } catch (e) {
-            clearInterval(poll);
-            prepareStatus.className = 'prepare-status err';
-            prepareStatus.textContent = `Servicio de predicción no disponible: ${e.message}. Reintenta.`;
-            finish();
-            return;
+        } catch {
+            fails++;
+            await sleep(Math.min(2000 + fails * 500, 10000));
+            continue;
         }
 
         if (!jd.ok || !jd.job) {
-            clearInterval(poll);
-            prepareStatus.className = 'prepare-status err';
-            prepareStatus.textContent = `Error: ${(jd && jd.error) || 'job no encontrado'}.`;
-            finish();
-            return;
+            return { status: 'error', error: (jd && jd.error) || 'job no encontrado' };
         }
 
+        fails = 0;
         const job = jd.job;
         const total = job.total || totalCombinaciones;
         const elapsed = Math.floor((Date.now() - t0) / 1000);
@@ -453,31 +389,21 @@ async function prepararPartido() {
             const progreso = Math.round((job.progreso || 0) * 100);
             prepareStatus.className = 'prepare-status running';
             prepareStatus.innerHTML = `⏳ ${progreso}% · mapa ${job.mapas_hechos || 0}/${total / 2} · ${elapsed}s. <strong>No cierres esta pestaña.</strong>`;
-            return;
+            await sleep(2000);
+            continue;
         }
 
         if (job.estado === 'listo') {
-            clearInterval(poll);
-            const secs = job.tiempo_s != null ? job.tiempo_s : elapsed;
-            preparedMatchId = matchId;
-            preparedModelVersion = job.modelo_version;
-            await refreshModelVersion();
-            updateModelBadge();
-            prepareStatus.className = 'prepare-status ok';
-            prepareStatus.textContent = `✓ ${total} combinaciones listas en ${secs}s · ${job.computados != null ? job.computados : 0} computadas · ${job.desde_cache != null ? job.desde_cache : 0} desde caché · modelo ${job.modelo_version}`;
-            loadCacheSummary();
-            finish();
-            return;
+            return { status: 'listo', job, total, elapsed };
         }
 
         if (job.estado === 'error') {
-            clearInterval(poll);
-            prepareStatus.className = 'prepare-status err';
-            prepareStatus.textContent = `Error: ${job.error || 'no se pudo precomputar'}`;
-            finish();
-            return;
+            return { status: 'error', error: job.error };
         }
-    }, 2000);
+
+        await sleep(2000);
+    }
+    return { status: 'cancelled' };
 }
 
 // ─── ASOCIAR ID ───────────────────────────────────────────────────────────────
@@ -512,7 +438,6 @@ async function asociarId() {
         prepareStatus.className = 'prepare-status ok';
         prepareStatus.textContent = `✓ ${data.filas_actualizadas != null ? data.filas_actualizadas : 0} filas asociadas a #${matchId}.`;
         loadCacheSummary();
-        fetchComparacion();
     } catch (e) {
         prepareStatus.className = 'prepare-status err';
         prepareStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;

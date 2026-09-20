@@ -15,6 +15,9 @@ Endpoints expuestos (proxy):
     GET  /api/aletheia/prediccion      -> GET  {BASE}/api/prediccion
     GET  /api/aletheia/predicciones    -> GET  {BASE}/api/predicciones
     GET  /api/aletheia/comparacion     -> GET  {BASE}/api/comparacion
+    GET  /api/aletheia/simulaciones    -> GET  {BASE}/api/simulaciones
+    POST /api/aletheia/serie           -> POST {BASE}/api/serie
+    POST /api/aletheia/borrar          -> POST {BASE}/api/borrar
 
 Decisiones de diseño:
     · El servicio externo devuelve solo NOMBRES de equipo. Para no romper el
@@ -222,3 +225,9 @@ def simulaciones():
 def serie():
     """Proxy POST /api/serie (probabilidad de serie desde caché, sin Monte Carlo)."""
     return _passthrough_post('/api/serie')
+
+
+@aletheia_bp.route('/api/aletheia/borrar', methods=['POST'])
+def borrar():
+    """Proxy POST /api/borrar (borra las predicciones de un enfrentamiento)."""
+    return _passthrough_post('/api/borrar')
