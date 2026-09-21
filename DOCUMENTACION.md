@@ -228,6 +228,11 @@ a `[100, MAX_SIM]` (default `10000`). **En hosting free no usar 25K/50K.**
 `prob_victoria_a` viene **calibrada**. `confianza`/`confianza_serie`
 (`alta|media|baja`) son para la UI; `fuente` es `cache|calculado`.
 
+**Semántica de la banda de confianza** (la fija el backend, conservadora):
+se calcula sobre `max(p, 1-p)` → `>=0.62` **alta**, `>=0.55` **media**, si no
+**baja**. La web la muestra con color (alta=verde, media=ámbar, baja=gris) y, si
+el dato no viene, lo **oculta o deriva** con la misma regla (no rompe).
+
 Manejo de errores: timeout de 120 s (504 si expira) y 502 `{"ok": false, "error": "..."}`
 si el servicio no responde. Este módulo **no importa** `numpy`, `pandas` ni
 `backend.conexion`.
@@ -385,10 +390,22 @@ estas tablas). Endpoints adicionales del proxy:
      - **MAPA / BANDO:** rejilla de los 13 mapas con P(A) y OT del bando elegido
        (leídas de `liveBulk`; no llama al servicio en cada clic, solo si falta el
        dato). Al tocar un mapa muestra `prob_victoria_a/b`, `prob_overtime`,
-       `confianza` y `n_sim`.
+       **confianza** (etiqueta con color: alta=verde, media=ámbar, baja=gris) y `n_sim`.
+       Como las filas de `/predicciones` no traen `confianza`, se deriva con la
+       misma regla conservadora del motor sobre `max(p, 1-p)` (≥0.62 alta, ≥0.55
+       media, resto baja); si el backend la manda (`/predecir`, `/serie`,
+       `/prediccion`), se usa la del backend.
      - **ARMAR SERIE (BO1/BO3/BO5):** slots en orden (el último = DECIDER) con bando
        por mapa; cada cambio hace `POST /api/aletheia/serie` y muestra el banner
-       (`prob_serie_a/b`, `confianza_serie`, formato, `mapas_para_ganar`) al instante.
+       (`prob_serie_a/b`, `confianza_serie` con color, formato, `mapas_para_ganar`,
+       `n_sim`) al instante. La tabla de mapas de la serie muestra la **confianza
+       por mapa**.
+     - **VIGENCIA Y RE-PRECALCULAR:** la web compara `modelo_version` de cada
+       enfrentamiento con `GET /api/aletheia/modelo_version` (y usa `vigente` de
+       `/api/simulaciones`). Si difiere, marca el enfrentamiento como **NO vigente**
+       y ofrece **↻ RE-PRECALCULAR**, que hace `POST /api/precalcular` con
+       `forzar:true` **directo a `PREDICT_DIRECTO`** (async: `job_id` + polling de
+       `/api/precalcular/estado`), refresca la lista y vuelve a leer la caché.
      - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra tarjetas resumen
        (accuracy, brier, log-loss, favoritos_ok, upsets, inciertos) y una tabla de
        detalle coloreada (verde = favorito ganó, rojo = upset, ámbar = incierto);

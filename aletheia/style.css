@@ -1168,6 +1168,99 @@ main {
     background: var(--red);
 }
 
+/* ── ETIQUETA DE CONFIANZA (alta/media/baja) ── */
+.conf-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    white-space: nowrap;
+}
+
+.conf-badge .conf-dot {
+    width: 6px;
+    height: 6px;
+}
+
+.conf-badge.alta {
+    color: var(--green);
+    border-color: rgba(74, 222, 128, .4);
+    background: rgba(74, 222, 128, .08);
+}
+
+.conf-badge.alta .conf-dot {
+    background: var(--green);
+}
+
+.conf-badge.media {
+    color: var(--orange);
+    border-color: rgba(251, 146, 60, .4);
+    background: rgba(251, 146, 60, .08);
+}
+
+.conf-badge.media .conf-dot {
+    background: var(--orange);
+}
+
+.conf-badge.baja {
+    color: var(--dim);
+}
+
+.conf-badge.baja .conf-dot {
+    background: var(--dim);
+}
+
+/* Variante usada en el banner de serie (fondo oscuro, más compacta) */
+.sb-conf {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-top: 4px;
+}
+
+.sb-conf.alta {
+    color: var(--green);
+}
+
+.sb-conf.media {
+    color: var(--orange);
+}
+
+.sb-conf.baja {
+    color: var(--dim);
+}
+
+/* Fila de mapa en la tabla de serie: la confianza por mapa */
+.smr-conf {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.smr-conf.alta {
+    color: var(--green);
+}
+
+.smr-conf.media {
+    color: var(--orange);
+}
+
+.smr-conf.baja {
+    color: var(--dim);
+}
+
 /* ── LEGEND ── */
 .legend {
     display: flex;
@@ -3163,6 +3256,21 @@ main {
     color: var(--dim);
     letter-spacing: 1px;
     margin-top: 4px;
+}
+
+.ss-head-actions {
+    margin-top: 10px;
+}
+
+.ss-head-actions .btn-nav {
+    cursor: pointer;
+    background: transparent;
+    font-family: var(--mono);
+}
+
+.ss-head-actions .btn-nav[disabled] {
+    opacity: .55;
+    cursor: wait;
 }
 
 .serie-maps {

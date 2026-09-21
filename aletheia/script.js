@@ -1,8 +1,15 @@
 const API = `${window.location.origin}/api`;
 
-// EN VIVO nunca simula: todo sale de la caché (predicciones/serie/comparación).
-// Las lecturas van por el proxy de la web (/api/aletheia/...), que a su vez
-// contacta ALETHEIA_PREDICT (ALETHEIA_PREDICT_URL). Aquí no hay corridas largas.
+// EN VIVO lee de la caché por el proxy (/api/aletheia/...). La única corrida
+// larga que puede lanzar es RE-PRECALCULAR (forzar:true), que va DIRECTO a
+// ngrok para no chocar con el timeout de gunicorn/Render.
+const PREDICT_DIRECTO = 'https://snugly-encore-sweep.ngrok-free.dev';
+const NGROK_HEADER = { 'ngrok-skip-browser-warning': '1' };
+
+function predictFetch(path, options = {}) {
+    const headers = Object.assign({}, NGROK_HEADER, options.headers || {});
+    return fetch(`${PREDICT_DIRECTO}${path}`, Object.assign({}, options, { headers }));
+}
 
 let availableMaps = [];    // 13 mapas del servicio (proxy /api/aletheia/mapas)
 let mapsLoading = false;
@@ -14,6 +21,8 @@ let liveMap = null;        // mapa seleccionado en el panel mapa/bando
 let matchMaps = [];        // [{ map_name, lado_inicial_a }] para la serie
 let maxMapsSel = 3;        // slots del formato (1/3/5)
 let showStale = false;     // mostrar simulaciones no vigentes
+let serviceModelVersion = null;  // modelo vigente (GET /modelo_version)
+let recalculating = false;       // evita doble RE-PRECALCULAR
 
 // ─── DOM ──────────────────────────────────────────────────────────────────────
 const simList = document.getElementById('simList');
@@ -88,6 +97,26 @@ function sameSim(a, b) {
     return a.equipo_a === b.equipo_a && a.equipo_b === b.equipo_b;
 }
 
+// Banda de confianza. Usa la que manda el backend (`confianza`) y, si no viene
+// (p. ej. las filas crudas de /predicciones no la incluyen), la deriva con la
+// misma regla conservadora que el motor: max(p, 1-p) >=0.62 alta, >=0.55 media.
+function confBand(p) {
+    if (!p) return null;
+    if (p.confianza) return String(p.confianza).toLowerCase();
+    const pa = Number(p.prob_victoria_a);
+    const pb = Number(p.prob_victoria_b);
+    if (isNaN(pa) && isNaN(pb)) return null;
+    const pmax = Math.max(isNaN(pa) ? 0 : pa, isNaN(pb) ? 0 : pb);
+    if (pmax >= 0.62) return 'alta';
+    if (pmax >= 0.55) return 'media';
+    return 'baja';
+}
+
+function confBadge(conf) {
+    if (!conf) return '';
+    return `<span class="conf-badge ${conf}"><span class="conf-dot"></span>${escapeHtml(conf)}</span>`;
+}
+
 // ─── MAPAS (proxy) ────────────────────────────────────────────────────────────
 async function loadAvailableMaps() {
     mapsLoading = true;
@@ -113,7 +142,15 @@ async function loadSimulaciones() {
             simListStatus.textContent = `Error: ${data.error || 'no se pudo leer /api/simulaciones'}`;
             return;
         }
+        if (data.modelo_version) serviceModelVersion = data.modelo_version;
         sims = data.simulaciones || [];
+        // Marca no vigentes también por comparación de modelo_version (aunque el
+        // backend no lo hubiera marcado), para ofrecer RE-PRECALCULAR.
+        sims.forEach(s => {
+            if (s.modelo_version && serviceModelVersion && s.modelo_version !== serviceModelVersion) {
+                s.vigente = false;
+            }
+        });
         renderSimList();
         const vigentes = sims.filter(s => s.vigente !== false).length;
         simListStatus.className = 'live-status ok';
@@ -202,6 +239,24 @@ async function borrarSim(sim) {
     }
 }
 
+// Modelo vigente del servicio (GET /modelo_version, vía proxy).
+async function loadModeloVersion() {
+    try {
+        const res = await proxyFetch('/modelo_version');
+        const data = await res.json();
+        if (data.ok) serviceModelVersion = data.modelo_version;
+    } catch { }
+}
+
+// ¿La simulación seleccionada está desactualizada? (su modelo_version difiere
+// del vigente, o el servicio ya la marca vigente:false).
+function simIsStale(s) {
+    if (!s) return false;
+    if (s.vigente === false) return true;
+    if (s.modelo_version && serviceModelVersion) return s.modelo_version !== serviceModelVersion;
+    return false;
+}
+
 // ─── SELECCIÓN DE SIMULACIÓN ──────────────────────────────────────────────────
 async function selectSim(s) {
     current = s;
@@ -210,10 +265,15 @@ async function selectSim(s) {
     liveBulk = null;
     liveSection.style.display = 'block';
 
-    const vigente = s.vigente !== false;
+    const stale = simIsStale(s);
     selSimHead.innerHTML = `
     <div class="ss-head-teams">${escapeHtml(s.equipo_a)} <span class="si-vs">vs</span> ${escapeHtml(s.equipo_b)}</div>
-    <div class="ss-head-meta">${s.match_id ? 'PARTIDO #' + s.match_id : 'sin id'} · ${s.n_sim ? Number(s.n_sim).toLocaleString() + ' sims' : ''} · modelo ${s.modelo_version || '—'}${vigente ? '' : ' · <span style="color:var(--orange)">⚠ no vigente, re-preparar</span>'}</div>`;
+    <div class="ss-head-meta">${s.match_id ? 'PARTIDO #' + s.match_id : 'sin id'} · ${s.n_sim ? Number(s.n_sim).toLocaleString() + ' sims' : ''} · modelo ${s.modelo_version || '—'}${stale ? ' · <span style="color:var(--orange)">⚠ NO vigente</span>' : ''}</div>
+    <div class="ss-head-actions">
+      <button class="btn-nav" id="btnReprecalcular"${stale ? '' : ' style="display:none"'}>↻ RE-PRECALCULAR${stale ? ' (modelo cambió)' : ''}</button>
+    </div>`;
+    const btnRepre = document.getElementById('btnReprecalcular');
+    if (btnRepre) btnRepre.addEventListener('click', () => reprecalcular(s));
     liveTeamALabel.textContent = s.equipo_a;
 
     await loadLiveBulkForCurrent();
@@ -223,6 +283,91 @@ async function selectSim(s) {
     updateSerie();
     if (panelComparacion && panelComparacion.style.display !== 'none') fetchComparacion();
     renderSimList();
+}
+
+// Re-precalcula el enfrentamiento actual con forzar:true (directo a ngrok) y
+// refresca la lista. Es la única corrida larga que lanza EN VIVO.
+async function reprecalcular(s) {
+    if (!s || recalculating) return;
+    recalculating = true;
+    const btn = document.getElementById('btnReprecalcular');
+    if (btn) { btn.disabled = true; btn.textContent = '↻ RECALCULANDO…'; }
+    simListStatus.className = 'live-status warn';
+    simListStatus.textContent = `Re-precalculando ${s.equipo_a} vs ${s.equipo_b}… no cierres la pestaña.`;
+    try {
+        const res = await predictFetch('/api/precalcular', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                equipo_a: s.equipo_a,
+                equipo_b: s.equipo_b,
+                match_id: s.match_id || 0,
+                n_sim: s.n_sim || 10000,
+                forzar: true,
+            }),
+        });
+        const data = await res.json();
+        if (!data.ok) {
+            simListStatus.className = 'live-status err';
+            simListStatus.textContent = `Error: ${data.error || 'no se pudo re-precalcular'}`;
+            return;
+        }
+        // Async (202): poll del job; sync: ya terminó.
+        if (data.job_id) {
+            const ok = await pollPrecalcular(data.job_id, s);
+            if (!ok) return;
+        }
+        simListStatus.className = 'live-status ok';
+        simListStatus.textContent = '✓ Re-precalculo listo.';
+        await loadModeloVersion();
+        await loadSimulaciones();
+        if (current && sameSim(current, s)) await selectSim(current);
+    } catch (e) {
+        simListStatus.className = 'live-status err';
+        simListStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
+    } finally {
+        recalculating = false;
+    }
+}
+
+// Poll simple del job de precalculo (mismo contrato que PREPARAR).
+async function pollPrecalcular(jobId, s) {
+    let fails = 0;
+    while (true) {
+        let r, jd;
+        try {
+            r = await predictFetch(`/api/precalcular/estado?job_id=${encodeURIComponent(jobId)}`);
+            if (r.status === 404) {
+                simListStatus.className = 'live-status err';
+                simListStatus.textContent = 'El servicio perdió el job. Reintenta RE-PRECALCULAR.';
+                return false;
+            }
+            jd = await r.json();
+            fails = 0;
+        } catch {
+            fails++;
+            simListStatus.className = 'live-status warn';
+            simListStatus.textContent = `⚠ Sin conexión (reintento #${fails})… puedes dejarlo abierto.`;
+            await new Promise(r2 => setTimeout(r2, Math.min(2000 + fails * 500, 10000)));
+            continue;
+        }
+        const job = jd && jd.job;
+        if (!jd || !jd.ok || !job) {
+            simListStatus.className = 'live-status err';
+            simListStatus.textContent = `Error: ${(jd && jd.error) || 'job no encontrado'}`;
+            return false;
+        }
+        const pctProg = Math.round((job.progreso || 0) * 100);
+        simListStatus.className = 'live-status warn';
+        simListStatus.textContent = `↻ ${pctProg}% · mapa ${job.mapas_hechos || 0}/${Math.ceil((job.total || 26) / 2)} · no cierres la pestaña.`;
+        if (job.estado === 'listo') return true;
+        if (job.estado === 'error') {
+            simListStatus.className = 'live-status err';
+            simListStatus.textContent = `Error: ${job.error || 'no se pudo re-precalcular'}`;
+            return false;
+        }
+        await new Promise(r2 => setTimeout(r2, 2000));
+    }
 }
 
 async function loadLiveBulkForCurrent() {
@@ -243,7 +388,13 @@ async function loadLiveBulkForCurrent() {
                 if (p && p.map_name) liveBulk[`${p.map_name}|${p.lado_inicial_a}`] = p;
             });
         }
-        if (data.modelo_version) current.modelo_version = data.modelo_version;
+        // `data.modelo_version` es la versión VIGENTE del servicio, no la de las
+        // filas. La versión real de la cache de este enfrentamiento está en cada
+        // fila (`p.modelo_version`), y es la que determina la vigencia.
+        if (data.modelo_version) serviceModelVersion = data.modelo_version;
+        const filas = Object.values(liveBulk);
+        const fila = filas.find(p => p && p.modelo_version);
+        if (fila) current.modelo_version = fila.modelo_version;
     } catch {
         liveBulk = {};
     }
@@ -324,6 +475,7 @@ async function fetchPrediccion(map, side) {
 
 function paintLiveDetail(p, modelVersion, vigente) {
     liveDetailTitle.textContent = `${(liveMap || '').toUpperCase()} · ${liveSide === 'attack' ? 'ATK' : 'DEF'}`;
+    const conf = confBand(p);
     liveCards.innerHTML = `
     <div class="live-card">
       <div class="live-card-label" style="color:var(--accent)">${escapeHtml(current.equipo_a)}</div>
@@ -338,15 +490,18 @@ function paintLiveDetail(p, modelVersion, vigente) {
       <div class="live-card-val live-ot">${pct(p.prob_overtime)}%</div>
     </div>
     <div class="live-card">
+      <div class="live-card-label">CONFIANZA</div>
+      <div class="live-card-val">${confBadge(conf) || '<span class="live-card-val">—</span>'}</div>
+    </div>
+    <div class="live-card">
       <div class="live-card-label">MUESTRAS</div>
       <div class="live-card-val">${p.n_sim ? Number(p.n_sim).toLocaleString() : '—'}</div>
     </div>`;
     const stale = vigente === false || current.vigente === false;
-    const conf = p.confianza ? ` · confianza ${p.confianza}` : '';
     liveStatus.className = 'live-status ' + (stale ? 'warn' : 'ok');
     liveStatus.textContent = stale
-        ? '⚠ Predicciones desactualizadas; vuelve a PREPARAR PARTIDO.'
-        : `✓ desde caché${conf} · modelo ${modelVersion || current.modelo_version || '—'}`;
+        ? '⚠ Predicciones desactualizadas; usa RE-PRECALCULAR.'
+        : `✓ desde caché${conf ? ' · confianza ' + conf : ''} · modelo ${modelVersion || current.modelo_version || '—'}`;
 }
 
 function setLiveSide(side) {
@@ -510,15 +665,19 @@ function renderSerieBanner(data) {
     const favB = pb * 100 >= 55 ? 'winner-side-b' : '';
     const mid = current.match_id ? `PARTIDO #${current.match_id}` : 'sin id';
 
-    const mapRows = (data.mapas || []).map(m => `
+    const mapRows = (data.mapas || []).map(m => {
+        const conf = confBand(m);
+        return `
     <div class="serie-map-row">
       <span class="smr-name">${m.map_name.toUpperCase()}</span>
       <span class="smr-side">${m.lado_inicial_a === 'attack' ? 'ATK' : 'DEF'}</span>
       <span class="smr-a">${pct(m.prob_victoria_a)}%</span>
       <span class="smr-b">${pct(m.prob_victoria_b)}%</span>
       <span class="smr-ot">OT ${pct(m.prob_overtime)}%</span>
-      <span class="smr-fuente">${m.fuente || 'cache'}${m.confianza ? ' · ' + m.confianza : ''}</span>
-    </div>`).join('');
+      <span class="smr-conf ${conf || ''}">${conf ? `<span class="conf-dot"></span>${conf}` : ''}</span>
+      <span class="smr-fuente">${m.fuente || 'cache'}</span>
+    </div>`;
+    }).join('');
 
     seriesBanner.innerHTML = `
     <div class="sb-team ${favA}">
@@ -529,9 +688,9 @@ function renderSerieBanner(data) {
     </div>
     <div class="sb-center">
       <div class="sb-format">${(data.formato || '').toUpperCase()}</div>
-      <div class="sb-sims">${(current.n_sim || 0).toLocaleString()}<br>SIMULACIONES</div>
+      <div class="sb-sims">${(data.n_sim || current.n_sim || 0).toLocaleString()}<br>SIMULACIONES</div>
       <div style="font-size:10px;color:var(--dim);letter-spacing:1px;margin-top:4px">GANAR ${data.mapas_para_ganar}</div>
-      ${data.confianza_serie ? `<div style="font-size:9px;color:var(--dim);letter-spacing:1px;margin-top:4px">CONFIANZA ${escapeHtml(String(data.confianza_serie).toUpperCase())}</div>` : ''}
+      ${data.confianza_serie ? `<div class="sb-conf ${String(data.confianza_serie).toLowerCase()}"><span class="conf-dot"></span>CONFIANZA ${escapeHtml(String(data.confianza_serie).toUpperCase())}</div>` : ''}
       <div style="font-size:9px;color:var(--dim);letter-spacing:1px;margin-top:4px">${mid}</div>
     </div>
     <div class="sb-team ${favB}" style="text-align:right;align-items:flex-end">
@@ -657,4 +816,4 @@ chkShowStale.addEventListener('change', () => {
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 loadAvailableMaps();
-loadSimulaciones();
+loadModeloVersion().then(loadSimulaciones);
