@@ -201,7 +201,14 @@ Endpoints expuestos por ALETHEIA (todos reenvían al servicio externo):
 ```
 Reglas: `lado_inicial_a` se define **por mapa** (`"attack"` | `"defense"`); el
 formato se **infiere por cantidad** (1→bo1, 2-3→bo3, 4-5→bo5); `n_sim` se normaliza
-a `[1000, 50000]`.
+a `[100, MAX_SIM]` (default `10000`). **En hosting free no usar 25K/50K.**
+
+> **P(mapa) es independiente del lado y constante entre mapas** del mismo
+> enfrentamiento: la fija la regresión logística calibrada (Platt) sobre el rating
+> Glicko-2; el Monte Carlo solo re-escala y aporta `prob_overtime`. No esperes
+> probabilidades distintas por mapa. La P(serie) se agrega asumiendo mapas
+> independientes desde la lista ordenada de mapas que realmente se juegan (el veto
+> se conoce antes del partido): **no** se predice ni se enumeran permutaciones.
 
 **Respuesta del servicio (proxy sin cambios):**
 ```json
@@ -214,12 +221,17 @@ a `[1000, 50000]`.
   "mapas_para_ganar": 2,
   "mapas": [
     {"map_name": "Split", "lado_inicial_a": "attack",
-     "prob_victoria_a": 0.4412, "prob_victoria_b": 0.5588, "prob_overtime": 0.164}
+     "prob_victoria_a": 0.4412, "prob_victoria_b": 0.5588, "prob_overtime": 0.164,
+     "confianza": "media", "fuente": "cache"}
   ],
   "prob_serie_a": 0.6333,
-  "prob_serie_b": 0.3667
+  "prob_serie_b": 0.3667,
+  "confianza_serie": "media",
+  "modelo_version": "<hash>"
 }
 ```
+`prob_victoria_a` viene **calibrada**. `confianza`/`confianza_serie`
+(`alta|media|baja`) son para la UI; `fuente` es `cache|calculado`.
 
 Manejo de errores: timeout de 120 s (504 si expira) y 502 `{"ok": false, "error": "..."}`
 si el servicio no responde. Este módulo **no importa** `numpy`, `pandas` ni
@@ -234,9 +246,14 @@ estas tablas). Endpoints adicionales del proxy:
 - `GET /api/aletheia/modelo_version` → proxy de `GET {BASE}/api/modelo_version`.
   Devuelve `{"ok": true, "modelo_version": "<hash>", "fecha": "<iso>"}`.
 - `POST /api/aletheia/precalcular` → proxy de `POST {BASE}/api/precalcular`.
-  Body: `{"equipo_a", "equipo_b", "n_sim": 50000, "match_id": 753455, "mapas": [...]?}`.
-  Calcula los 13 mapas × 2 lados (26 filas) y hace UPSERT en `predicciones_mapa`
-  con ese `match_id`. Responde `{"ok": true, ..., "total": 26, "computados": X, "desde_cache": Y, "tiempo_s": Z}`.
+  Body: `{"equipo_a", "equipo_b", "n_sim": 10000, "match_id": 753455, "mapas": [...]?,
+  "forzar": false}`. Calcula los 13 mapas × 2 lados (26 filas) y hace UPSERT en
+  `predicciones_mapa` con ese `match_id`.
+  **Por defecto ASÍNCRONO:** responde `202` con
+  `{"ok", "job_id", "total": 26, "modelo_version", "progreso", "mapas_hechos"}`.
+  Progreso: `GET {BASE}/api/precalcular/estado?job_id=...` →
+  `{"ok", "job": {"estado", "progreso", "mapas_hechos", "computados", "desde_cache", "error"}}`.
+  Con `sync:true` corre inline y responde `{"ok", "total", "computados", "desde_cache", "tiempo_s"}`.
 - `POST /api/aletheia/asociar` → proxy de `POST {BASE}/api/asociar`.
   Body: `{"equipo_a", "equipo_b", "match_id": 753455, "desde_match_id": 0}`.
   Reasigna el `match_id` de predicciones ya calculadas. Responde
@@ -286,23 +303,31 @@ estas tablas). Endpoints adicionales del proxy:
   Nota: el endpoint vive en ALETHEIA_PREDICT; ALETHEIA solo lo invoca por proxy
   (no borra directamente en Turso).
 
-**Flujo del ciclo (frontend → `PREDICT_DIRECTO` ngrok):**
+**Flujo del ciclo (frontend → `PREDICT_DIRECTO` ngrok solo para lo largo):**
 1. **PREPARAR** (`/aletheia_preparar/`): `POST {PREDICT_DIRECTO}/api/precalcular`
    con el id de vlr.gg (llamada larga, directa al servicio; async con `job_id`).
-   Se guarda el `modelo_version`; se puede **ASOCIAR ID** (reasignar) y
-   **re-preparar** si el modelo cambió.
-2. **LISTAR/LEER** (`/aletheia/`, EN VIVO): `GET /api/simulaciones` lista lo
-   preparado (por defecto solo `vigente:true`); al elegir una se leen sus filas
-   UNA vez con `GET /api/predicciones` (caché).
-3. **MAPA/BANDO**: elegir mapa+lado muestra `prob_victoria_a/b` y `prob_overtime`
-   desde la caché local (solo consulta `/api/prediccion` si falta el dato).
-4. **ARMAR SERIE**: `POST /api/serie` da `prob_serie_a/b` al instante.
-5. **COMPARACIÓN** (EN VIVO): `GET /api/comparacion` contrasta lo predicho con el
-   resultado real del mismo `match_id`.
+   El polling `GET {PREDICT_DIRECTO}/api/precalcular/estado?job_id=...` también es
+   directo. El resto (`equipos`, `modelo_version`, `predicciones`, `asociar`) va
+   por el **proxy** de la web (`/api/aletheia/...`). Se guarda el `modelo_version`
+   (viene en el `202`); se puede **ASOCIAR ID** y **re-preparar** con
+   `forzar:true` si el modelo cambió.
+2. **LISTAR/LEER** (`/aletheia/`, EN VIVO): `GET /api/aletheia/simulaciones` lista
+   lo preparado (por defecto solo `vigente:true`); al elegir una se leen sus filas
+   UNA vez con `GET /api/aletheia/predicciones` (caché). EN VIVO **nunca** llama a
+   ngrok directo ni simula.
+3. **MAPA/BANDO**: elegir mapa+lado muestra `prob_victoria_a/b`, `prob_overtime` y
+   `confianza` desde la caché local (solo consulta `/api/aletheia/prediccion` si
+   falta el dato).
+4. **ARMAR SERIE**: `POST /api/aletheia/serie` da `prob_serie_a/b`,
+   `confianza_serie` y `mapas_para_ganar` al instante (desde caché, sin Monte Carlo).
+5. **COMPARACIÓN** (EN VIVO): `GET /api/aletheia/comparacion` contrasta lo predicho
+   con el resultado real del mismo `match_id`.
 6. **GESTIÓN** (EN VIVO): por enfrentamiento, **asignar/corregir ID**
-   (`POST /api/asociar`) y **borrar** duplicados o preparaciones erróneas
-   (`POST /api/borrar`).
-7. Si `/api/modelo_version` cambia respecto al guardado, la web marca **RE-PREPARAR**.
+   (`POST /api/aletheia/asociar`) y **borrar** duplicados o preparaciones erróneas
+   (`POST /api/aletheia/borrar`).
+7. **INVALIDACIÓN:** la web compara el `modelo_version` de las filas cacheadas con
+   `GET /api/aletheia/modelo_version`; si difiere, esas filas quedan
+   `vigente:false` y la web marca **RE-PREPARAR** (que envía `forzar:true`).
 
 ### 4.6. Módulo Exportar (`exportar_bp`)
 - `GET /api/export/tables`: Retorna metadatos de las 10 tablas (filas y lista de columnas).
@@ -337,11 +362,16 @@ estas tablas). Endpoints adicionales del proxy:
      constante `PREDICT_DIRECTO` (`https://snugly-encore-sweep.ngrok-free.dev`).
      Todas las llamadas a ese host llevan el header `ngrok-skip-browser-warning: 1`
      (helper `predictFetch`).
-   - Las corridas **largas** (`/api/precalcular`) se piden **directo** a
-     `PREDICT_DIRECTO` (no por el proxy de la web) para no chocar con el timeout de
-     gunicorn/Render. Equipos y mapas sí van por el proxy (son rápidos).
+   - Las corridas **largas** (`POST /api/precalcular` y su polling
+     `GET /api/precalcular/estado`) se piden **directo** a `PREDICT_DIRECTO` (no por
+     el proxy de la web) para no chocar con el timeout de gunicorn/Render.
+     `equipos`, `mapas`, `modelo_version`, `predicciones`, `prediccion`, `serie`,
+     `comparacion`, `simulaciones`, `asociar` y `borrar` van por el **proxy**
+     `/api/aletheia/...` (helper `proxyFetch`; son rápidos).
+   - **EN VIVO** (`/aletheia/`) no importa `PREDICT_DIRECTO`: todas sus lecturas
+     salen de la caché a través del proxy.
    - **`/aletheia_preparar/` — PREPARAR:** selección de equipos (search+grids),
-     selector de simulaciones (5K/10K/25K/50K), campo de ID vlr.gg (parsea URL o
+     selector de simulaciones (1K/5K/10K; **sin 25K/50K en hosting free**), campo de ID vlr.gg (parsea URL o
      número), **PREPARAR PARTIDO** (async: `POST /api/precalcular` → `job_id` → poll
      `/api/precalcular/estado`, con % y tiempo transcurrido), **ASOCIAR ID** y badges
      de caché ("ya predicho") y de `modelo_version` ("si cambia el modelo" marca
@@ -351,23 +381,24 @@ estas tablas). Endpoints adicionales del proxy:
        ofrece **"cancelar espera"**. Se usa un favicon inline para evitar el 404 de
        `/favicon.ico`.
    - **`/aletheia/` — EN VIVO (nunca simula):**
-     - Al cargar, `GET /api/simulaciones` pinta la lista de preparadas
+     - Al cargar, `GET /api/aletheia/simulaciones` pinta la lista de preparadas
        (`EQUIPO_A vs EQUIPO_B · #match_id · N mapas · n_sim · [vigente]`); por
        defecto solo `vigente:true`, con toggle "mostrar no vigentes" (marcadas
        "re-preparar").
      - **Gestión por enfrentamiento:** **✎ ID** reasigna el `match_id`
-       (`POST /api/asociar`; sirve si se preparó sin id) y **🗑 BORRAR** elimina el
-       enfrentamiento (`POST /api/borrar`; sirve para duplicados o preparaciones
-       erróneas).
-     - Al elegir una se leen sus filas **UNA vez** (`GET /api/predicciones`) y se
-       guardan en `liveBulk` (`map|side`).
+       (`POST /api/aletheia/asociar`; sirve si se preparó sin id) y **🗑 BORRAR**
+       elimina el enfrentamiento (`POST /api/aletheia/borrar`; sirve para
+       duplicados o preparaciones erróneas).
+     - Al elegir una se leen sus filas **UNA vez** (`GET /api/aletheia/predicciones`)
+       y se guardan en `liveBulk` (`map|side`).
      - **MAPA / BANDO:** rejilla de los 13 mapas con P(A) y OT del bando elegido
        (leídas de `liveBulk`; no llama al servicio en cada clic, solo si falta el
-       dato). Al tocar un mapa muestra `prob_victoria_a/b`, `prob_overtime` y `n_sim`.
+       dato). Al tocar un mapa muestra `prob_victoria_a/b`, `prob_overtime`,
+       `confianza` y `n_sim`.
      - **ARMAR SERIE (BO1/BO3/BO5):** slots en orden (el último = DECIDER) con bando
-       por mapa; cada cambio hace `POST /api/serie` y muestra el banner
-       (`prob_serie_a/b`, formato, `mapas_para_ganar`) al instante.
-     - **COMPARACIÓN:** `GET /api/comparacion?match_id=..` muestra tarjetas resumen
+       por mapa; cada cambio hace `POST /api/aletheia/serie` y muestra el banner
+       (`prob_serie_a/b`, `confianza_serie`, formato, `mapas_para_ganar`) al instante.
+     - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra tarjetas resumen
        (accuracy, brier, log-loss, favoritos_ok, upsets, inciertos) y una tabla de
        detalle coloreada (verde = favorito ganó, rojo = upset, ámbar = incierto);
        si el partido no está en la DB: "sin resultado real todavía".

@@ -1,9 +1,8 @@
 const API = `${window.location.origin}/api`;
 
-// ALETHEIA_PREDICT corre en el PC del usuario y se expone con ngrok.
-// EN VIVO nunca simula: todo sale de la caché (/api/predicciones y /api/serie).
-const PREDICT_DIRECTO = 'https://snugly-encore-sweep.ngrok-free.dev';
-const NGROK_HEADER = { 'ngrok-skip-browser-warning': '1' };
+// EN VIVO nunca simula: todo sale de la caché (predicciones/serie/comparación).
+// Las lecturas van por el proxy de la web (/api/aletheia/...), que a su vez
+// contacta ALETHEIA_PREDICT (ALETHEIA_PREDICT_URL). Aquí no hay corridas largas.
 
 let availableMaps = [];    // 13 mapas del servicio (proxy /api/aletheia/mapas)
 let mapsLoading = false;
@@ -48,9 +47,8 @@ const cmpStatus = document.getElementById('cmpStatus');
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const pct = v => Math.round((v || 0) * 100);
 
-function predictFetch(path, options = {}) {
-    const headers = Object.assign({}, NGROK_HEADER, options.headers || {});
-    return fetch(`${PREDICT_DIRECTO}${path}`, Object.assign({}, options, { headers }));
+function proxyFetch(path, options = {}) {
+    return fetch(`${API}/aletheia${path}`, options);
 }
 
 function escapeHtml(s) {
@@ -108,7 +106,7 @@ async function loadSimulaciones() {
     simListStatus.className = 'live-status';
     simListStatus.textContent = 'Cargando simulaciones...';
     try {
-        const res = await predictFetch('/api/simulaciones?limite=100');
+        const res = await proxyFetch('/api/simulaciones?limite=100');
         const data = await res.json();
         if (!data.ok) {
             simListStatus.className = 'live-status err';
@@ -163,7 +161,7 @@ async function asignarId(sim) {
     const nuevo = parseMatchId(raw);
     if (!nuevo) { window.alert('ID inválido.'); return; }
     try {
-        const res = await predictFetch('/api/asociar', {
+        const res = await proxyFetch('/api/asociar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -186,7 +184,7 @@ async function borrarSim(sim) {
     const etiqueta = `${sim.equipo_a} vs ${sim.equipo_b} (${mid ? '#' + mid : 'sin id'})`;
     if (!window.confirm(`¿Borrar las predicciones de ${etiqueta}? Esta acción no se puede deshacer.`)) return;
     try {
-        const res = await predictFetch('/api/borrar', {
+        const res = await proxyFetch('/api/borrar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ equipo_a: sim.equipo_a, equipo_b: sim.equipo_b, match_id: mid }),
@@ -237,7 +235,7 @@ async function loadLiveBulkForCurrent() {
         params.set('equipo_b', current.equipo_b);
     }
     try {
-        const res = await predictFetch(`/api/predicciones?${params.toString()}`);
+        const res = await proxyFetch(`/api/predicciones?${params.toString()}`);
         const data = await res.json();
         liveBulk = {};
         if (data.ok && Array.isArray(data.predicciones)) {
@@ -308,7 +306,7 @@ async function fetchPrediccion(map, side) {
     params.set('map_name', map);
     params.set('lado_inicial_a', side);
     try {
-        const res = await predictFetch(`/api/prediccion?${params.toString()}`);
+        const res = await proxyFetch(`/api/prediccion?${params.toString()}`);
         const data = await res.json();
         if (res.status === 404 || !data.ok) {
             liveStatus.className = 'live-status warn';
@@ -344,10 +342,11 @@ function paintLiveDetail(p, modelVersion, vigente) {
       <div class="live-card-val">${p.n_sim ? Number(p.n_sim).toLocaleString() : '—'}</div>
     </div>`;
     const stale = vigente === false || current.vigente === false;
+    const conf = p.confianza ? ` · confianza ${p.confianza}` : '';
     liveStatus.className = 'live-status ' + (stale ? 'warn' : 'ok');
     liveStatus.textContent = stale
         ? '⚠ Predicciones desactualizadas; vuelve a PREPARAR PARTIDO.'
-        : `✓ desde caché · modelo ${modelVersion || current.modelo_version || '—'}`;
+        : `✓ desde caché${conf} · modelo ${modelVersion || current.modelo_version || '—'}`;
 }
 
 function setLiveSide(side) {
@@ -486,7 +485,7 @@ async function updateSerie() {
         mapas: matchMaps.map(m => ({ map_name: m.map_name, lado_inicial_a: m.lado_inicial_a })),
     };
     try {
-        const res = await predictFetch('/api/serie', {
+        const res = await proxyFetch('/api/serie', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -518,7 +517,7 @@ function renderSerieBanner(data) {
       <span class="smr-a">${pct(m.prob_victoria_a)}%</span>
       <span class="smr-b">${pct(m.prob_victoria_b)}%</span>
       <span class="smr-ot">OT ${pct(m.prob_overtime)}%</span>
-      <span class="smr-fuente">${m.fuente || 'cache'}</span>
+      <span class="smr-fuente">${m.fuente || 'cache'}${m.confianza ? ' · ' + m.confianza : ''}</span>
     </div>`).join('');
 
     seriesBanner.innerHTML = `
@@ -532,6 +531,7 @@ function renderSerieBanner(data) {
       <div class="sb-format">${(data.formato || '').toUpperCase()}</div>
       <div class="sb-sims">${(current.n_sim || 0).toLocaleString()}<br>SIMULACIONES</div>
       <div style="font-size:10px;color:var(--dim);letter-spacing:1px;margin-top:4px">GANAR ${data.mapas_para_ganar}</div>
+      ${data.confianza_serie ? `<div style="font-size:9px;color:var(--dim);letter-spacing:1px;margin-top:4px">CONFIANZA ${escapeHtml(String(data.confianza_serie).toUpperCase())}</div>` : ''}
       <div style="font-size:9px;color:var(--dim);letter-spacing:1px;margin-top:4px">${mid}</div>
     </div>
     <div class="sb-team ${favB}" style="text-align:right;align-items:flex-end">
@@ -563,7 +563,7 @@ async function fetchComparacion() {
     params.set('limite', '100');
 
     try {
-        const res = await predictFetch(`/api/comparacion?${params.toString()}`);
+        const res = await proxyFetch(`/api/comparacion?${params.toString()}`);
         const data = await res.json();
         if (!data.ok || !data.resumen || !data.resumen.n) {
             cmpStatus.className = 'live-status warn';

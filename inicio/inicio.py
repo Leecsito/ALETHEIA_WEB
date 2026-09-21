@@ -201,6 +201,44 @@ CREATE_TABLES_SQL = [
         fd          INTEGER,
         UNIQUE (player_id, agent, date_start, date_end)
     )""",
+    """CREATE TABLE IF NOT EXISTS events (
+        event_id     INTEGER PRIMARY KEY,
+        event_name   TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS event_map_stats (
+        event_id       INTEGER NOT NULL REFERENCES events(event_id),
+        map_name       TEXT    NOT NULL,
+        matches_played INTEGER,
+        atk_win_pct    INTEGER,
+        def_win_pct    INTEGER,
+        PRIMARY KEY (event_id, map_name)
+    )""",
+    """CREATE TABLE IF NOT EXISTS event_agent_pickrate (
+        event_id   INTEGER NOT NULL REFERENCES events(event_id),
+        map_name   TEXT    NOT NULL,
+        agent_name TEXT    NOT NULL,
+        pick_pct   INTEGER,
+        PRIMARY KEY (event_id, map_name, agent_name)
+    )""",
+    """CREATE TABLE IF NOT EXISTS tournament_aliases (
+        tournament_name TEXT PRIMARY KEY,
+        event_id        INTEGER REFERENCES events(event_id)
+    )""",
+]
+
+# Vista de matches con el evento resuelto (para cruzar el meta por torneo).
+# `matches` no guarda event_id: se resuelve vía tournament_aliases / nombre.
+CREATE_VIEWS_SQL = [
+    """CREATE VIEW IF NOT EXISTS v_matches_events AS
+       SELECT m.match_id, m.tournament, m.phase, m.match_date,
+              m.score_a, m.score_b, m.patch, m.team_a_id, m.team_b_id, m.winner_id,
+              COALESCE(
+                  (SELECT ta.event_id FROM tournament_aliases ta
+                   WHERE ta.tournament_name = m.tournament),
+                  (SELECT e.event_id FROM events e
+                   WHERE LOWER(TRIM(e.event_name)) = LOWER(TRIM(m.tournament)))
+              ) AS event_id
+       FROM matches m""",
 ]
 
 # Rol de cada agente (fuente: Riot). Se siembra una vez; no cambia.
@@ -389,6 +427,18 @@ def run_migrations(conn):
     # antes de eliminar las columnas de texto redundantes.
     backfill_ids(conn)
     normalize_schema(conn)
+    create_views(conn)
+
+
+def create_views(conn):
+    """Crea las vistas derivadas (idempotente)."""
+    cur = conn.cursor()
+    for sql in CREATE_VIEWS_SQL:
+        try:
+            cur.execute(sql)
+        except Exception:
+            pass
+    cur.close()
 
 # ─── HELPERS ETL ──────────────────────────────────────────────────────────────
 MAP_NAMES = {'abyss','bind','breeze','corrode','haven','pearl','split','lotus','icebox','fracture','sunset','ascent','summit'}
@@ -818,6 +868,99 @@ def etl_player_agent_stats(df, cur):
     return len(rows)
 
 
+def etl_event_map_stats(df, cur, events):
+    """
+    Estadísticas por mapa de un evento (vct_evento_map_stats.xlsx).
+    `events` es {event_id: event_name} compartido para sembrar `events`.
+    UPSERT por (event_id, map_name).
+    """
+    rows = []
+    for _, r in df.iterrows():
+        eid = ii(r.get('event_id'))
+        mn  = ss(r.get('map_name'))
+        if eid is None or not mn:
+            continue
+        name = ss(r.get('event_name'))
+        if name:
+            events.setdefault(eid, name)
+        rows.append((eid, mn, si(r.get('matches_played')),
+                     si(r.get('atk_win_pct')), si(r.get('def_win_pct'))))
+    if not rows:
+        return 0
+    # 'ALL' es redundante (se deriva promediando los mapas): se descarta.
+    for eid in {r[0] for r in rows}:
+        cur.execute("DELETE FROM event_map_stats WHERE event_id = ? AND map_name = 'ALL'", [eid])
+    upsert_events(cur, events)
+    exec_batch(cur,
+        """INSERT INTO event_map_stats
+           (event_id,map_name,matches_played,atk_win_pct,def_win_pct) VALUES """,
+        rows, 5,
+        suffix=""" ON CONFLICT(event_id,map_name) DO UPDATE SET
+               matches_played = excluded.matches_played,
+               atk_win_pct    = excluded.atk_win_pct,
+               def_win_pct    = excluded.def_win_pct""")
+    return len(rows)
+
+
+def etl_event_agent_pickrate(df, cur, events):
+    """
+    Pick rate por agente y mapa de un evento (vct_evento_agent_pickrate.xlsx).
+    UPSERT por (event_id, map_name, agent_name).
+    """
+    rows = []
+    for _, r in df.iterrows():
+        eid = ii(r.get('event_id'))
+        mn  = ss(r.get('map_name'))
+        ag  = ss(r.get('agent_name'))
+        if eid is None or not mn or not ag:
+            continue
+        name = ss(r.get('event_name'))
+        if name:
+            events.setdefault(eid, name)
+        rows.append((eid, mn, ag, si(r.get('pick_pct'))))
+    if not rows:
+        return 0
+    # 'ALL' es redundante (se deriva promediando los mapas): se descarta.
+    for eid in {r[0] for r in rows}:
+        cur.execute("DELETE FROM event_agent_pickrate WHERE event_id = ? AND map_name = 'ALL'", [eid])
+    upsert_events(cur, events)
+    exec_batch(cur,
+        """INSERT INTO event_agent_pickrate
+           (event_id,map_name,agent_name,pick_pct) VALUES """,
+        rows, 4,
+        suffix=""" ON CONFLICT(event_id,map_name,agent_name) DO UPDATE SET
+               pick_pct = excluded.pick_pct""")
+    return len(rows)
+
+
+def upsert_events(cur, events):
+    """Siembra/actualiza la tabla `events` desde {event_id: event_name}."""
+    rows = [(eid, name) for eid, name in events.items() if eid is not None and name]
+    exec_batch(cur,
+        "INSERT INTO events (event_id,event_name) VALUES ",
+        rows, 2,
+        suffix=""" ON CONFLICT(event_id) DO UPDATE SET
+               event_name = excluded.event_name""")
+    return len(rows)
+
+
+def autocreate_tournament_aliases(cur):
+    """
+    Enlaza `matches.tournament` con `events.event_name` donde el nombre coincida
+    (normalizado: trim + minúsculas). Idempotente: solo inserta alias nuevos.
+    Sirve como puente para cruzar el meta del evento con los partidos sin
+    necesidad de `matches.event_id`.
+    """
+    cur.execute("""
+        INSERT OR IGNORE INTO tournament_aliases (tournament_name, event_id)
+        SELECT DISTINCT m.tournament, e.event_id
+        FROM matches m
+        JOIN events e ON LOWER(TRIM(e.event_name)) = LOWER(TRIM(m.tournament))
+        WHERE m.tournament IS NOT NULL AND m.tournament <> ''
+    """)
+    return cur.rowcount
+
+
 # ─── RUTAS ────────────────────────────────────────────────────────────────────
 @inicio_bp.route('/api/init-db', methods=['POST'])
 def init_db():
@@ -933,6 +1076,17 @@ def _process_etl(raw_files, job=None):
             seed_agents(cur)
             results['player_agent_stats'] = etl_player_agent_stats(files['vct_stats_agentes'], cur)
 
+        # ── 2d) STATS POR EVENTO (global; events + mapa + pickrate de agentes) ──
+        if 'vct_evento_map_stats' in files or 'vct_evento_agent_pickrate' in files:
+            _job_set(job, step='stats por evento')
+            events = {}
+            if 'vct_evento_map_stats' in files:
+                results['event_map_stats'] = etl_event_map_stats(files['vct_evento_map_stats'], cur, events)
+            if 'vct_evento_agent_pickrate' in files:
+                results['event_agent_pickrate'] = etl_event_agent_pickrate(
+                    files['vct_evento_agent_pickrate'], cur, events)
+            results['events'] = upsert_events(cur, events)
+
         # match_id -> (team_a_id, team_b_id) para picker_id / veto / etc.
         match_teams = {}
         for _, r in files['vct_partidos'].iterrows():
@@ -996,6 +1150,9 @@ def _process_etl(raw_files, job=None):
         _job_set(job, step='partidos')
         results['matches'] = etl_matches(files['vct_partidos'], cur)
 
+        # Enlazar los torneos de los partidos con `events` (tras insertarlos).
+        results['tournament_aliases'] = autocreate_tournament_aliases(cur)
+
         if 'vlr_mapas' in files:
             _job_set(job, step='mapas')
             results['maps'] = etl_maps(files['vlr_mapas'], cur, match_teams)
@@ -1043,7 +1200,8 @@ def run_etl():
         'vct_partidos', 'vlr_mapas', 'vlr_rondas', 'vlr_economia_rondas',
         'vlr_stats_players_sides', 'vlr_economia_resumen',
         'vlr_enfrentamientos', 'vlr_multikills_clutches',
-        'vct_equipos', 'vct_jugadores', 'vct_transacciones', 'vct_stats_agentes'
+        'vct_equipos', 'vct_jugadores', 'vct_transacciones', 'vct_stats_agentes',
+        'vct_evento_map_stats', 'vct_evento_agent_pickrate'
     ]
 
     if not request.files.get('vct_partidos'):
@@ -1171,7 +1329,9 @@ def status():
         cur  = conn.cursor()
         tables = ['matches','match_veto','maps','rounds','player_stats',
                   'economy_summary','duels','multikills_clutches','teams','players',
-                  'roster_transactions','agents','player_agent_stats']
+                  'roster_transactions','agents','player_agent_stats',
+                  'events','event_map_stats','event_agent_pickrate',
+                  'tournament_aliases']
         counts = {}
         for t in tables:
             try:

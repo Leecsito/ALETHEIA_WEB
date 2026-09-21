@@ -14,6 +14,8 @@ const FILE_MAP = {
   'vct_jugadores': 'vct_jugadores',
   'vct_transacciones': 'vct_transacciones',
   'vct_stats_agentes': 'vct_stats_agentes',
+  'vct_evento_map_stats': 'vct_evento_map_stats',
+  'vct_evento_agent_pickrate': 'vct_evento_agent_pickrate',
 };
 
 const REQUIRED = [
@@ -21,7 +23,8 @@ const REQUIRED = [
   'vlr_stats_players_sides', 'vlr_economia_resumen',
   'vlr_enfrentamientos', 'vlr_multikills_clutches'
 ];
-const OPTIONAL = ['vct_equipos', 'vct_jugadores', 'vct_transacciones', 'vct_stats_agentes'];
+const OPTIONAL = ['vct_equipos', 'vct_jugadores', 'vct_transacciones', 'vct_stats_agentes',
+  'vct_evento_map_stats', 'vct_evento_agent_pickrate'];
 
 // ─── ESTADO ──────────────────────────────────────────────────────────────────
 const state = { files: {} };
@@ -196,7 +199,7 @@ function updateCounts() {
   const optLoaded = OPTIONAL.filter(k => state.files[k]).length;
   const total = reqLoaded + optLoaded;
   countRequired.textContent = `${reqLoaded} / 8`;
-  countOptional.textContent = `${optLoaded} / 4`;
+  countOptional.textContent = `${optLoaded} / 6`;
   fileCount.textContent = `${total} archivo${total !== 1 ? 's' : ''}`;
   // Solo necesitamos vct_partidos para poder ejecutar
   btnRun.disabled = !state.files['vct_partidos'];
@@ -257,6 +260,8 @@ function logInserted(ins) {
   if (ins.players != null) log(`  players:          ${ins.players} jugadores`, 'success');
   if (ins.roster_transactions != null) log(`  roster_transactions: ${ins.roster_transactions} transacciones`, 'success');
   if (ins.player_agent_stats != null) log(`  player_agent_stats: ${ins.player_agent_stats} filas`, 'success');
+  if (ins.event_map_stats != null) log(`  event_map_stats:   ${ins.event_map_stats} filas`, 'success');
+  if (ins.event_agent_pickrate != null) log(`  event_agent_pickrate: ${ins.event_agent_pickrate} filas`, 'success');
 }
 
 // Consulta el estado del job hasta que termine (evita el timeout del worker).

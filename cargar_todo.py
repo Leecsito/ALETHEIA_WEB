@@ -39,7 +39,8 @@ DATA_FILES = [
     'vlr_stats_players_sides', 'vlr_economia_resumen',
     'vlr_enfrentamientos', 'vlr_multikills_clutches',
 ]
-GLOBAL_FILES = ['vct_equipos', 'vct_jugadores', 'vct_transacciones', 'vct_stats_agentes']
+GLOBAL_FILES = ['vct_equipos', 'vct_jugadores', 'vct_transacciones', 'vct_stats_agentes',
+                'vct_evento_map_stats', 'vct_evento_agent_pickrate']
 
 # Borrado en este orden respeta las FKs (hijos primero)
 DELETE_ORDER = [

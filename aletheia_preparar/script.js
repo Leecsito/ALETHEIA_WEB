@@ -1,10 +1,15 @@
 const API = `${window.location.origin}/api`;
 
-// ALETHEIA_PREDICT corre en el PC del usuario y se expone con ngrok.
-// Las corridas largas (precalcular) se piden DIRECTO al servicio para que no
-// las corte el timeout de gunicorn/Render. Equipos van por el proxy (rápidos).
+// Las llamadas normales (equipos, caché, modelo_version, asociar) van por el
+// proxy de la web (/api/aletheia/...). Solo la corrida larga (precalcular) y su
+// polling de estado se piden DIRECTO a ngrok para no chocar con el timeout de
+// gunicorn/Render. Toda petición a ngrok lleva el header anti-warning.
 const PREDICT_DIRECTO = 'https://snugly-encore-sweep.ngrok-free.dev';
 const NGROK_HEADER = { 'ngrok-skip-browser-warning': '1' };
+
+function proxyFetch(path, options = {}) {
+    return fetch(`${API}/aletheia${path}`, options);
+}
 
 let teams = [];
 let selectedA = null;
@@ -170,7 +175,7 @@ async function loadCacheSummary() {
         params.set('equipo_b', selectedB);
     }
     try {
-        const res = await predictFetch(`/api/predicciones?${params.toString()}`);
+        const res = await proxyFetch(`/api/predicciones?${params.toString()}`);
         const data = await res.json();
         cacheRows = {};
         if (data.ok && Array.isArray(data.predicciones)) {
@@ -184,6 +189,14 @@ async function loadCacheSummary() {
     updateCacheBadge();
 }
 
+// ¿Hay que re-precalcular? Sí si ya está completo o si el modelo del servicio
+// cambió (las filas cacheadas quedan con modelo_version viejo => vigente:false).
+function needsReprepare() {
+    const rows = Object.values(cacheRows);
+    const staleModel = !!serviceModelVersion && rows.some(r => r.modelo_version && r.modelo_version !== serviceModelVersion);
+    return staleModel || rows.length >= TOTAL_COMBOS;
+}
+
 function updateCacheBadge() {
     const bpText = btnPreparar.querySelector('.bp-text');
     if (!selectedA || !selectedB) {
@@ -191,10 +204,16 @@ function updateCacheBadge() {
         cacheBadge.textContent = '';
         return;
     }
-    const n = Object.keys(cacheRows).length;
+    const rows = Object.values(cacheRows);
+    const n = rows.length;
+    const staleModel = !!serviceModelVersion && rows.some(r => r.modelo_version && r.modelo_version !== serviceModelVersion);
     if (n === 0) {
         cacheBadge.className = 'cache-badge warn';
         cacheBadge.textContent = '⚠ sin predicciones en caché';
+    } else if (staleModel) {
+        const sample = (rows.find(r => r.modelo_version) || {}).modelo_version || '?';
+        cacheBadge.className = 'cache-badge warn';
+        cacheBadge.textContent = `⚠ ${n} filas con modelo ${sample} — RE-PREPARAR`;
     } else if (n >= TOTAL_COMBOS) {
         cacheBadge.className = 'cache-badge ok';
         cacheBadge.textContent = `✓ ya predicho (${n} filas en caché)`;
@@ -202,17 +221,18 @@ function updateCacheBadge() {
         cacheBadge.className = 'cache-badge partial';
         cacheBadge.textContent = `${n}/${TOTAL_COMBOS} en caché`;
     }
-    if (bpText) bpText.textContent = (n >= TOTAL_COMBOS) ? 'RE-PREPARAR' : 'PREPARAR PARTIDO';
+    if (bpText) bpText.textContent = needsReprepare() ? 'RE-PREPARAR' : 'PREPARAR PARTIDO';
 }
 
 // ─── MODELO / VERSIÓN ─────────────────────────────────────────────────────────
 async function refreshModelVersion() {
     try {
-        const res = await predictFetch('/api/modelo_version');
+        const res = await proxyFetch('/api/modelo_version');
         const data = await res.json();
         if (data.ok) serviceModelVersion = data.modelo_version;
     } catch { }
     updateModelBadge();
+    if (selectedA && selectedB) updateCacheBadge();
 }
 
 function updateModelBadge() {
@@ -276,6 +296,7 @@ async function prepararPartido() {
                 equipo_b: selectedB,
                 n_sim: nSim,
                 match_id: matchId,
+                forzar: needsReprepare(),
             }),
         });
         if (res.status === 502 || res.status === 504) {
@@ -325,11 +346,13 @@ async function prepararPartido() {
     if (result.status === 'listo') {
         const secs = result.job.tiempo_s != null ? result.job.tiempo_s : result.elapsed;
         preparedMatchId = matchId;
-        preparedModelVersion = result.job.modelo_version;
+        // El modelo vigente viene en el 202 (data.modelo_version); el job de
+        // estado puede no incluirlo.
+        preparedModelVersion = data.modelo_version || result.job.modelo_version || serviceModelVersion || null;
         await refreshModelVersion();
         updateModelBadge();
         prepareStatus.className = 'prepare-status ok';
-        prepareStatus.textContent = `✓ ${result.total} combinaciones listas en ${secs}s · ${result.job.computados != null ? result.job.computados : 0} computadas · ${result.job.desde_cache != null ? result.job.desde_cache : 0} desde caché · modelo ${result.job.modelo_version}`;
+        prepareStatus.textContent = `✓ ${result.total} combinaciones listas en ${secs}s · ${result.job.computados != null ? result.job.computados : 0} computadas · ${result.job.desde_cache != null ? result.job.desde_cache : 0} desde caché · modelo ${preparedModelVersion || result.job.modelo_version || '—'}`;
         loadCacheSummary();
     } else if (result.status === 'lost') {
         prepareStatus.className = 'prepare-status err';
@@ -418,7 +441,7 @@ async function asociarId() {
     prepareStatus.textContent = `Asociando predicciones a #${matchId}...`;
 
     try {
-        const res = await predictFetch('/api/asociar', {
+        const res = await proxyFetch('/api/asociar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

@@ -19,7 +19,8 @@ exportar_bp = Blueprint('exportar', __name__)
 TABLAS_PERMITIDAS = [
     'matches', 'match_veto', 'maps', 'rounds',
     'player_stats', 'economy_summary', 'duels', 'multikills_clutches',
-    'teams', 'players', 'roster_transactions', 'agents', 'player_agent_stats'
+    'teams', 'players', 'roster_transactions', 'agents', 'player_agent_stats',
+    'events', 'event_map_stats', 'event_agent_pickrate'
 ]
 
 
