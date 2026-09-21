@@ -10,6 +10,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
         rel="stylesheet" />
+    <link rel="stylesheet" href="../header/header.css" />
     <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -17,17 +18,7 @@
     <div class="bg-grid"></div>
     <div class="scanlines"></div>
 
-    <header>
-        <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
-        <div class="header-title">
-            EN VIVO <span class="header-badge">PREDICTOR</span>
-        </div>
-        <div class="header-nav">
-            <a href="../aletheia_preparar/index.html" class="btn-nav">← PREPARAR PARTIDO</a>
-            <a href="../exportar/index.html" class="btn-nav">EXPORTAR 📥</a>
-            <a href="../predecir/index.html" class="btn-nav">MC CLÁSICO</a>
-        </div>
-    </header>
+    <div id="aeHeaderMount"></div>
 
     <main>
 
@@ -109,6 +100,8 @@
 
     </main>
 
+    <script>window.AE_HEADER = { title: 'EN VIVO', badge: 'PREDICTOR' };</script>
+    <script src="../header/header.js"></script>
     <script src="script.js"></script>
 </body>
 

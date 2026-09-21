@@ -24,11 +24,9 @@ from flask_cors import CORS
 from inicio    import inicio_bp
 from tablas    import tablas_bp
 from visualizar import visualizar_bp
-from predecir  import predecir_bp
 from aletheia import aletheia_bp
-from exportar import exportar_bp
 
-FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'predecir', 'aletheia', 'aletheia_preparar', 'exportar']
+FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_preparar', 'header']
 
 # static_folder=ROOT sirve automáticamente CSS/JS/imágenes desde la raíz del proyecto
 app = Flask(__name__, static_folder=ROOT, static_url_path='')
@@ -37,14 +35,12 @@ CORS(app)
 app.register_blueprint(inicio_bp)
 app.register_blueprint(tablas_bp)
 app.register_blueprint(visualizar_bp)
-app.register_blueprint(predecir_bp)
 app.register_blueprint(aletheia_bp)
-app.register_blueprint(exportar_bp)
 
 # -- RUTAS PARA SERVIR LAS PÁGINAS HTML --
 @app.route('/')
 def home():
-    return redirect('/inicio/')
+    return redirect('/aletheia/')
 
 @app.route('/<folder>/')
 @app.route('/<folder>/index.html')

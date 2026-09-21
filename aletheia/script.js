@@ -48,7 +48,7 @@ const cmpStatus = document.getElementById('cmpStatus');
 const pct = v => Math.round((v || 0) * 100);
 
 function proxyFetch(path, options = {}) {
-    return fetch(`${API}/aletheia${path}`, options);
+    return fetch(`${API}/aletheia/${String(path).replace(/^\/+/, '')}`, options);
 }
 
 function escapeHtml(s) {
@@ -106,7 +106,7 @@ async function loadSimulaciones() {
     simListStatus.className = 'live-status';
     simListStatus.textContent = 'Cargando simulaciones...';
     try {
-        const res = await proxyFetch('/api/simulaciones?limite=100');
+        const res = await proxyFetch('/simulaciones?limite=100');
         const data = await res.json();
         if (!data.ok) {
             simListStatus.className = 'live-status err';
@@ -161,7 +161,7 @@ async function asignarId(sim) {
     const nuevo = parseMatchId(raw);
     if (!nuevo) { window.alert('ID inválido.'); return; }
     try {
-        const res = await proxyFetch('/api/asociar', {
+        const res = await proxyFetch('/asociar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -184,7 +184,7 @@ async function borrarSim(sim) {
     const etiqueta = `${sim.equipo_a} vs ${sim.equipo_b} (${mid ? '#' + mid : 'sin id'})`;
     if (!window.confirm(`¿Borrar las predicciones de ${etiqueta}? Esta acción no se puede deshacer.`)) return;
     try {
-        const res = await proxyFetch('/api/borrar', {
+        const res = await proxyFetch('/borrar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ equipo_a: sim.equipo_a, equipo_b: sim.equipo_b, match_id: mid }),
@@ -235,7 +235,7 @@ async function loadLiveBulkForCurrent() {
         params.set('equipo_b', current.equipo_b);
     }
     try {
-        const res = await proxyFetch(`/api/predicciones?${params.toString()}`);
+        const res = await proxyFetch(`/predicciones?${params.toString()}`);
         const data = await res.json();
         liveBulk = {};
         if (data.ok && Array.isArray(data.predicciones)) {
@@ -306,7 +306,7 @@ async function fetchPrediccion(map, side) {
     params.set('map_name', map);
     params.set('lado_inicial_a', side);
     try {
-        const res = await proxyFetch(`/api/prediccion?${params.toString()}`);
+        const res = await proxyFetch(`/prediccion?${params.toString()}`);
         const data = await res.json();
         if (res.status === 404 || !data.ok) {
             liveStatus.className = 'live-status warn';
@@ -485,7 +485,7 @@ async function updateSerie() {
         mapas: matchMaps.map(m => ({ map_name: m.map_name, lado_inicial_a: m.lado_inicial_a })),
     };
     try {
-        const res = await proxyFetch('/api/serie', {
+        const res = await proxyFetch('/serie', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
@@ -563,7 +563,7 @@ async function fetchComparacion() {
     params.set('limite', '100');
 
     try {
-        const res = await proxyFetch(`/api/comparacion?${params.toString()}`);
+        const res = await proxyFetch(`/comparacion?${params.toString()}`);
         const data = await res.json();
         if (!data.ok || !data.resumen || !data.resumen.n) {
             cmpStatus.className = 'live-status warn';

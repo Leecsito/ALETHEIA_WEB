@@ -8,7 +8,7 @@ const PREDICT_DIRECTO = 'https://snugly-encore-sweep.ngrok-free.dev';
 const NGROK_HEADER = { 'ngrok-skip-browser-warning': '1' };
 
 function proxyFetch(path, options = {}) {
-    return fetch(`${API}/aletheia${path}`, options);
+    return fetch(`${API}/aletheia/${String(path).replace(/^\/+/, '')}`, options);
 }
 
 let teams = [];
@@ -175,7 +175,7 @@ async function loadCacheSummary() {
         params.set('equipo_b', selectedB);
     }
     try {
-        const res = await proxyFetch(`/api/predicciones?${params.toString()}`);
+        const res = await proxyFetch(`/predicciones?${params.toString()}`);
         const data = await res.json();
         cacheRows = {};
         if (data.ok && Array.isArray(data.predicciones)) {
@@ -227,7 +227,7 @@ function updateCacheBadge() {
 // ─── MODELO / VERSIÓN ─────────────────────────────────────────────────────────
 async function refreshModelVersion() {
     try {
-        const res = await proxyFetch('/api/modelo_version');
+        const res = await proxyFetch('/modelo_version');
         const data = await res.json();
         if (data.ok) serviceModelVersion = data.modelo_version;
     } catch { }
@@ -339,7 +339,8 @@ async function prepararPartido() {
     // temporales del túnel/PC y a que el navegador esté en segundo plano.
     const jobId = data.job_id;
     const totalCombinaciones = data.total || 26;
-    prepareStatus.innerHTML = `⏳ ${data.estado || 'en_proceso'} · 0% · mapa 0/${totalCombinaciones / 2}. <strong>No cierres esta pestaña.</strong>`;
+    const initProg = Math.round((data.progreso || 0) * 100);
+    prepareStatus.innerHTML = `⏳ en_proceso · ${initProg}% · mapa ${data.mapas_hechos || 0}/${Math.ceil(totalCombinaciones / 2)}. <strong>No cierres esta pestaña.</strong>`;
 
     const result = await pollPrecalcularJob(jobId, t0, totalCombinaciones);
 
@@ -441,7 +442,7 @@ async function asociarId() {
     prepareStatus.textContent = `Asociando predicciones a #${matchId}...`;
 
     try {
-        const res = await proxyFetch('/api/asociar', {
+        const res = await proxyFetch('/asociar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

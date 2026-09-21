@@ -9,20 +9,15 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
         rel="stylesheet" />
+    <link rel="stylesheet" href="../header/header.css" />
     <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
     <div class="bg-grid"></div>
 
-    <header>
-        <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
-        <div class="header-center" id="tableTitle">SELECCIONA UNA TABLA</div>
-        <div style="display: flex; gap: 8px;">
-            <a href="../exportar/index.html" class="btn-nav">EXPORTAR 📥</a>
-            <a href="../inicio/index.html" class="btn-nav">ETL ↑</a>
-        </div>
-    </header>
+    <div id="aeHeaderMount"></div>
+    <div class="ae-page-title" id="tableTitle">SELECCIONA UNA TABLA</div>
 
     <div class="layout">
 
@@ -94,6 +89,8 @@
 
     <div class="loading-bar" id="loadingBar"></div>
 
+    <script>window.AE_HEADER = {};</script>
+    <script src="../header/header.js"></script>
     <script src="script.js"></script>
 </body>
 

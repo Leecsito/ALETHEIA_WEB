@@ -19,7 +19,8 @@
     --mono: 'DM Mono', monospace;
     --display: 'Bebas Neue', sans-serif;
     --sidebar: 220px;
-    --header: 52px;
+    --header: 56px;
+    --page-title: 41px;
 }
 
 html,
@@ -107,7 +108,7 @@ header {
 /* ── LAYOUT ── */
 .layout {
     position: fixed;
-    top: var(--header);
+    top: calc(var(--header) + var(--page-title));
     left: 0;
     right: 0;
     bottom: 0;
@@ -428,7 +429,7 @@ td.bool-false {
 /* ── LOADING BAR ── */
 .loading-bar {
     position: fixed;
-    top: var(--header);
+    top: calc(var(--header) + var(--page-title));
     left: 0;
     right: 0;
     height: 2px;

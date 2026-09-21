@@ -9,6 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
     rel="stylesheet" />
+  <link rel="stylesheet" href="../header/header.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -16,20 +17,14 @@
 
   <div class="bg-grid"></div>
 
-  <header>
-    <div class="logo"><span class="logo-a">A</span>LETHEIA</div>
-    <nav>
-      <button class="nav-btn active" data-tab="partidos">PARTIDOS</button>
-      <button class="nav-btn" data-tab="jugadores">JUGADORES</button>
-      <button class="nav-btn" data-tab="mapas">MAPAS</button>
-      <button class="nav-btn" data-tab="economia">ECONOMÍA</button>
-      <button class="nav-btn" data-tab="agentes">AGENTES</button>
-    </nav>
-    <div style="display: flex; gap: 8px;">
-      <a href="../exportar/index.html" class="btn-etl">EXPORTAR 📥</a>
-      <a href="../inicio/index.html" class="btn-etl">ETL ↑</a>
-    </div>
-  </header>
+  <div id="aeHeaderMount"></div>
+  <nav class="viz-tabs">
+    <button class="nav-btn active" data-tab="partidos">PARTIDOS</button>
+    <button class="nav-btn" data-tab="jugadores">JUGADORES</button>
+    <button class="nav-btn" data-tab="mapas">MAPAS</button>
+    <button class="nav-btn" data-tab="economia">ECONOMÍA</button>
+    <button class="nav-btn" data-tab="agentes">AGENTES</button>
+  </nav>
 
   <main>
 
@@ -144,6 +139,8 @@
     <div class="loading-text">Cargando datos...</div>
   </div>
 
+  <script>window.AE_HEADER = { title: 'VISUALIZAR', badge: 'VCT' };</script>
+  <script src="../header/header.js"></script>
   <script src="script.js"></script>
 </body>
 

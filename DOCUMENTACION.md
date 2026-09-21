@@ -29,27 +29,22 @@ ALETHEIA/
 │   ├── conexion.py           # Gestión centralizada de la base de datos (Turso / SQLite)
 │   ├── aletheia.db           # Base de datos SQLite local (fallback)
 │   └── aletheia_2025.db      # Base de datos SQLite de respaldo
-├── inicio/                   # Componente ETL (Carga de Excel e inicialización)
+├── inicio/                   # Componente ETL (carga de Excel). Su /index.html REDIRIGE a /aletheia/
 │   ├── __init__.py
-│   ├── inicio.py             # Blueprint Flask (/api/init-db, /api/etl, /api/status)
-│   ├── index.html            # UI de carga masiva de Excel
-│   ├── style.css
-│   └── script.js
+│   ├── inicio.py             # Blueprint Flask (/api/init-db, /api/etl, /api/etl-batch,
+│   │                         #   /api/etl-status/<job_id>, /api/status) — backend ETL
+│   ├── index.html            # Redirect a ../aletheia/index.html (la UI ETL ya no se usa)
+│   ├── style.css             # (huérfano; la UI ETL dejó de servirse)
+│   └── script.js             # (huérfano; la UI ETL dejó de servirse)
 ├── tablas/                   # Componente Explorador de Tablas (Raw Data)
 │   ├── __init__.py
-│   ├── tablas.py             # Blueprint Flask (/api/tablas, /api/tabla/<nombre>)
+│   ├── tablas.py             # Blueprint Flask (/api/tablas, /api/tabla/<nombre>, /api/tablas/reporte)
 │   ├── index.html
 │   ├── style.css
 │   └── script.js
 ├── visualizar/               # Componente de Visualización y Métricas VCT
 │   ├── __init__.py
 │   ├── visualizar.py         # Blueprint Flask (partidos, jugadores, mapas, rondas, economía, agentes)
-│   ├── index.html
-│   ├── style.css
-│   └── script.js
-├── predecir/                 # Componente Predictor Monte Carlo Clásico (v2)
-│   ├── __init__.py
-│   ├── predecir.py           # Blueprint Flask (Simulación Monte Carlo con 5 señales)
 │   ├── index.html
 │   ├── style.css
 │   └── script.js
@@ -63,18 +58,22 @@ ALETHEIA/
 │   ├── index.html
 │   ├── style.css
 │   └── script.js
-├── exportar/                 # Componente de Exportación de Datos
-│   ├── __init__.py
-│   ├── exportar.py           # Blueprint Flask (Descarga CSV, Excel, JSON y paquete ZIP)
-│   ├── index.html
-│   ├── style.css
-│   └── script.js
-├── multimedia/               # Archivos multimedia / imágenes
+├── header/                   # Componente HEADER reutilizable (no es una página)
+│   ├── index.html            # Demo/preview del componente
+│   ├── header.css            # Estilos del header (clases `ae-*`)
+│   └── header.js             # Inyecta el header en `#aeHeaderMount` y marca el nav activo
+├── multimedia/               # Archivos multimedia / imágenes (maps/, agents/)
 ├── wsgi.py                   # Punto de entrada WSGI para Gunicorn
 ├── render.yaml               # Configuración de despliegue en Render
 ├── requirements.txt          # Dependencias de Python
 └── DOCUMENTACION.md          # Este documento de arquitectura
 ```
+
+> **Módulos eliminados:** `predecir/` (Predictor Monte Carlo clásico) y `exportar/`
+> (exportación CSV/Excel/JSON/ZIP) fueron **borrados** junto con sus blueprints
+> (`predecir_bp`, `exportar_bp`) y sus rutas `/api/equipos-pred`,
+> `/api/predecir-partido`, `/api/export/*`. El predictor vigente es el proxy a
+> ALETHEIA_PREDICT (módulo `aletheia/`).
 
 ---
 
@@ -163,11 +162,7 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 - `GET /api/economy`: Win rate por categoría económica (Pistol, Eco, Semi-Eco, Semi-Buy, Full-Buy).
 - `GET /api/agents`: Estadísticas de selección e impacto por agente.
 
-### 4.4. Módulo Predecir Clásico v2 (`predecir_bp`)
-- `GET /api/equipos-pred`: Lista los equipos disponibles en la base de datos con su número de mapas jugados y rating promedio.
-- `POST /api/predecir`: Ejecuta la simulación Monte Carlo (por defecto 10,000 iteraciones) utilizando 5 señales de rendimiento (WR histórico, habilidad, economía, clutch, H2H/veto) y decaimiento exponencial temporal.
-
-### 4.5. Módulo Predictor Avanzado (`aletheia_bp`)
+### 4.4. Módulo Predictor Avanzado (`aletheia_bp`)
 
 Este módulo **no simula partidos**: es un **proxy HTTP** hacia el servicio externo
 **ALETHEIA_PREDICT** (repositorio independiente), cuyo motor es **Glicko-2 + regresión
@@ -329,26 +324,22 @@ estas tablas). Endpoints adicionales del proxy:
    `GET /api/aletheia/modelo_version`; si difiere, esas filas quedan
    `vigente:false` y la web marca **RE-PREPARAR** (que envía `forzar:true`).
 
-### 4.6. Módulo Exportar (`exportar_bp`)
-- `GET /api/export/tables`: Retorna metadatos de las 10 tablas (filas y lista de columnas).
-- `GET /api/export/csv/<nombre>`: Descarga la tabla seleccionada en formato `.csv`.
-- `GET /api/export/excel/<nombre>`: Descarga la tabla seleccionada en formato `.xlsx`.
-- `GET /api/export/json/<nombre>`: Descarga la tabla seleccionada en formato `.json`.
-- `GET /api/export/zip`: Genera y descarga un archivo `.zip` comprimido con todos los `.csv` de la base de datos.
-
 ---
 
 ## 5. Estructura y Reglas del Frontend
 
 1. **Rutas Estáticas de Navegación (`backend/app.py`):**
-   Las subcarpetas registradas en `FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'predecir', 'aletheia', 'aletheia_preparar', 'exportar']` se sirven automáticamente en la raíz HTTP:
-   - `/inicio/` o `/inicio/index.html`
+   Las subcarpetas registradas en `FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_preparar', 'header']` se sirven automáticamente en la raíz HTTP:
+   - `/` → **redirige a `/aletheia/`**
+   - `/inicio/` o `/inicio/index.html` → **redirige a `/aletheia/`** (la UI ETL ya no se usa)
    - `/tablas/` o `/tablas/index.html`
    - `/visualizar/` o `/visualizar/index.html`
-   - `/predecir/` o `/predecir/index.html`
    - `/aletheia/` o `/aletheia/index.html` (**EN VIVO**)
    - `/aletheia_preparar/` o `/aletheia_preparar/index.html` (**PREPARAR**)
-   - `/exportar/` o `/exportar/index.html`
+   - `/header/` o `/header/index.html` (demo del componente header)
+   - `header/header.css` y `header/header.js` se sirven como estáticos desde la raíz
+     (`static_url_path=''`).
+   > Los módulos `predecir/` y `exportar/` **ya no existen**.
 
 2. **Configuración de Host API Dinámico:**
    En todos los archivos JavaScript del frontend (`script.js`), la variable `API` está configurada como:
@@ -410,7 +401,37 @@ estas tablas). Endpoints adicionales del proxy:
    - Tipografías principales desde Google Fonts:
      - Titulares y Badges: `'Bebas Neue', sans-serif`
      - Textos, Tablas y Métricas: `'DM Mono', monospace`
-   - Navegación superior consistente en todos los componentes mediante la clase `.btn-nav`.
+
+5. **Componente HEADER reutilizable (`header/`):**
+   La cabecera de navegación ya **no se duplica** en cada `index.html`: vive en
+   `header/` y se inyecta en las páginas reales.
+
+   - **Inclusión** en el `<head>` de la página:
+     ```html
+     <link rel="stylesheet" href="../header/header.css" />
+     ```
+   - **Marcado** (un solo montaje dentro del `<body>`):
+     ```html
+     <div id="aeHeaderMount"></div>
+     ```
+   - **Script** (antes de cerrar `</body>`, antes del `script.js` de la página):
+     ```html
+     <script>window.AE_HEADER = { title: 'EN VIVO', badge: 'PREDICTOR' };</script>
+     <script src="../header/header.js"></script>
+     ```
+   - `header.js` construye el nav (`EN VIVO`, `PREPARAR PARTIDO`, `TABLAS`,
+     `VISUALIZAR`), resuelve las rutas relativas a la raíz y **marca activa** la
+     página actual según `window.location.pathname`.
+   - Config opcional `window.AE_HEADER`:
+     - `title` / `badge`: título central (p. ej. `EN VIVO` · `PREDICTOR`).
+     - `hidden`: array de ids (`'aletheia'`, `'preparar'`, `'tablas'`,
+       `'visualizar'`) para ocultar entradas concretas.
+   - Todas las clases del componente usan prefijo `ae-` (`.ae-header`, `.ae-nav`,
+     `.ae-btn`, `.ae-logo`, `.ae-page-title`…) para no colisionar con los estilos
+     propios de cada componente.
+   - `header/index.html` es solo una **demo/preview** del componente.
+   - **Páginas que lo usan:** `aletheia/`, `aletheia_preparar/`, `tablas/`,
+     `visualizar/`.
 
 ---
 
@@ -435,4 +456,6 @@ Al recibir una nueva tarea o solicitud de cambio:
 1. **Revisa este documento** para ubicar el archivo, blueprint o tabla involucrada.
 2. **Realiza modificaciones quirúrgicas** enfocadas únicamente en los archivos relevantes.
 3. **Mantén las firmas de API**, la estructura dinámica de `window.location.origin` y la compatibilidad con el esquema de base de datos descrito arriba.
-4. **Prioriza siempre la tasa de acierto** (principio rector, §1): ningún cambio debe degradar la precisión de las predicciones. Si un cambio la empeora, descártalo o revíerte.
+4. **No dupliques el header**: usa el componente `header/` (`#aeHeaderMount` + `header.js`).
+5. **Recuerda los módulos eliminados**: `predecir/` y `exportar/` no existen; no los referencies.
+6. **Prioriza siempre la tasa de acierto** (principio rector, §1): ningún cambio debe degradar la precisión de las predicciones. Si un cambio la empeora, descártalo o revíerte.
