@@ -17,7 +17,7 @@ tablas_bp = Blueprint('tablas', __name__)
 TABLAS_PERMITIDAS = [
     'matches', 'match_veto', 'maps', 'rounds',
     'player_stats', 'economy_summary', 'duels', 'multikills_clutches',
-    'teams', 'players',
+    'teams', 'players', 'roster_transactions', 'agents', 'player_agent_stats',
     # Tablas del servicio ALETHEIA_PREDICT (solo consulta/muestra).
     'predicciones_mapa', 'predicciones_serie',
 ]
@@ -117,13 +117,13 @@ def list_tablas():
 REPORT_CHECKS = [
     # ── matches ──
     ('matches', 'sin_equipo_id', 'Equipos sin id (team_a_id/team_b_id)', 'team_a_id IS NULL OR team_b_id IS NULL'),
-    ('matches', 'sin_equipos', 'Nombres de equipo vacíos', "team_a IS NULL OR team_a = '' OR team_b IS NULL OR team_b = ''"),
+    ('matches', 'sin_ganador_id', 'Partido sin winner_id', 'winner_id IS NULL'),
     ('matches', 'sin_torneo', 'Torneo vacío', "tournament IS NULL OR tournament = ''"),
     ('matches', 'sin_fase', 'Fase vacía', "phase IS NULL OR phase = ''"),
     ('matches', 'sin_fecha', 'Fecha vacía', "match_date IS NULL OR match_date = ''"),
     ('matches', 'sin_patch', 'Patch vacío', "patch IS NULL OR patch = ''"),
-    ('matches', 'ganador_invalido', 'Ganador vacío o no coincide con los equipos', "winner IS NULL OR winner = '' OR (winner <> team_a AND winner <> team_b)"),
-    ('matches', 'huerfano', 'Partido huérfano (sin datos de equipos)', 'team_a IS NULL AND team_b IS NULL'),
+    ('matches', 'ganador_invalido', 'Ganador no coincide con los equipos', 'winner_id IS NOT NULL AND winner_id != team_a_id AND winner_id != team_b_id'),
+    ('matches', 'huerfano', 'Partido huérfano (sin datos de equipos)', 'team_a_id IS NULL AND team_b_id IS NULL'),
     # ── match_veto ──
     ('match_veto', 'equipo_sin_id', 'Veto de un equipo sin team_id', "team IN ('a','b') AND team_id IS NULL"),
     ('match_veto', 'mapa_vacio', 'Veto sin nombre de mapa', "map_name IS NULL OR map_name = ''"),
@@ -138,22 +138,20 @@ REPORT_CHECKS = [
     ('maps', 'duracion_vacia', 'Duración vacía', "duration IS NULL OR duration = ''"),
     # NOTA: un marcador/valor en 0 NO es un error (puede ser legítimo: pocas rondas, sin clutch, etc.)
     # ── rounds ──
-    ('rounds', 'ganador_vacio', 'Ronda sin ganador', "winner IS NULL OR winner = ''"),
+    ('rounds', 'ganador_vacio', 'Ronda sin ganador', 'winner_id IS NULL'),
     ('rounds', 'tipo_vacio', 'Ronda sin tipo de resultado', "result_type IS NULL OR result_type = ''"),
     ('rounds', 'lado_vacio', 'Ronda sin bando ganador', "winning_side IS NULL OR winning_side = ''"),
-    # NOTA: team_top/team_bot/category vacíos NO se marcan como error:
+    # NOTA: category_top/category_bot vacíos NO se marcan como error:
     # hay torneos (ej. China) que no traen archivos de economía, así que es esperado.
     # ── player_stats ──
     ('player_stats', 'jugador_sin_id', 'Jugador sin player_id', 'player_id IS NULL'),
     ('player_stats', 'equipo_sin_id', 'Jugador sin team_id', 'team_id IS NULL'),
-    ('player_stats', 'nombre_vacio', 'Jugador sin nombre', "player_name IS NULL OR player_name = ''"),
     ('player_stats', 'agente_vacio', 'Jugador sin agente', "agent IS NULL OR agent = ''"),
     ('player_stats', 'lado_invalido', 'Lado inválido (no attack/defense)', "side IS NULL OR side = '' OR side NOT IN ('attack','defense')"),
     ('player_stats', 'stats_nulos', 'KAST/ADR/HS nulos', 'kast IS NULL OR adr IS NULL OR hs_percent IS NULL'),
     # NOTA: rating o ACS en 0 NO es un error.
     # ── economy_summary ──
     ('economy_summary', 'equipo_sin_id', 'Economía sin team_id', 'team_id IS NULL'),
-    ('economy_summary', 'equipo_vacio', 'Economía sin nombre de equipo', "team IS NULL OR team = ''"),
     # ── duels ──
     ('duels', 'jugador_a_sin_id', 'Duelo: jugador A sin id', 'player_a_id IS NULL'),
     ('duels', 'jugador_b_sin_id', 'Duelo: jugador B sin id', 'player_b_id IS NULL'),
@@ -204,7 +202,10 @@ def build_reporte(conn):
                     afectados_por_tabla[tabla].add(mid)
 
     # ── Info de partidos ──
-    cur.execute('SELECT match_id, tournament, team_a, team_b FROM matches')
+    cur.execute("""SELECT m.match_id, m.tournament, ta.team_name, tb.team_name
+                   FROM matches m
+                   LEFT JOIN teams ta ON ta.team_id = m.team_a_id
+                   LEFT JOIN teams tb ON tb.team_id = m.team_b_id""")
     partidos = {r[0]: {'tournament': r[1], 'team_a': r[2], 'team_b': r[3]} for r in cur.fetchall()}
     cur.execute('SELECT COUNT(*) FROM matches')
     total_partidos = cur.fetchone()[0]

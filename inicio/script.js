@@ -12,6 +12,8 @@ const FILE_MAP = {
   'vlr_multikills_clutches': 'vlr_multikills_clutches',
   'vct_equipos': 'vct_equipos',
   'vct_jugadores': 'vct_jugadores',
+  'vct_transacciones': 'vct_transacciones',
+  'vct_stats_agentes': 'vct_stats_agentes',
 };
 
 const REQUIRED = [
@@ -19,7 +21,7 @@ const REQUIRED = [
   'vlr_stats_players_sides', 'vlr_economia_resumen',
   'vlr_enfrentamientos', 'vlr_multikills_clutches'
 ];
-const OPTIONAL = ['vct_equipos', 'vct_jugadores'];
+const OPTIONAL = ['vct_equipos', 'vct_jugadores', 'vct_transacciones', 'vct_stats_agentes'];
 
 // ─── ESTADO ──────────────────────────────────────────────────────────────────
 const state = { files: {} };
@@ -120,7 +122,7 @@ function logBatchInserted(results) {
   if (!results || typeof results !== 'object') return;
   const names = Object.keys(results);
   let ok = 0, err = 0;
-  const COUNT_KEYS = ['matches', 'maps', 'rounds', 'player_stats', 'economy_summary', 'duels', 'multikills'];
+  const COUNT_KEYS = ['matches', 'maps', 'rounds', 'player_stats', 'economy_summary', 'duels', 'multikills', 'roster_transactions'];
   names.forEach(name => {
     const r = results[name];
     if (!r || r.error) { err++; log(`  ✕ ${name}: ${(r && r.error) || 'error'}`, 'error'); return; }
@@ -194,7 +196,7 @@ function updateCounts() {
   const optLoaded = OPTIONAL.filter(k => state.files[k]).length;
   const total = reqLoaded + optLoaded;
   countRequired.textContent = `${reqLoaded} / 8`;
-  countOptional.textContent = `${optLoaded} / 2`;
+  countOptional.textContent = `${optLoaded} / 4`;
   fileCount.textContent = `${total} archivo${total !== 1 ? 's' : ''}`;
   // Solo necesitamos vct_partidos para poder ejecutar
   btnRun.disabled = !state.files['vct_partidos'];
@@ -253,6 +255,8 @@ function logInserted(ins) {
   if (ins.multikills != null) log(`  multikills:       ${ins.multikills} filas`, 'success');
   if (ins.teams != null) log(`  teams:            ${ins.teams} equipos`, 'success');
   if (ins.players != null) log(`  players:          ${ins.players} jugadores`, 'success');
+  if (ins.roster_transactions != null) log(`  roster_transactions: ${ins.roster_transactions} transacciones`, 'success');
+  if (ins.player_agent_stats != null) log(`  player_agent_stats: ${ins.player_agent_stats} filas`, 'success');
 }
 
 // Consulta el estado del job hasta que termine (evita el timeout del worker).

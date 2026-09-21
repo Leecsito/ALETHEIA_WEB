@@ -35,15 +35,18 @@ def get_matches():
                 m.tournament,
                 m.phase,
                 m.match_date,
-                m.team_a,
-                m.team_b,
+                ta.team_name AS team_a,
+                tb.team_name AS team_b,
                 m.score_a,
                 m.score_b,
-                m.winner,
+                tw.team_name AS winner,
                 m.patch,
                 COUNT(mp.map_id) AS maps_played
             FROM matches m
             LEFT JOIN maps mp ON mp.match_id = m.match_id
+            LEFT JOIN teams ta ON ta.team_id = m.team_a_id
+            LEFT JOIN teams tb ON tb.team_id = m.team_b_id
+            LEFT JOIN teams tw ON tw.team_id = m.winner_id
             GROUP BY m.match_id
             ORDER BY
                 CASE WHEN m.match_date IS NULL THEN 1 ELSE 0 END,
@@ -60,21 +63,23 @@ def get_player_stats():
     try:
         data = query("""
             SELECT
-                player_name,
-                team_name,
-                COUNT(DISTINCT match_id)                        AS matches,
-                ROUND(AVG(rating), 2)                           AS avg_rating,
-                ROUND(AVG(acs), 0)                              AS avg_acs,
-                SUM(kills)                                      AS total_kills,
-                SUM(deaths)                                     AS total_deaths,
-                SUM(assists)                                    AS total_assists,
-                ROUND(AVG(hs_percent), 1)                       AS avg_hs,
-                ROUND(AVG(adr), 1)                              AS avg_adr,
-                ROUND(AVG(kast), 1)                             AS avg_kast,
-                SUM(fk)                                         AS total_fk,
-                SUM(fd)                                         AS total_fd
-            FROM player_stats
-            GROUP BY player_name, team_name
+                p.nickname                                      AS player_name,
+                t.team_name                                     AS team_name,
+                COUNT(DISTINCT ps.match_id)                     AS matches,
+                ROUND(AVG(ps.rating), 2)                        AS avg_rating,
+                ROUND(AVG(ps.acs), 0)                           AS avg_acs,
+                SUM(ps.kills)                                   AS total_kills,
+                SUM(ps.deaths)                                  AS total_deaths,
+                SUM(ps.assists)                                 AS total_assists,
+                ROUND(AVG(ps.hs_percent), 1)                    AS avg_hs,
+                ROUND(AVG(ps.adr), 1)                           AS avg_adr,
+                ROUND(AVG(ps.kast), 1)                          AS avg_kast,
+                SUM(ps.fk)                                      AS total_fk,
+                SUM(ps.fd)                                      AS total_fd
+            FROM player_stats ps
+            LEFT JOIN players p ON p.player_id = ps.player_id
+            LEFT JOIN teams   t ON t.team_id   = ps.team_id
+            GROUP BY ps.player_id, ps.team_id
             ORDER BY avg_rating DESC
         """)
         return jsonify({"ok": True, "data": data})
@@ -131,34 +136,35 @@ def get_economy():
     try:
         data = query("""
             SELECT
-                team,
-                COUNT(DISTINCT map_id)                              AS maps,
-                SUM(pistol_won)                                     AS pistol_won,
-                SUM(eco_played)                                     AS eco_played,
-                SUM(eco_won)                                        AS eco_won,
-                SUM(semi_eco_played)                                AS semi_eco_p,
-                SUM(semi_eco_won)                                   AS semi_eco_w,
-                SUM(semi_buy_played)                                AS semi_buy_p,
-                SUM(semi_buy_won)                                   AS semi_buy_w,
-                SUM(full_buy_played)                                AS full_buy_p,
-                SUM(full_buy_won)                                   AS full_buy_w,
-                CASE WHEN SUM(eco_played) > 0
-                     THEN ROUND(SUM(eco_won) * 100.0 / SUM(eco_played), 1)
+                t.team_name                                         AS team,
+                COUNT(DISTINCT es.map_id)                           AS maps,
+                SUM(es.pistol_won)                                  AS pistol_won,
+                SUM(es.eco_played)                                  AS eco_played,
+                SUM(es.eco_won)                                     AS eco_won,
+                SUM(es.semi_eco_played)                             AS semi_eco_p,
+                SUM(es.semi_eco_won)                                AS semi_eco_w,
+                SUM(es.semi_buy_played)                             AS semi_buy_p,
+                SUM(es.semi_buy_won)                                AS semi_buy_w,
+                SUM(es.full_buy_played)                             AS full_buy_p,
+                SUM(es.full_buy_won)                                AS full_buy_w,
+                CASE WHEN SUM(es.eco_played) > 0
+                     THEN ROUND(SUM(es.eco_won) * 100.0 / SUM(es.eco_played), 1)
                      ELSE NULL END                                  AS eco_wr,
-                CASE WHEN SUM(semi_eco_played) > 0
-                     THEN ROUND(SUM(semi_eco_won) * 100.0 / SUM(semi_eco_played), 1)
+                CASE WHEN SUM(es.semi_eco_played) > 0
+                     THEN ROUND(SUM(es.semi_eco_won) * 100.0 / SUM(es.semi_eco_played), 1)
                      ELSE NULL END                                  AS semi_eco_wr,
-                CASE WHEN SUM(semi_buy_played) > 0
-                     THEN ROUND(SUM(semi_buy_won) * 100.0 / SUM(semi_buy_played), 1)
+                CASE WHEN SUM(es.semi_buy_played) > 0
+                     THEN ROUND(SUM(es.semi_buy_won) * 100.0 / SUM(es.semi_buy_played), 1)
                      ELSE NULL END                                  AS semi_buy_wr,
-                CASE WHEN SUM(full_buy_played) > 0
-                     THEN ROUND(SUM(full_buy_won) * 100.0 / SUM(full_buy_played), 1)
+                CASE WHEN SUM(es.full_buy_played) > 0
+                     THEN ROUND(SUM(es.full_buy_won) * 100.0 / SUM(es.full_buy_played), 1)
                      ELSE NULL END                                  AS full_buy_wr
-            FROM economy_summary
-            GROUP BY team
+            FROM economy_summary es
+            LEFT JOIN teams t ON t.team_id = es.team_id
+            GROUP BY es.team_id
             ORDER BY
-                CASE WHEN SUM(full_buy_played) = 0 THEN 1 ELSE 0 END,
-                ROUND(SUM(full_buy_won) * 100.0 / MAX(SUM(full_buy_played), 1), 1) DESC
+                CASE WHEN SUM(es.full_buy_played) = 0 THEN 1 ELSE 0 END,
+                ROUND(SUM(es.full_buy_won) * 100.0 / MAX(SUM(es.full_buy_played), 1), 1) DESC
         """)
         return jsonify({"ok": True, "data": data})
     except Exception as e:

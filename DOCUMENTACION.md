@@ -3,6 +3,8 @@
 > **Nota para Asistentes de IA y Desarrolladores:**  
 > Este documento contiene la arquitectura completa, esquema de base de datos, catálogo de APIs, estructura de archivos y reglas de negocio del proyecto **ALETHEIA**. Consúltalo como fuente de verdad para realizar modificaciones, agregar rutas o ajustar lógica sin necesidad de escanear repetidamente todo el código fuente del proyecto.
 
+> **⭐ PRINCIPIO RECTOR — prioridad máxima:** lo más importante de ALETHEIA es que su **tasa de acierto de predicciones sea alta**. El motor, las features, el cache y toda decisión de diseño se subordinan a **maximizar la precisión** (medida con `accuracy`, Brier y log-loss en `/api/comparacion`). La velocidad, la estética y la comodidad importan, pero **nunca por encima de acertar**: cualquier cambio que empeore la tasa de acierto debe rechazarse o revertirse.
+
 ---
 
 ## 1. Visión General del Proyecto
@@ -87,28 +89,45 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 
 ### Esquema de las Tablas de la Base de Datos
 
-**10 tablas del ETL** (creadas/gestionadas por ALETHEIA):
+**13 tablas del ETL** (creadas/gestionadas por ALETHEIA):
+
+> **Modelo normalizado (solo IDs):** las tablas de hechos **no guardan nombres ni
+> siglas** de equipos/jugadores. La identidad vive únicamente en `teams` (`team_name`,
+> `tag`) y `players` (`nickname`, `real_name`) y se referencia por FK (`*_id`). Para
+> mostrar nombres hay que hacer `JOIN` con `teams`/`players`.
+> El ETL migra esquemas viejos automáticamente: rellena las FKs desde los textos y
+> luego **elimina** las columnas de texto redundantes (`team_a`, `team_b`, `winner`,
+> `team_top`, `team_bot`, `player_name`, `team_name`, `team`, `player_a`, `player_b`).
 
 1. **`matches`**: Partidos jugados.
-   - `match_id` (INTEGER, PK), `tournament` (TEXT), `phase` (TEXT), `match_date` (TEXT), `team_a` (TEXT), `team_b` (TEXT), `score_a` (INTEGER), `score_b` (INTEGER), `winner` (TEXT), `patch` (TEXT).
+   - `match_id` (INTEGER, PK), `tournament` (TEXT), `phase` (TEXT), `match_date` (TEXT), `score_a` (INTEGER), `score_b` (INTEGER), `patch` (TEXT), `team_a_id` (FK teams), `team_b_id` (FK teams), `winner_id` (FK teams).
 2. **`match_veto`**: Picks y bans de mapas por partido.
-   - `veto_id` (INTEGER, PK AUTO), `match_id` (FK matches), `action` (TEXT: pick/ban/decider), `team` (TEXT: a/b), `map_name` (TEXT), `veto_order` (INTEGER).
+   - `veto_id` (INTEGER, PK AUTO), `match_id` (FK matches), `action` (TEXT: pick/ban/decider), `team` (TEXT: a/b), `map_name` (TEXT), `veto_order` (INTEGER), `team_id` (FK teams).
 3. **`maps`**: Mapas disputados en los partidos.
-   - `map_id` (TEXT, PK), `match_id` (FK matches), `map_name` (TEXT), `map_number` (INTEGER), `picker` (TEXT), `side_chosen` (TEXT), `side_top_start` (TEXT), `score_a_attack` (INTEGER), `score_a_defense` (INTEGER), `score_b_attack` (INTEGER), `score_b_defense` (INTEGER), `duration` (TEXT).
+   - `map_id` (TEXT, PK), `match_id` (FK matches), `map_name` (TEXT), `map_number` (INTEGER), `picker` (TEXT: a/b/decider), `side_chosen` (TEXT), `side_top_start` (TEXT), `score_a_attack` (INTEGER), `score_a_defense` (INTEGER), `score_b_attack` (INTEGER), `score_b_defense` (INTEGER), `duration` (TEXT), `picker_id` (FK teams).
 4. **`rounds`**: Detalle ronda a ronda.
-   - `map_id` (TEXT, FK maps), `round_num` (INTEGER), `winner` (TEXT), `result_type` (TEXT), `winning_side` (TEXT), `team_top` (TEXT), `bank_top` (INTEGER), `spend_top` (INTEGER), `category_top` (TEXT), `team_bot` (TEXT), `bank_bot` (INTEGER), `spend_bot` (INTEGER), `category_bot` (TEXT). PK: `(map_id, round_num)`.
+   - `map_id` (TEXT, FK maps), `round_num` (INTEGER), `winner_id` (FK teams), `result_type` (TEXT), `winning_side` (TEXT), `team_top_id` (FK teams), `bank_top` (INTEGER), `spend_top` (INTEGER), `category_top` (TEXT), `team_bot_id` (FK teams), `bank_bot` (INTEGER), `spend_bot` (INTEGER), `category_bot` (TEXT). PK: `(map_id, round_num)`.
 5. **`player_stats`**: Rendimiento individual por mapa y lado.
-   - `stat_id` (INTEGER, PK AUTO), `match_id` (FK matches), `map_id` (FK maps), `player_name` (TEXT), `team_name` (TEXT), `side` (TEXT), `agent` (TEXT), `rating` (REAL), `acs` (INTEGER), `kills` (INTEGER), `deaths` (INTEGER), `assists` (INTEGER), `kast` (REAL), `adr` (REAL), `hs_percent` (REAL), `fk` (INTEGER), `fd` (INTEGER).
+   - `stat_id` (INTEGER, PK AUTO), `match_id` (FK matches), `map_id` (FK maps), `player_id` (FK players), `team_id` (FK teams), `side` (TEXT), `agent` (TEXT), `rating` (REAL), `acs` (INTEGER), `kills` (INTEGER), `deaths` (INTEGER), `assists` (INTEGER), `kast` (REAL), `adr` (REAL), `hs_percent` (REAL), `fk` (INTEGER), `fd` (INTEGER).
 6. **`economy_summary`**: Resumen económico por equipo y mapa.
-   - `econ_id` (INTEGER, PK AUTO), `match_id` (FK matches), `map_id` (FK maps), `team` (TEXT), `pistol_won` (INTEGER), `eco_played` (INTEGER), `eco_won` (INTEGER), `semi_eco_played` (INTEGER), `semi_eco_won` (INTEGER), `semi_buy_played` (INTEGER), `semi_buy_won` (INTEGER), `full_buy_played` (INTEGER), `full_buy_won` (INTEGER).
+   - `econ_id` (INTEGER, PK AUTO), `match_id` (FK matches), `map_id` (FK maps), `team_id` (FK teams), `pistol_won` (INTEGER), `eco_played` (INTEGER), `eco_won` (INTEGER), `semi_eco_played` (INTEGER), `semi_eco_won` (INTEGER), `semi_buy_played` (INTEGER), `semi_buy_won` (INTEGER), `full_buy_played` (INTEGER), `full_buy_won` (INTEGER).
 7. **`duels`**: Enfrentamientos y duelos 1v1 entre jugadores.
-   - `duel_id` (INTEGER, PK AUTO), `match_id` (FK matches), `map_id` (FK maps), `duel_type` (TEXT), `player_a` (TEXT), `player_b` (TEXT), `kills_a` (INTEGER), `kills_b` (INTEGER).
+   - `duel_id` (INTEGER, PK AUTO), `match_id` (FK matches), `map_id` (FK maps), `duel_type` (TEXT), `player_a_id` (FK players), `player_b_id` (FK players), `kills_a` (INTEGER), `kills_b` (INTEGER).
 8. **`multikills_clutches`**: Bajas múltiples y situaciones límite.
-   - `mk_id` (INTEGER, PK AUTO), `match_id` (FK matches), `map_id` (FK maps), `player_name` (TEXT), `agent` (TEXT), `k2`..`k5` (INTEGER), `v1`..`v5` (INTEGER), `econ_rating` (INTEGER), `plants` (INTEGER), `defuses` (INTEGER).
-9. **`teams`**: Información de equipos.
+   - `mk_id` (INTEGER, PK AUTO), `match_id` (FK matches), `map_id` (FK maps), `player_id` (FK players), `agent` (TEXT), `k2`..`k5` (INTEGER), `v1`..`v5` (INTEGER), `econ_rating` (INTEGER), `plants` (INTEGER), `defuses` (INTEGER).
+9. **`teams`**: Información de equipos (fuente de verdad de nombres/siglas).
    - `team_id` (INTEGER, PK), `team_name` (TEXT), `region` (TEXT), `url` (TEXT), `tag` (TEXT), `country` (TEXT).
 10. **`players`**: Registro de jugadores.
-    - `player_id` (INTEGER, PK AUTO), `nickname` (TEXT), `real_name` (TEXT), `team_id` (FK teams), `team_name` (TEXT), `country` (TEXT).
+    - `player_id` (INTEGER, PK AUTO), `nickname` (TEXT), `real_name` (TEXT), `team_id` (FK teams), `country` (TEXT).
+11. **`roster_transactions`**: Historial de movimientos de roster (JOIN/LEAVE/INACTIVE).
+    - `transaction_id` (INTEGER, PK AUTO), `team_id` (FK teams), `player_id` (FK players), `action` (TEXT: JOIN/LEAVE/INACTIVE), `transaction_date` (TEXT), `reference_url` (TEXT).
+    - Fuente: `vct_transacciones.xlsx` (global). El ETL crea `teams`/`players` stub si el id no existe y hace UPSERT por `transaction_id`.
+12. **`agents`**: Catálogo de agentes y su rol (fuente de verdad de nombres de agente).
+    - `agent_id` (INTEGER, PK AUTO), `agent_name` (TEXT UNIQUE: jett, raze, sova...), `role` (TEXT: Duelist/Controller/Initiator/Sentinel).
+    - Se **siembra** automáticamente con 29 agentes (constante `AGENTS` en `inicio/inicio.py`); no proviene de ningún Excel.
+13. **`player_agent_stats`**: Rendimiento agregado por jugador y agente (ventana temporal).
+    - `id` (INTEGER, PK AUTO), `player_id` (FK players), `agent` (TEXT), `date_start`/`date_end` (TEXT `YYYY-MM-DD`), `use_count`, `rnd`, `rating`, `acs`, `kd`, `kast`, `adr`, `kpr`, `apr`, `fk_fd`, `k`, `d`, `a`, `fk`, `fd`. `UNIQUE(player_id, agent, date_start, date_end)`.
+    - Fuente: `vct_stats_agentes.xlsx` (global). El ETL hace UPSERT por `(player_id, agent, date_start, date_end)` (idempotente) y crea `players` stub si el id no existe.
 
 **2 tablas del servicio ALETHEIA_PREDICT** (ALETHEIA **solo las consulta/muestra**; las crea y escribe el servicio externo). `match_id` es el id del partido de **vlr.gg** (ej. `753455`) y es el mismo para todo el partido.
 
@@ -124,7 +143,7 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 
 ### 4.1. Módulo ETL / Inicio (`inicio_bp`)
 - `POST /api/init-db`: Crea las tablas de la base de datos si no existen y ejecuta migraciones.
-- `POST /api/etl`: Recibe archivos Excel (`vct_partidos`, `vlr_mapas`, `vlr_rondas`, etc.) y procesa la inserción masiva. Responde `202` con un `job_id`; el ETL corre en segundo plano.
+- `POST /api/etl`: Recibe archivos Excel (`vct_partidos`, `vlr_mapas`, `vlr_rondas`, etc.) y procesa la inserción masiva. Responde `202` con un `job_id`; el ETL corre en segundo plano. Archivos globales: `vct_equipos`, `vct_jugadores`, `vct_transacciones`, `vct_stats_agentes`.
 - `POST /api/etl-batch`: Recibe múltiples archivos con su ruta relativa (subida de carpetas por torneo) y ejecuta el ETL de cada torneo. Responde `202` con `job_id`.
 - `GET /api/etl-status/<job_id>`: Consulta el estado de un ETL asíncrono (`status`, `step`, `progress`, `inserted`, `error`).
 - `GET /api/status`: Retorna el conteo de filas de cada una de las 10 tablas.
@@ -385,3 +404,4 @@ Al recibir una nueva tarea o solicitud de cambio:
 1. **Revisa este documento** para ubicar el archivo, blueprint o tabla involucrada.
 2. **Realiza modificaciones quirúrgicas** enfocadas únicamente en los archivos relevantes.
 3. **Mantén las firmas de API**, la estructura dinámica de `window.location.origin` y la compatibilidad con el esquema de base de datos descrito arriba.
+4. **Prioriza siempre la tasa de acierto** (principio rector, §1): ningún cambio debe degradar la precisión de las predicciones. Si un cambio la empeora, descártalo o revíerte.

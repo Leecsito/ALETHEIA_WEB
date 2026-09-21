@@ -47,14 +47,12 @@ CREATE_TABLES_SQL = [
         tournament  TEXT,
         phase       TEXT,
         match_date  TEXT,
-        team_a      TEXT,
-        team_b      TEXT,
         score_a     INTEGER,
         score_b     INTEGER,
-        winner      TEXT,
         patch       TEXT,
         team_a_id   INTEGER REFERENCES teams(team_id),
-        team_b_id   INTEGER REFERENCES teams(team_id)
+        team_b_id   INTEGER REFERENCES teams(team_id),
+        winner_id   INTEGER REFERENCES teams(team_id)
     )""",
     """CREATE TABLE IF NOT EXISTS match_veto (
         veto_id     INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -83,25 +81,23 @@ CREATE_TABLES_SQL = [
     """CREATE TABLE IF NOT EXISTS rounds (
         map_id          TEXT REFERENCES maps(map_id) ON DELETE CASCADE,
         round_num       INTEGER,
-        winner          TEXT,
+        winner_id       INTEGER REFERENCES teams(team_id),
         result_type     TEXT,
         winning_side    TEXT,
-        team_top        TEXT,
         bank_top        INTEGER,
         spend_top       INTEGER,
         category_top    TEXT,
-        team_bot        TEXT,
         bank_bot        INTEGER,
         spend_bot       INTEGER,
         category_bot    TEXT,
+        team_top_id     INTEGER REFERENCES teams(team_id),
+        team_bot_id     INTEGER REFERENCES teams(team_id),
         PRIMARY KEY (map_id, round_num)
     )""",
     """CREATE TABLE IF NOT EXISTS player_stats (
         stat_id     INTEGER PRIMARY KEY AUTOINCREMENT,
         match_id    INTEGER REFERENCES matches(match_id) ON DELETE CASCADE,
         map_id      TEXT REFERENCES maps(map_id) ON DELETE CASCADE,
-        player_name TEXT,
-        team_name   TEXT,
         side        TEXT,
         agent       TEXT,
         rating      REAL,
@@ -121,7 +117,6 @@ CREATE_TABLES_SQL = [
         econ_id         INTEGER PRIMARY KEY AUTOINCREMENT,
         match_id        INTEGER REFERENCES matches(match_id) ON DELETE CASCADE,
         map_id          TEXT REFERENCES maps(map_id) ON DELETE CASCADE,
-        team            TEXT,
         pistol_won      INTEGER,
         eco_played      INTEGER,
         eco_won         INTEGER,
@@ -138,8 +133,6 @@ CREATE_TABLES_SQL = [
         match_id    INTEGER REFERENCES matches(match_id) ON DELETE CASCADE,
         map_id      TEXT REFERENCES maps(map_id) ON DELETE CASCADE,
         duel_type   TEXT,
-        player_a    TEXT,
-        player_b    TEXT,
         kills_a     INTEGER,
         kills_b     INTEGER,
         player_a_id INTEGER REFERENCES players(player_id),
@@ -149,7 +142,6 @@ CREATE_TABLES_SQL = [
         mk_id       INTEGER PRIMARY KEY AUTOINCREMENT,
         match_id    INTEGER REFERENCES matches(match_id) ON DELETE CASCADE,
         map_id      TEXT REFERENCES maps(map_id) ON DELETE CASCADE,
-        player_name TEXT,
         agent       TEXT,
         k2 INTEGER, k3 INTEGER, k4 INTEGER, k5 INTEGER,
         v1 INTEGER, v2 INTEGER, v3 INTEGER, v4 INTEGER, v5 INTEGER,
@@ -171,9 +163,60 @@ CREATE_TABLES_SQL = [
         nickname    TEXT,
         real_name   TEXT,
         team_id     INTEGER REFERENCES teams(team_id) ON DELETE SET NULL,
-        team_name   TEXT,
         country     TEXT
     )""",
+    """CREATE TABLE IF NOT EXISTS roster_transactions (
+        transaction_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+        team_id          INTEGER NOT NULL REFERENCES teams(team_id),
+        player_id        INTEGER NOT NULL REFERENCES players(player_id),
+        action           TEXT NOT NULL,
+        transaction_date TEXT,
+        reference_url    TEXT
+    )""",
+    """CREATE TABLE IF NOT EXISTS agents (
+        agent_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+        agent_name   TEXT NOT NULL UNIQUE,
+        role         TEXT NOT NULL
+    )""",
+    """CREATE TABLE IF NOT EXISTS player_agent_stats (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id   INTEGER NOT NULL REFERENCES players(player_id),
+        agent       TEXT    NOT NULL,
+        date_start  TEXT    NOT NULL,
+        date_end    TEXT    NOT NULL,
+        use_count   INTEGER,
+        rnd         INTEGER,
+        rating      REAL,
+        acs         REAL,
+        kd          REAL,
+        kast        INTEGER,
+        adr         REAL,
+        kpr         REAL,
+        apr         REAL,
+        fk_fd       REAL,
+        k           INTEGER,
+        d           INTEGER,
+        a           INTEGER,
+        fk          INTEGER,
+        fd          INTEGER,
+        UNIQUE (player_id, agent, date_start, date_end)
+    )""",
+]
+
+# Rol de cada agente (fuente: Riot). Se siembra una vez; no cambia.
+AGENTS = [
+    ('brimstone', 'Controller'), ('viper', 'Controller'), ('omen', 'Controller'),
+    ('astra', 'Controller'), ('harbor', 'Controller'), ('clove', 'Controller'),
+    ('miks', 'Controller'),
+    ('killjoy', 'Sentinel'), ('cypher', 'Sentinel'), ('sage', 'Sentinel'),
+    ('chamber', 'Sentinel'), ('deadlock', 'Sentinel'), ('vyse', 'Sentinel'),
+    ('veto', 'Sentinel'),
+    ('sova', 'Initiator'), ('breach', 'Initiator'), ('skye', 'Initiator'),
+    ('kayo', 'Initiator'), ('fade', 'Initiator'), ('gekko', 'Initiator'),
+    ('tejo', 'Initiator'),
+    ('phoenix', 'Duelist'), ('jett', 'Duelist'), ('reyna', 'Duelist'),
+    ('raze', 'Duelist'), ('yoru', 'Duelist'), ('neon', 'Duelist'),
+    ('iso', 'Duelist'), ('waylay', 'Duelist'),
 ]
 
 # ─── MIGRACIONES ─────────────────────────────────────────────────────────────
@@ -181,6 +224,10 @@ CREATE_TABLES_SQL = [
 ID_COLUMNS = [
     ('matches',              'team_a_id',   'INTEGER REFERENCES teams(team_id)'),
     ('matches',              'team_b_id',   'INTEGER REFERENCES teams(team_id)'),
+    ('matches',              'winner_id',   'INTEGER REFERENCES teams(team_id)'),
+    ('rounds',               'winner_id',   'INTEGER REFERENCES teams(team_id)'),
+    ('rounds',               'team_top_id', 'INTEGER REFERENCES teams(team_id)'),
+    ('rounds',               'team_bot_id', 'INTEGER REFERENCES teams(team_id)'),
     ('match_veto',           'team_id',     'INTEGER REFERENCES teams(team_id)'),
     ('maps',                 'picker_id',   'INTEGER REFERENCES teams(team_id)'),
     ('player_stats',         'player_id',   'INTEGER REFERENCES players(player_id)'),
@@ -201,6 +248,100 @@ def ensure_column(cur, table, column, decl):
             cur.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
         except Exception:
             pass
+
+def backfill_ids(conn):
+    """
+    Rellena las columnas *_id agregadas después de una carga previa, sin
+    necesidad de volver a subir los Excel. Es idempotente: solo actúa sobre
+    filas con la FK en NULL.
+
+    - matches.winner_id  ← team_a_id / team_b_id (o equipos por nombre/tag).
+    - rounds.team_top_id / team_bot_id ← team_a_id / team_b_id del partido,
+      ya que el ETL guarda siempre el equipo `a` en `team_top` y el `b` en
+      `team_bot`.
+    """
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """UPDATE matches
+               SET winner_id = CASE
+                   WHEN winner = team_a THEN team_a_id
+                   WHEN winner = team_b THEN team_b_id
+                   WHEN team_a IS NOT NULL AND winner LIKE '%(' || team_a || ')%' THEN team_a_id
+                   WHEN team_b IS NOT NULL AND winner LIKE '%(' || team_b || ')%' THEN team_b_id
+                   ELSE (SELECT t.team_id FROM teams t
+                         WHERE t.team_name = matches.winner OR t.tag = matches.winner
+                         LIMIT 1)
+               END
+               WHERE winner_id IS NULL AND winner IS NOT NULL AND winner <> ''"""
+        )
+        cur.execute(
+            """UPDATE rounds
+               SET team_top_id = (
+                       SELECT m.team_a_id FROM maps mp
+                       JOIN matches m ON m.match_id = mp.match_id
+                       WHERE mp.map_id = rounds.map_id)
+               WHERE team_top_id IS NULL"""
+        )
+        cur.execute(
+            """UPDATE rounds
+               SET team_bot_id = (
+                       SELECT m.team_b_id FROM maps mp
+                       JOIN matches m ON m.match_id = mp.match_id
+                       WHERE mp.map_id = rounds.map_id)
+               WHERE team_bot_id IS NULL"""
+        )
+        cur.execute(
+            """UPDATE rounds
+               SET winner_id = (
+                       SELECT CASE
+                           WHEN rounds.winner = m.team_a THEN m.team_a_id
+                           WHEN rounds.winner = m.team_b THEN m.team_b_id
+                           WHEN m.team_a IS NOT NULL AND rounds.winner LIKE '%(' || m.team_a || ')%' THEN m.team_a_id
+                           WHEN m.team_b IS NOT NULL AND rounds.winner LIKE '%(' || m.team_b || ')%' THEN m.team_b_id
+                           ELSE rounds.team_top_id
+                       END
+                       FROM maps mp JOIN matches m ON m.match_id = mp.match_id
+                       WHERE mp.map_id = rounds.map_id)
+               WHERE winner_id IS NULL AND winner IS NOT NULL AND winner <> ''"""
+        )
+    except Exception:
+        pass
+    finally:
+        cur.close()
+
+
+# Columnas de texto redundantes que se eliminan en el modelo normalizado.
+# La identidad de equipos y jugadores vive solo en teams/players y se
+# referencia por FK (*_id). Se borran de las tablas de hechos.
+LEGACY_TEXT_COLUMNS = [
+    ('matches',             'team_a'),
+    ('matches',             'team_b'),
+    ('matches',             'winner'),
+    ('rounds',              'winner'),
+    ('rounds',              'team_top'),
+    ('rounds',              'team_bot'),
+    ('player_stats',        'player_name'),
+    ('player_stats',        'team_name'),
+    ('economy_summary',     'team'),
+    ('duels',               'player_a'),
+    ('duels',               'player_b'),
+    ('multikills_clutches', 'player_name'),
+    ('players',             'team_name'),
+]
+
+
+def normalize_schema(conn):
+    """Elimina las columnas de texto redundantes (idempotente)."""
+    cur = conn.cursor()
+    for table, column in LEGACY_TEXT_COLUMNS:
+        if column in table_columns(cur, table):
+            try:
+                cur.execute(f"ALTER TABLE {table} DROP COLUMN {column}")
+            except Exception:
+                pass
+    cur.close()
+
 
 def run_migrations(conn):
     cur = conn.cursor()
@@ -243,6 +384,11 @@ def run_migrations(conn):
         ensure_column(cur, table, column, decl)
 
     cur.close()
+
+    # Rellenar las FKs nuevas en filas ya cargadas (sin re-subir Excel)
+    # antes de eliminar las columnas de texto redundantes.
+    backfill_ids(conn)
+    normalize_schema(conn)
 
 # ─── HELPERS ETL ──────────────────────────────────────────────────────────────
 MAP_NAMES = {'abyss','bind','breeze','corrode','haven','pearl','split','lotus','icebox','fracture','sunset','ascent','summit'}
@@ -394,13 +540,13 @@ def etl_matches(df, cur):
 
     for _, r in df.iterrows():
         sa, sb = parse_score_match(r['score'])
-        winner = r['equipo_a'] if sa > sb else r['equipo_b']
         patch  = str(r['patch']).replace('Patch ', '').strip() if pd.notna(r.get('patch')) else None
         a_id   = ii(r.get('equipo_a_id'))
         b_id   = ii(r.get('equipo_b_id'))
+        winner_id = a_id if sa > sb else b_id
         rows.append((int(r['match_id']), str(r['torneo']), str(r['fase']),
-                     parse_date(r['fecha'], fallback_year), str(r['equipo_a']), str(r['equipo_b']),
-                     sa, sb, winner, patch, a_id, b_id))
+                     parse_date(r['fecha'], fallback_year),
+                     sa, sb, patch, a_id, b_id, winner_id))
         mid   = int(r['match_id'])
         order = [1]
         def add_veto(val, action, team, team_id):
@@ -412,8 +558,8 @@ def etl_matches(df, cur):
         add_veto(r.get('ban_a'),'ban','a', a_id);   add_veto(r.get('ban_b'),'ban','b', b_id)
         add_veto(r.get('decider'),'decider',None,None)
     exec_batch(cur,
-        "INSERT OR IGNORE INTO matches (match_id,tournament,phase,match_date,team_a,team_b,score_a,score_b,winner,patch,team_a_id,team_b_id) VALUES ",
-        rows, 12)
+        "INSERT OR IGNORE INTO matches (match_id,tournament,phase,match_date,score_a,score_b,patch,team_a_id,team_b_id,winner_id) VALUES ",
+        rows, 10)
     exec_batch(cur,
         "INSERT INTO match_veto (match_id,action,team,map_name,veto_order,team_id) VALUES ",
         veto_rows, 6)
@@ -449,11 +595,12 @@ def etl_maps(df, cur, match_teams):
     return len(rows)
 
 
-def etl_rounds(df_rondas, df_eco, cur, team_names):
+def etl_rounds(df_rondas, df_eco, cur, team_lookup, map_to_match, match_teams):
     # df_eco puede ser None si no se subió el archivo de economía
     eco_lookup = {}
     if df_eco is not None and not df_eco.empty:
         eco_lookup = {(str(r['map_id']), int(r['round'])): r for _, r in df_eco.iterrows()}
+    valid_ids = {v for v in team_lookup.values() if v is not None}
     rows = []
     for _, r in df_rondas.iterrows():
         mid = str(r['round_id'])
@@ -462,29 +609,35 @@ def etl_rounds(df_rondas, df_eco, cur, team_names):
         def eg(field, default=None):
             v = eco.get(field, default) if hasattr(eco, 'get') else default
             return None if (v is None or (hasattr(v, '__float__') and pd.isna(v))) else v
-        win_id = ii(r.get('win'))
-        if win_id is not None and win_id in team_names:
-            winner_full = team_names[win_id]
-        else:
-            winner_full = normalize_winner(eg('winner')) or str(r['win']).strip()
-        rows.append((mid, num, winner_full,
+        # `win` ya es el team_id del ganador (vlr_rondas.win:int). Si el id no
+        # existe en teams se deja NULL para no romper la FK.
+        winner_id = ii(r.get('win'))
+        if winner_id is not None and winner_id not in valid_ids:
+            winner_id = None
+        # FK de lado: el Excel trae team_top_id/team_bot_id; si faltan, el
+        # exportador guarda el equipo `a` como top y el `b` como bot.
+        a_id, b_id = match_teams.get(map_to_match.get(mid), (None, None))
+        top_id = ii(eg('team_top_id')) or team_lookup.get(str(eg('team_top','') or '')) or a_id
+        bot_id = ii(eg('team_bot_id')) or team_lookup.get(str(eg('team_bot','') or '')) or b_id
+        rows.append((mid, num, winner_id,
                      str(r.get('result','')), str(r.get('band','')),
-                     str(eg('team_top','') or ''), int(eg('bank_top',0) or 0),
-                     int(eg('spend_top',0) or 0), str(eg('category_top','') or ''),
-                     str(eg('team_bot','') or ''), int(eg('bank_bot',0) or 0),
-                     int(eg('spend_bot',0) or 0), str(eg('category_bot','') or '')))
+                     int(eg('bank_top',0) or 0), int(eg('spend_top',0) or 0),
+                     str(eg('category_top','') or ''),
+                     int(eg('bank_bot',0) or 0), int(eg('spend_bot',0) or 0),
+                     str(eg('category_bot','') or ''),
+                     top_id, bot_id))
     exec_batch(cur,
         """INSERT OR IGNORE INTO rounds
-           (map_id,round_num,winner,result_type,winning_side,
-            team_top,bank_top,spend_top,category_top,
-            team_bot,bank_bot,spend_bot,category_bot) VALUES """,
+           (map_id,round_num,winner_id,result_type,winning_side,
+            bank_top,spend_top,category_top,
+            bank_bot,spend_bot,category_bot,
+            team_top_id,team_bot_id) VALUES """,
         rows, 13)
     return len(rows)
 
 
 def etl_stats(df, cur):
     rows = [(si(r['match_id']), clean_map_id(r['map_id']),
-             ss(r.get('player_name')), ss(r.get('team_name')),
              str(r['side']).lower() if pd.notna(r.get('side')) else None, ss(r.get('agent')),
              sf(r['rating']), si(r['acs']), si(r['kills']),
              si(r['deaths']), si(r['assists']), sf(r['kast']),
@@ -492,8 +645,8 @@ def etl_stats(df, cur):
              ii(r.get('player_id')), ii(r.get('team_id')))
             for _, r in df.iterrows()]
     exec_batch(cur,
-        "INSERT INTO player_stats (match_id,map_id,player_name,team_name,side,agent,rating,acs,kills,deaths,assists,kast,adr,hs_percent,fk,fd,player_id,team_id) VALUES ",
-        rows, 18)
+        "INSERT INTO player_stats (match_id,map_id,side,agent,rating,acs,kills,deaths,assists,kast,adr,hs_percent,fk,fd,player_id,team_id) VALUES ",
+        rows, 16)
     return len(rows)
 
 
@@ -502,12 +655,12 @@ def etl_economy_summary(df, cur):
     for _, r in df.iterrows():
         ep,ew=parse_eco(r['eco']); sep,sew=parse_eco(r['semi_eco'])
         sbp,sbw=parse_eco(r['semi_buy']); fbp,fbw=parse_eco(r['full_buy'])
-        rows.append((si(r['match_id']), str(r['map_id']), str(r['team']),
+        rows.append((si(r['match_id']), str(r['map_id']),
                      si(r['pistol_won']), ep,ew,sep,sew,sbp,sbw,fbp,fbw,
                      ii(r.get('team_id'))))
     exec_batch(cur,
-        "INSERT INTO economy_summary (match_id,map_id,team,pistol_won,eco_played,eco_won,semi_eco_played,semi_eco_won,semi_buy_played,semi_buy_won,full_buy_played,full_buy_won,team_id) VALUES ",
-        rows, 13)
+        "INSERT INTO economy_summary (match_id,map_id,pistol_won,eco_played,eco_won,semi_eco_played,semi_eco_won,semi_buy_played,semi_buy_won,full_buy_played,full_buy_won,team_id) VALUES ",
+        rows, 12)
     return len(rows)
 
 
@@ -516,25 +669,25 @@ def etl_duels(df, cur, nick_to_pid):
     for _, r in df.iterrows():
         ka, kb = parse_kills(r['kills'])
         rows.append((int(r['match_id']), str(r['map_id']), str(r['tipo_kill']),
-                     str(r['player_a']), str(r['player_b']), ka, kb,
+                     ka, kb,
                      nick_to_pid.get(str(r['player_a'])), nick_to_pid.get(str(r['player_b']))))
     exec_batch(cur,
-        "INSERT INTO duels (match_id,map_id,duel_type,player_a,player_b,kills_a,kills_b,player_a_id,player_b_id) VALUES ",
-        rows, 9)
+        "INSERT INTO duels (match_id,map_id,duel_type,kills_a,kills_b,player_a_id,player_b_id) VALUES ",
+        rows, 7)
     return len(rows)
 
 
 def etl_multikills(df, cur, nick_to_pid):
     rows = []
     for _, r in df.iterrows():
-        rows.append((si(r['match_id']), str(r['map_id']), str(r['player_name']), str(r['agent']),
+        rows.append((si(r['match_id']), str(r['map_id']), str(r['agent']),
                      si(r.get('k2')),si(r.get('k3')),si(r.get('k4')),si(r.get('k5')),
                      si(r.get('v1')),si(r.get('v2')),si(r.get('v3')),si(r.get('v4')),si(r.get('v5')),
                      si(r.get('econ')),si(r.get('pl')),si(r.get('de')),
                      nick_to_pid.get(str(r['player_name']))))
     exec_batch(cur,
-        "INSERT INTO multikills_clutches (match_id,map_id,player_name,agent,k2,k3,k4,k5,v1,v2,v3,v4,v5,econ_rating,plants,defuses,player_id) VALUES ",
-        rows, 17)
+        "INSERT INTO multikills_clutches (match_id,map_id,agent,k2,k3,k4,k5,v1,v2,v3,v4,v5,econ_rating,plants,defuses,player_id) VALUES ",
+        rows, 16)
     return len(rows)
 
 
@@ -556,17 +709,112 @@ def etl_teams(df, cur):
 
 def etl_players(df, cur):
     rows = [(ii(r['player_id']), ss(r.get('nickname')), ss(r.get('real_name')),
-             ii(r.get('team_id')), ss(r.get('team_name')), ss(r.get('country')))
+             ii(r.get('team_id')), ss(r.get('country')))
             for _, r in df.iterrows() if ii(r.get('player_id')) is not None]
     exec_batch(cur,
-        "INSERT INTO players (player_id,nickname,real_name,team_id,team_name,country) VALUES ",
-        rows, 6,
+        "INSERT INTO players (player_id,nickname,real_name,team_id,country) VALUES ",
+        rows, 5,
         suffix=""" ON CONFLICT(player_id) DO UPDATE SET
                nickname  = COALESCE(excluded.nickname, players.nickname),
                real_name = COALESCE(excluded.real_name, players.real_name),
                team_id   = COALESCE(excluded.team_id, players.team_id),
-               team_name = COALESCE(excluded.team_name, players.team_name),
                country   = COALESCE(excluded.country, players.country)""")
+    return len(rows)
+
+
+def etl_roster_transactions(df, cur):
+    """
+    Carga las transacciones de roster (JOIN/LEAVE/INACTIVE) del scraper.
+    Crea equipos/jugadores stub si no existen (el Excel solo trae ids) para
+    satisfacer las FKs, y hace UPSERT por transaction_id (idempotente).
+    """
+    rows = []
+    team_ids, player_ids = set(), set()
+    for _, r in df.iterrows():
+        trid = ii(r.get('transaction_id'))
+        tid  = ii(r.get('team_id'))
+        pid  = ii(r.get('player_id'))
+        if trid is None or tid is None or pid is None:
+            continue
+        team_ids.add(tid); player_ids.add(pid)
+        rows.append((trid, tid, pid,
+                     str(r.get('action', '')).strip().upper(),
+                     ss(r.get('transaction_date')) or '',
+                     ss(r.get('reference_url'))))
+    if not rows:
+        return 0
+    exec_batch(cur, "INSERT OR IGNORE INTO teams (team_id) VALUES ",
+               [(t,) for t in team_ids], 1)
+    exec_batch(cur, "INSERT OR IGNORE INTO players (player_id) VALUES ",
+               [(p,) for p in player_ids], 1)
+    exec_batch(cur,
+        """INSERT INTO roster_transactions
+           (transaction_id,team_id,player_id,action,transaction_date,reference_url) VALUES """,
+        rows, 6,
+        suffix=""" ON CONFLICT(transaction_id) DO UPDATE SET
+               team_id          = excluded.team_id,
+               player_id        = excluded.player_id,
+               action           = excluded.action,
+               transaction_date = excluded.transaction_date,
+               reference_url    = COALESCE(excluded.reference_url, roster_transactions.reference_url)""")
+    return len(rows)
+
+
+def seed_agents(cur):
+    """Siembra el catálogo de roles de agentes (idempotente)."""
+    exec_batch(cur,
+        "INSERT OR IGNORE INTO agents (agent_name,role) VALUES ",
+        AGENTS, 2)
+    return len(AGENTS)
+
+
+def etl_player_agent_stats(df, cur):
+    """
+    Carga el rendimiento agregado por jugador y agente (vct_stats_agentes.xlsx).
+    Hace UPSERT por (player_id, agent, date_start, date_end): re-cargar el
+    mismo Excel el mismo día actualiza las métricas sin duplicar filas.
+    """
+    rows = []
+    player_ids = set()
+    for _, r in df.iterrows():
+        pid = ii(r.get('player_id'))
+        agent = ss(r.get('agent'))
+        ds, de = ss(r.get('date-start')), ss(r.get('date-end'))
+        if pid is None or not agent or not ds or not de:
+            continue
+        player_ids.add(pid)
+        rows.append((pid, agent, ds, de,
+                     si(r.get('use_count')), si(r.get('rnd')),
+                     sf(r.get('rating')), sf(r.get('acs')), sf(r.get('kd')),
+                     si(r.get('kast')), sf(r.get('adr')), sf(r.get('kpr')),
+                     sf(r.get('apr')), sf(r.get('fk_fd')),
+                     si(r.get('k')), si(r.get('d')), si(r.get('a')),
+                     si(r.get('fk')), si(r.get('fd'))))
+    if not rows:
+        return 0
+    exec_batch(cur, "INSERT OR IGNORE INTO players (player_id) VALUES ",
+               [(p,) for p in player_ids], 1)
+    exec_batch(cur,
+        """INSERT INTO player_agent_stats
+           (player_id,agent,date_start,date_end,use_count,rnd,rating,acs,kd,kast,
+            adr,kpr,apr,fk_fd,k,d,a,fk,fd) VALUES """,
+        rows, 19,
+        suffix=""" ON CONFLICT(player_id,agent,date_start,date_end) DO UPDATE SET
+               use_count = excluded.use_count,
+               rnd       = excluded.rnd,
+               rating    = excluded.rating,
+               acs       = excluded.acs,
+               kd        = excluded.kd,
+               kast      = excluded.kast,
+               adr       = excluded.adr,
+               kpr       = excluded.kpr,
+               apr       = excluded.apr,
+               fk_fd     = excluded.fk_fd,
+               k         = excluded.k,
+               d         = excluded.d,
+               a         = excluded.a,
+               fk        = excluded.fk,
+               fd        = excluded.fd""")
     return len(rows)
 
 
@@ -625,6 +873,18 @@ def _process_etl(raw_files, job=None):
             "INSERT OR IGNORE INTO teams (team_id,team_name) VALUES ",
             [(tid, name) for tid, name in team_names.items() if tid is not None], 2)
 
+        # Mapa tag/nombre -> team_id para resolver FKs por texto (ej. rounds).
+        team_lookup = {}
+        try:
+            cur.execute("SELECT team_id, team_name, tag FROM teams")
+            for tid, name, tag in cur.fetchall():
+                if name:
+                    team_lookup.setdefault(str(name), tid)
+                if tag:
+                    team_lookup.setdefault(str(tag), tid)
+        except Exception:
+            pass
+
         # ── 2) PLAYERS (antes de player_stats/duels/multikills) ──
         _job_set(job, step='jugadores')
         nick_to_pid = {}  # nickname -> player_id
@@ -642,14 +902,13 @@ def _process_etl(raw_files, job=None):
                 if pid is None or nick is None or pid in seen:
                     continue
                 seen.add(pid)
-                player_rows.append((pid, nick, ii(r.get('team_id')), ss(r.get('team_name'))))
+                player_rows.append((pid, nick, ii(r.get('team_id'))))
             exec_batch(cur,
-                """INSERT INTO players (player_id,nickname,team_id,team_name) VALUES """,
-                player_rows, 4,
+                """INSERT INTO players (player_id,nickname,team_id) VALUES """,
+                player_rows, 3,
                 suffix=""" ON CONFLICT(player_id) DO UPDATE SET
-                       nickname  = COALESCE(excluded.nickname, players.nickname),
-                       team_id   = COALESCE(excluded.team_id, players.team_id),
-                       team_name = COALESCE(excluded.team_name, players.team_name)""")
+                       nickname = COALESCE(excluded.nickname, players.nickname),
+                       team_id  = COALESCE(excluded.team_id, players.team_id)""")
 
         # Mapa nickname -> player_id (fuente principal: stats; refuerzo: vct_jugadores)
         if 'vlr_stats_players_sides' in files:
@@ -663,10 +922,29 @@ def _process_etl(raw_files, job=None):
                 if pid is not None and nick:
                     nick_to_pid.setdefault(nick, pid)
 
+        # ── 2b) TRANSACCIONES DE ROSTER (global; incluye stubs de jugadores) ──
+        if 'vct_transacciones' in files:
+            _job_set(job, step='transacciones de roster')
+            results['roster_transactions'] = etl_roster_transactions(files['vct_transacciones'], cur)
+
+        # ── 2c) RENDIMIENTO POR AGENTE (global; catálogo de agentes + stats) ──
+        if 'vct_stats_agentes' in files:
+            _job_set(job, step='stats por agente')
+            seed_agents(cur)
+            results['player_agent_stats'] = etl_player_agent_stats(files['vct_stats_agentes'], cur)
+
         # match_id -> (team_a_id, team_b_id) para picker_id / veto / etc.
         match_teams = {}
         for _, r in files['vct_partidos'].iterrows():
             match_teams[int(r['match_id'])] = (ii(r.get('equipo_a_id')), ii(r.get('equipo_b_id')))
+
+        # map_id -> match_id para resolver team_top_id/team_bot_id en rounds.
+        map_to_match = {}
+        if 'vlr_mapas' in files:
+            for _, r in files['vlr_mapas'][['match_id','round_id']].drop_duplicates().iterrows():
+                m_id = ii(r.get('match_id'))
+                if m_id is not None:
+                    map_to_match[str(r['round_id'])] = m_id
 
         # Partidos referenciados por otros archivos pero ausentes en vct_partidos
         referenciados = set()
@@ -725,7 +1003,8 @@ def _process_etl(raw_files, job=None):
         if 'vlr_rondas' in files:
             _job_set(job, step='rondas')
             df_eco = files.get('vlr_economia_rondas')  # puede ser None
-            results['rounds'] = etl_rounds(files['vlr_rondas'], df_eco, cur, team_names)
+            results['rounds'] = etl_rounds(files['vlr_rondas'], df_eco, cur,
+                                            team_lookup, map_to_match, match_teams)
 
         if 'vlr_stats_players_sides' in files:
             _job_set(job, step='stats de jugadores')
@@ -764,7 +1043,7 @@ def run_etl():
         'vct_partidos', 'vlr_mapas', 'vlr_rondas', 'vlr_economia_rondas',
         'vlr_stats_players_sides', 'vlr_economia_resumen',
         'vlr_enfrentamientos', 'vlr_multikills_clutches',
-        'vct_equipos', 'vct_jugadores'
+        'vct_equipos', 'vct_jugadores', 'vct_transacciones', 'vct_stats_agentes'
     ]
 
     if not request.files.get('vct_partidos'):
@@ -891,7 +1170,8 @@ def status():
         conn = get_conn()
         cur  = conn.cursor()
         tables = ['matches','match_veto','maps','rounds','player_stats',
-                  'economy_summary','duels','multikills_clutches','teams','players']
+                  'economy_summary','duels','multikills_clutches','teams','players',
+                  'roster_transactions','agents','player_agent_stats']
         counts = {}
         for t in tables:
             try:
