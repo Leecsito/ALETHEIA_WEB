@@ -217,16 +217,26 @@ a `[100, MAX_SIM]` (default `10000`). **En hosting free no usar 25K/50K.**
   "mapas": [
     {"map_name": "Split", "lado_inicial_a": "attack",
      "prob_victoria_a": 0.4412, "prob_victoria_b": 0.5588, "prob_overtime": 0.164,
-     "confianza": "media", "fuente": "cache"}
+     "confianza": "media", "fuente": "cache",
+     "marcadores": [
+       {"marcador_a": 11, "marcador_b": 13, "prob": 0.09},
+       {"marcador_a": 13, "marcador_b": 11, "prob": 0.07},
+       {"marcador_a": 10, "marcador_b": 13, "prob": 0.06}
+     ],
+     "marcador_mas_probable": {"marcador_a": 11, "marcador_b": 13, "prob": 0.09}}
   ],
   "prob_serie_a": 0.6333,
   "prob_serie_b": 0.3667,
   "confianza_serie": "media",
-  "modelo_version": "<hash>"
+  "modelo_version": "<hash>",
+  "n_sim": 10000
 }
 ```
 `prob_victoria_a` viene **calibrada**. `confianza`/`confianza_serie`
 (`alta|media|baja`) son para la UI; `fuente` es `cache|calculado`.
+`marcadores[]` viene ordenado por `prob` desc; `marcador_a` son los goles de
+`equipo_a`. **El marcador más probable ronda 8-12%**, no es dominante: la web lo
+etiqueta siempre como *estimación, no resultado seguro*.
 
 **Semántica de la banda de confianza** (la fija el backend, conservadora):
 se calcula sobre `max(p, 1-p)` → `>=0.62` **alta**, `>=0.55` **media**, si no
@@ -395,17 +405,24 @@ estas tablas). Endpoints adicionales del proxy:
        misma regla conservadora del motor sobre `max(p, 1-p)` (≥0.62 alta, ≥0.55
        media, resto baja); si el backend la manda (`/predecir`, `/serie`,
        `/prediccion`), se usa la del backend.
+     - **DISTRIBUCIÓN DE MARCADOR:** bajo las tarjetas se muestra el **marcador
+       más probable** (etiquetado como *estimación, no resultado seguro*) y el
+       **top-3** con su % (`marcadores[]` viene del backend ordenado por prob desc;
+       `marcador_a` = goles de `equipo_a`). Si `marcadores` falta (fila de caché
+       anterior al cambio), el bloque se **oculta** y se marca el enfrentamiento
+       para **RE-PRECALCULAR**.
      - **ARMAR SERIE (BO1/BO3/BO5):** slots en orden (el último = DECIDER) con bando
        por mapa; cada cambio hace `POST /api/aletheia/serie` y muestra el banner
        (`prob_serie_a/b`, `confianza_serie` con color, formato, `mapas_para_ganar`,
        `n_sim`) al instante. La tabla de mapas de la serie muestra la **confianza
-       por mapa**.
+       por mapa** y el **marcador más probable** de cada mapa.
      - **VIGENCIA Y RE-PRECALCULAR:** la web compara `modelo_version` de cada
        enfrentamiento con `GET /api/aletheia/modelo_version` (y usa `vigente` de
-       `/api/simulaciones`). Si difiere, marca el enfrentamiento como **NO vigente**
-       y ofrece **↻ RE-PRECALCULAR**, que hace `POST /api/precalcular` con
-       `forzar:true` **directo a `PREDICT_DIRECTO`** (async: `job_id` + polling de
-       `/api/precalcular/estado`), refresca la lista y vuelve a leer la caché.
+       `/api/simulaciones`). Si difiere, o si las filas no traen `marcadores`,
+       marca el enfrentamiento como **RE-PRECALCULAR** y ofrece **↻ RE-PRECALCULAR**,
+       que hace `POST /api/precalcular` con `forzar:true` **directo a
+       `PREDICT_DIRECTO`** (async: `job_id` + polling de `/api/precalcular/estado`),
+       refresca la lista y vuelve a leer la caché.
      - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra tarjetas resumen
        (accuracy, brier, log-loss, favoritos_ok, upsets, inciertos) y una tabla de
        detalle coloreada (verde = favorito ganó, rojo = upset, ámbar = incierto);

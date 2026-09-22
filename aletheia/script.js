@@ -41,6 +41,7 @@ const liveTeamALabel = document.getElementById('liveTeamALabel');
 const liveSideAtk = document.getElementById('liveSideAtk');
 const liveSideDef = document.getElementById('liveSideDef');
 const liveCards = document.getElementById('liveCards');
+const liveScoreboard = document.getElementById('liveScoreboard');
 const liveStatus = document.getElementById('liveStatus');
 
 const serieSlots = document.getElementById('serieSlots');
@@ -257,6 +258,32 @@ function simIsStale(s) {
     return false;
 }
 
+// ¿Las filas cacheadas del enfrentamiento actual son anteriores al cambio y no
+// traen `marcadores`? En ese caso conviene re-precalcular para tenerlos.
+function simSinMarcadores() {
+    if (!liveBulk) return false;
+    const filas = Object.values(liveBulk).filter(Boolean);
+    if (!filas.length) return false;
+    return filas.every(p => !Array.isArray(p.marcadores) || !p.marcadores.length);
+}
+
+// Cabecera del enfrentamiento seleccionado + botón RE-PRECALCULAR si aplica.
+function renderSimHead(s, needsRepre) {
+    const staleModel = simIsStale(s);
+    const sinMarcadores = simSinMarcadores();
+    const motivos = [];
+    if (staleModel) motivos.push('modelo cambió');
+    if (sinMarcadores) motivos.push('sin marcadores');
+    selSimHead.innerHTML = `
+    <div class="ss-head-teams">${escapeHtml(s.equipo_a)} <span class="si-vs">vs</span> ${escapeHtml(s.equipo_b)}</div>
+    <div class="ss-head-meta">${s.match_id ? 'PARTIDO #' + s.match_id : 'sin id'} · ${s.n_sim ? Number(s.n_sim).toLocaleString() + ' sims' : ''} · modelo ${s.modelo_version || '—'}${needsRepre ? ` · <span style="color:var(--orange)">⚠ RE-PRECALCULAR${motivos.length ? ' (' + motivos.join(', ') + ')' : ''}</span>` : ''}</div>
+    <div class="ss-head-actions">
+      <button class="btn-nav" id="btnReprecalcular"${needsRepre ? '' : ' style="display:none"'}>↻ RE-PRECALCULAR</button>
+    </div>`;
+    const btnRepre = document.getElementById('btnReprecalcular');
+    if (btnRepre) btnRepre.addEventListener('click', () => reprecalcular(s));
+}
+
 // ─── SELECCIÓN DE SIMULACIÓN ──────────────────────────────────────────────────
 async function selectSim(s) {
     current = s;
@@ -265,18 +292,13 @@ async function selectSim(s) {
     liveBulk = null;
     liveSection.style.display = 'block';
 
-    const stale = simIsStale(s);
-    selSimHead.innerHTML = `
-    <div class="ss-head-teams">${escapeHtml(s.equipo_a)} <span class="si-vs">vs</span> ${escapeHtml(s.equipo_b)}</div>
-    <div class="ss-head-meta">${s.match_id ? 'PARTIDO #' + s.match_id : 'sin id'} · ${s.n_sim ? Number(s.n_sim).toLocaleString() + ' sims' : ''} · modelo ${s.modelo_version || '—'}${stale ? ' · <span style="color:var(--orange)">⚠ NO vigente</span>' : ''}</div>
-    <div class="ss-head-actions">
-      <button class="btn-nav" id="btnReprecalcular"${stale ? '' : ' style="display:none"'}>↻ RE-PRECALCULAR${stale ? ' (modelo cambió)' : ''}</button>
-    </div>`;
-    const btnRepre = document.getElementById('btnReprecalcular');
-    if (btnRepre) btnRepre.addEventListener('click', () => reprecalcular(s));
     liveTeamALabel.textContent = s.equipo_a;
+    renderSimHead(s, simIsStale(s));
 
     await loadLiveBulkForCurrent();
+    // Tras leer la caché, puede que las filas sean antiguas (sin marcadores) o
+    // de otro modelo: recomputa el motivo de re-precalcular con la info real.
+    renderSimHead(s, simIsStale(s) || simSinMarcadores());
     renderLiveMapPicker();
     renderLiveDetail();
     syncSerieBuilder();
@@ -447,6 +469,7 @@ async function fetchPrediccion(map, side) {
     liveStatus.className = 'live-status';
     liveStatus.textContent = 'Consultando...';
     liveCards.innerHTML = '';
+    if (liveScoreboard) { liveScoreboard.className = 'scoreboard-block'; liveScoreboard.innerHTML = ''; }
     const params = new URLSearchParams();
     if (current.match_id > 0) {
         params.set('match_id', current.match_id);
@@ -473,9 +496,54 @@ async function fetchPrediccion(map, side) {
     }
 }
 
+// Top de marcadores por mapa. `marcadores` viene del backend ordenado por prob
+// desc (puede faltar en filas de cache anteriores: se oculta sin romper).
+function renderScoreboard(p) {
+    if (!liveScoreboard) return;
+    const lista = Array.isArray(p && p.marcadores) ? p.marcadores.filter(m => m) : [];
+    if (!lista.length) {
+        liveScoreboard.className = 'scoreboard-block';
+        liveScoreboard.innerHTML = '';
+        return;
+    }
+
+    const equipoA = current ? current.equipo_a : 'A';
+    const equipoB = current ? current.equipo_b : 'B';
+    const masProb = (p && p.marcador_mas_probable) || lista[0];
+    const top = lista.slice(0, 3);
+    const maxProb = Math.max(...top.map(m => Number(m.prob) || 0), 0.0001);
+
+    const filas = top.map((m, i) => {
+        const prob = Number(m.prob) || 0;
+        const ancho = Math.max(4, Math.round((prob / maxProb) * 100));
+        return `
+      <div class="scoreboard-row">
+        <span class="scoreboard-score">${m.marcador_a}-${m.marcador_b}</span>
+        <span class="scoreboard-bar"><span style="width:${ancho}%"></span></span>
+        <span class="scoreboard-pct">${(prob * 100).toFixed(1)}%</span>
+      </div>`;
+    }).join('');
+
+    liveScoreboard.className = 'scoreboard-block has-data';
+    liveScoreboard.innerHTML = `
+    <div class="scoreboard-head">
+      <div class="scoreboard-title">DISTRIBUCIÓN DE MARCADOR
+        <span class="scoreboard-note">${escapeHtml(equipoA)}-${escapeHtml(equipoB)} · estimación, no resultado seguro</span>
+      </div>
+      <div class="scoreboard-top">
+        <div>
+          <div class="scoreboard-mostprob-label">MÁS PROBABLE (${((Number(masProb.prob) || 0) * 100).toFixed(1)}%)</div>
+          <div class="scoreboard-mostprob">${masProb.marcador_a}-${masProb.marcador_b}</div>
+        </div>
+      </div>
+    </div>
+    <div class="scoreboard-list">${filas}</div>`;
+}
+
 function paintLiveDetail(p, modelVersion, vigente) {
     liveDetailTitle.textContent = `${(liveMap || '').toUpperCase()} · ${liveSide === 'attack' ? 'ATK' : 'DEF'}`;
     const conf = confBand(p);
+    renderScoreboard(p);
     liveCards.innerHTML = `
     <div class="live-card">
       <div class="live-card-label" style="color:var(--accent)">${escapeHtml(current.equipo_a)}</div>
@@ -667,6 +735,8 @@ function renderSerieBanner(data) {
 
     const mapRows = (data.mapas || []).map(m => {
         const conf = confBand(m);
+        const mp = m.marcador_mas_probable || (Array.isArray(m.marcadores) && m.marcadores.length ? m.marcadores[0] : null);
+        const marcadorTxt = mp ? `<b>${mp.marcador_a}-${mp.marcador_b}</b> (${((Number(mp.prob) || 0) * 100).toFixed(1)}%)` : '';
         return `
     <div class="serie-map-row">
       <span class="smr-name">${m.map_name.toUpperCase()}</span>
@@ -674,6 +744,7 @@ function renderSerieBanner(data) {
       <span class="smr-a">${pct(m.prob_victoria_a)}%</span>
       <span class="smr-b">${pct(m.prob_victoria_b)}%</span>
       <span class="smr-ot">OT ${pct(m.prob_overtime)}%</span>
+      <span class="smr-marcador">${marcadorTxt}</span>
       <span class="smr-conf ${conf || ''}">${conf ? `<span class="conf-dot"></span>${conf}` : ''}</span>
       <span class="smr-fuente">${m.fuente || 'cache'}</span>
     </div>`;

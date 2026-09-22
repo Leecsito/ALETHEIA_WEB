@@ -2943,6 +2943,103 @@ main {
     margin-bottom: 14px;
 }
 
+/* ── MARCADORES (distribución por mapa) ── */
+.scoreboard-block {
+    display: none;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+
+.scoreboard-block.has-data {
+    display: block;
+}
+
+.scoreboard-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.scoreboard-title {
+    font-family: var(--display);
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: var(--text);
+}
+
+.scoreboard-title .scoreboard-note {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    margin-left: 8px;
+}
+
+.scoreboard-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.scoreboard-mostprob {
+    font-family: var(--display);
+    font-size: 30px;
+    letter-spacing: 1px;
+    color: var(--accent);
+}
+
+.scoreboard-mostprob-label {
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    text-transform: uppercase;
+}
+
+.scoreboard-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.scoreboard-row {
+    display: grid;
+    grid-template-columns: 70px 1fr 54px;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+}
+
+.scoreboard-score {
+    font-family: var(--mono);
+    color: var(--text);
+    letter-spacing: 1px;
+}
+
+.scoreboard-bar {
+    height: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.scoreboard-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    opacity: .75;
+}
+
+.scoreboard-pct {
+    text-align: right;
+    color: var(--dim);
+    font-size: 10px;
+}
+
 .live-card {
     border: 1px solid var(--border);
     background: var(--bg);
@@ -3285,10 +3382,23 @@ main {
 
 .serie-map-row {
     display: grid;
-    grid-template-columns: 1fr 50px 60px 60px 70px 60px;
+    grid-template-columns: 1fr 46px 54px 54px 62px 74px 60px 56px;
     align-items: center;
     gap: 8px;
     font-size: 10px;
+}
+
+.smr-marcador {
+    color: var(--dim);
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.smr-marcador b {
+    color: var(--text);
+    font-weight: 500;
 }
 
 .smr-name {
