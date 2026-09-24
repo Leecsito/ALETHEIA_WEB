@@ -3697,3 +3697,74 @@ main {
     color: var(--dim);
     font-size: 10px;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CAMINOS DE LA SERIE (secuencia mapa a mapa)
+   ───────────────────────────────────────────────────────────────────────────── */
+.serie-caminos {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.cam-row {
+    display: grid;
+    grid-template-columns: 44px 1fr 56px;
+    align-items: center;
+    gap: 10px;
+    font-size: 10px;
+}
+
+.cam-mark {
+    font-family: var(--mono);
+    letter-spacing: 1px;
+}
+
+.cam-mark.cam-a {
+    color: var(--accent);
+}
+
+.cam-mark.cam-b {
+    color: var(--blue);
+}
+
+.cam-seq {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.cam-step {
+    font-size: 9px;
+    letter-spacing: .5px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--dim);
+    white-space: nowrap;
+}
+
+.cam-step.cam-v {
+    color: var(--accent);
+    border-color: rgba(232, 255, 71, .35);
+}
+
+.cam-step.cam-d {
+    color: var(--blue);
+    border-color: rgba(56, 189, 248, .3);
+}
+
+.cam-arrow {
+    color: var(--dim);
+    font-size: 10px;
+}
+
+.cam-prob {
+    text-align: right;
+    color: var(--dim);
+}

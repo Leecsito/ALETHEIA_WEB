@@ -866,6 +866,29 @@ function renderSerieBanner(data) {
            </div>`
         : '';
 
+    // Caminos de la serie: secuencia mapa a mapa (V = gana A, D = gana B).
+    const caminos = Array.isArray(data.caminos_serie) ? data.caminos_serie : [];
+    const nombresMapas = matchMaps.map(m => m.map_name);
+    const caminosRows = caminos.map(c => {
+        const pasos = (c.camino || []).map((v, i) => {
+            const ganaA = v === 'V';
+            const lbl = (nombresMapas[i] || `M${i + 1}`).toUpperCase();
+            return `<span class="cam-step ${ganaA ? 'cam-v' : 'cam-d'}">${lbl} ${ganaA ? '✓' : '✗'}</span>`;
+        }).join('<span class="cam-arrow">›</span>');
+        return `<div class="cam-row">
+            <span class="cam-mark ${c.equipo === 'a' ? 'cam-a' : 'cam-b'}">${c.marcador}</span>
+            <span class="cam-seq">${pasos}</span>
+            <span class="cam-prob">${(Number(c.prob) * 100).toFixed(1)}%</span>
+        </div>`;
+    }).join('');
+    const caminosBlock = caminos.length
+        ? `<div class="serie-caminos">
+             <div class="sd-title">CAMINOS DE LA SERIE
+               <span class="eco-note">✓ gana ${escapeHtml(current.equipo_a)} · ✗ gana ${escapeHtml(current.equipo_b)}</span></div>
+             ${caminosRows}
+           </div>`
+        : '';
+
     seriesBanner.innerHTML = `
     <div class="sb-team ${favA}">
       <div class="sb-name">EQUIPO A</div>
@@ -887,6 +910,7 @@ function renderSerieBanner(data) {
       <div class="sb-label">PROB. GANAR SERIE</div>
     </div>
     ${distBlock}
+    ${caminosBlock}
     ${mapRows ? `<div class="serie-maps">${mapRows}</div>` : ''}`;
 
     serieNote.innerHTML = `<strong>Serie desde caché</strong> (sin Monte Carlo). Formato <strong>${(data.formato || '').toUpperCase()}</strong> — necesario ganar <strong>${data.mapas_para_ganar}</strong> mapa(s).`;
