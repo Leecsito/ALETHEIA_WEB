@@ -3458,3 +3458,242 @@ main {
 .link-cancel:hover {
     color: var(--red);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ECONOMÍA / RONDAS (micro-eventos por mapa, EN VIVO)
+   ───────────────────────────────────────────────────────────────────────────── */
+.economia-block {
+    display: none;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+}
+
+.economia-block.has-data {
+    display: block;
+}
+
+.eco-head {
+    margin-bottom: 12px;
+}
+
+.eco-title {
+    font-family: var(--display);
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: var(--text);
+}
+
+.eco-note {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    margin-left: 8px;
+}
+
+.eco-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-bottom: 12px;
+}
+
+.eco-team-name {
+    font-family: var(--display);
+    font-size: 14px;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+}
+
+.eco-team-name.eco-a {
+    color: var(--accent);
+}
+
+.eco-team-name.eco-b {
+    color: var(--blue);
+}
+
+.eco-cat,
+.eco-pistol {
+    display: grid;
+    grid-template-columns: 74px 1fr 54px;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+    font-size: 10px;
+}
+
+.eco-pistol {
+    grid-template-columns: 74px 1fr 120px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    margin-bottom: 12px;
+}
+
+.eco-cat-label {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--dim);
+}
+
+.eco-cat-bar {
+    height: 5px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.eco-cat-bar span {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    opacity: .7;
+}
+
+.eco-cat-val {
+    text-align: right;
+    color: var(--text);
+}
+
+.eco-cruce-wrap {
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+}
+
+.eco-cruce-title {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    margin-bottom: 8px;
+}
+
+.eco-cruce-title b {
+    color: var(--text);
+}
+
+.eco-matrix {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 560px;
+}
+
+.eco-mrow {
+    display: grid;
+    grid-template-columns: 74px repeat(4, 1fr);
+    gap: 4px;
+    align-items: center;
+}
+
+.eco-mrow-label {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--dim);
+}
+
+.eco-mcol {
+    font-size: 8px;
+    letter-spacing: .5px;
+    color: var(--dim);
+    text-align: center;
+}
+
+.eco-cell {
+    text-align: center;
+    font-size: 10px;
+    padding: 5px 0;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+}
+
+.eco-cell.eco-hi {
+    color: var(--accent);
+    border-color: rgba(232, 255, 71, .35);
+}
+
+.eco-cell.eco-lo {
+    color: var(--red);
+    border-color: rgba(255, 71, 87, .3);
+}
+
+.eco-cell.eco-dest {
+    border-color: var(--orange);
+    box-shadow: inset 0 0 0 1px var(--orange);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   DISTRIBUCIÓN DE LA SERIE (2-0 / 2-1 / 1-2 / 0-2)
+   ───────────────────────────────────────────────────────────────────────────── */
+.serie-dist {
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--border);
+    padding-top: 12px;
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.sd-title {
+    font-family: var(--display);
+    font-size: 14px;
+    letter-spacing: 2px;
+    color: var(--text);
+    margin-bottom: 6px;
+}
+
+.sd-row {
+    display: grid;
+    grid-template-columns: 54px 1fr 56px;
+    align-items: center;
+    gap: 10px;
+    font-size: 11px;
+}
+
+.sd-row.sd-top .sd-score {
+    font-weight: 500;
+}
+
+.sd-score {
+    font-family: var(--mono);
+    letter-spacing: 1px;
+    color: var(--dim);
+}
+
+.sd-score.sd-a {
+    color: var(--accent);
+}
+
+.sd-score.sd-b {
+    color: var(--blue);
+}
+
+.sd-bar {
+    height: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    overflow: hidden;
+}
+
+.sd-bar span {
+    display: block;
+    height: 100%;
+    opacity: .8;
+}
+
+.sd-bar span.sd-a {
+    background: var(--accent);
+}
+
+.sd-bar span.sd-b {
+    background: var(--blue);
+}
+
+.sd-pct {
+    text-align: right;
+    color: var(--dim);
+    font-size: 10px;
+}

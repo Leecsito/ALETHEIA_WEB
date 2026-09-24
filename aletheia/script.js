@@ -42,6 +42,7 @@ const liveSideAtk = document.getElementById('liveSideAtk');
 const liveSideDef = document.getElementById('liveSideDef');
 const liveCards = document.getElementById('liveCards');
 const liveScoreboard = document.getElementById('liveScoreboard');
+const liveEconomia = document.getElementById('liveEconomia');
 const liveStatus = document.getElementById('liveStatus');
 
 const serieSlots = document.getElementById('serieSlots');
@@ -258,22 +259,27 @@ function simIsStale(s) {
     return false;
 }
 
-// ¿Las filas cacheadas del enfrentamiento actual son anteriores al cambio y no
-// traen `marcadores`? En ese caso conviene re-precalcular para tenerlos.
-function simSinMarcadores() {
-    if (!liveBulk) return false;
+// ¿Qué detalle falta en la caché del enfrentamiento actual? (filas anteriores al
+// cambio, sin `marcadores` o sin `economia`). Sirve para ofrecer RE-PRECALCULAR.
+function detalleFaltante() {
+    const nada = { marcadores: false, economia: false };
+    if (!liveBulk) return nada;
     const filas = Object.values(liveBulk).filter(Boolean);
-    if (!filas.length) return false;
-    return filas.every(p => !Array.isArray(p.marcadores) || !p.marcadores.length);
+    if (!filas.length) return nada;
+    return {
+        marcadores: filas.every(p => !Array.isArray(p.marcadores) || !p.marcadores.length),
+        economia: filas.every(p => !p.economia || typeof p.economia !== 'object'),
+    };
 }
 
 // Cabecera del enfrentamiento seleccionado + botón RE-PRECALCULAR si aplica.
 function renderSimHead(s, needsRepre) {
     const staleModel = simIsStale(s);
-    const sinMarcadores = simSinMarcadores();
+    const falta = detalleFaltante();
     const motivos = [];
     if (staleModel) motivos.push('modelo cambió');
-    if (sinMarcadores) motivos.push('sin marcadores');
+    if (falta.marcadores) motivos.push('sin marcadores');
+    if (falta.economia) motivos.push('sin economía');
     selSimHead.innerHTML = `
     <div class="ss-head-teams">${escapeHtml(s.equipo_a)} <span class="si-vs">vs</span> ${escapeHtml(s.equipo_b)}</div>
     <div class="ss-head-meta">${s.match_id ? 'PARTIDO #' + s.match_id : 'sin id'} · ${s.n_sim ? Number(s.n_sim).toLocaleString() + ' sims' : ''} · modelo ${s.modelo_version || '—'}${needsRepre ? ` · <span style="color:var(--orange)">⚠ RE-PRECALCULAR${motivos.length ? ' (' + motivos.join(', ') + ')' : ''}</span>` : ''}</div>
@@ -298,7 +304,8 @@ async function selectSim(s) {
     await loadLiveBulkForCurrent();
     // Tras leer la caché, puede que las filas sean antiguas (sin marcadores) o
     // de otro modelo: recomputa el motivo de re-precalcular con la info real.
-    renderSimHead(s, simIsStale(s) || simSinMarcadores());
+    const falta = detalleFaltante();
+    renderSimHead(s, simIsStale(s) || falta.marcadores || falta.economia);
     renderLiveMapPicker();
     renderLiveDetail();
     syncSerieBuilder();
@@ -540,10 +547,96 @@ function renderScoreboard(p) {
     <div class="scoreboard-list">${filas}</div>`;
 }
 
+// Categorías de economía en orden (eco -> full-buy).
+const CAT_ECO = [
+    ['eco', 'ECO'],
+    ['semi_eco', 'SEMI-ECO'],
+    ['semi_buy', 'SEMI-BUY'],
+    ['full_buy', 'FULL-BUY'],
+];
+
+// Bloque de economía/ronda por mapa (micro-eventos). `economia` viene del backend
+// (por equipo: win rate por categoría; 16 cruces `cat_a_vs_cat_b`; pistol). Si
+// falta (fila de caché vieja), se oculta sin romper.
+function renderEconomia(p) {
+    if (!liveEconomia) return;
+    const eco = p && p.economia;
+    if (!eco || typeof eco !== 'object' || !eco.cruce) {
+        liveEconomia.className = 'economia-block';
+        liveEconomia.innerHTML = '';
+        return;
+    }
+    const eqA = (current && current.equipo_a) || 'A';
+    const eqB = (current && current.equipo_b) || 'B';
+    const pctOr = v => (v == null || isNaN(Number(v))) ? '—' : `${Math.round(Number(v) * 100)}%`;
+
+    const catCols = datos => CAT_ECO.map(([key, label]) => {
+        const d = (datos && datos[key]) || {};
+        const pv = Number(d.p_gana_ronda);
+        const ancho = isNaN(pv) ? 0 : Math.round(pv * 100);
+        return `<div class="eco-cat">
+            <span class="eco-cat-label">${label}</span>
+            <span class="eco-cat-bar"><span style="width:${ancho}%"></span></span>
+            <span class="eco-cat-val">${pctOr(pv)}</span>
+        </div>`;
+    }).join('');
+
+    const destacados = new Set(['semi_buy_vs_full_buy', 'eco_vs_full_buy']);
+    const colsB = CAT_ECO.map(([, l]) => `<span class="eco-mcol">${l}</span>`).join('');
+    const filasM = CAT_ECO.map(([ra, la]) => {
+        const celdas = CAT_ECO.map(([cb]) => {
+            const d = (eco.cruce || {})[`${ra}_vs_${cb}`] || {};
+            const pv = Number(d.p_gana_a);
+            const txt = isNaN(pv) ? '—' : `${Math.round(pv * 100)}%`;
+            const tono = isNaN(pv) ? '' : (pv >= 0.5 ? 'eco-hi' : 'eco-lo');
+            const dest = destacados.has(`${ra}_vs_${cb}`) ? ' eco-dest' : '';
+            return `<span class="eco-cell ${tono}${dest}">${txt}</span>`;
+        }).join('');
+        return `<div class="eco-mrow"><span class="eco-mrow-label">${la}</span>${celdas}</div>`;
+    }).join('');
+
+    const pistol = eco.pistol || {};
+    const pvPis = Number(pistol.p_gana_a);
+    const anchoPis = isNaN(pvPis) ? 0 : Math.round(pvPis * 100);
+
+    liveEconomia.className = 'economia-block has-data';
+    liveEconomia.innerHTML = `
+    <div class="eco-head">
+      <div class="eco-title">ECONOMÍA / RONDAS
+        <span class="eco-note">estimación condicionada a la P del mapa · no resultado seguro</span>
+      </div>
+    </div>
+    <div class="eco-cols">
+      <div class="eco-team">
+        <div class="eco-team-name eco-a">${escapeHtml(eqA)}</div>
+        ${catCols(eco.equipo_a)}
+      </div>
+      <div class="eco-team">
+        <div class="eco-team-name eco-b">${escapeHtml(eqB)}</div>
+        ${catCols(eco.equipo_b)}
+      </div>
+    </div>
+    <div class="eco-pistol">
+      <span class="eco-cat-label">PISTOL</span>
+      <span class="eco-cat-bar"><span style="width:${anchoPis}%"></span></span>
+      <span class="eco-cat-val">${escapeHtml(eqA)} ${pctOr(pvPis)}</span>
+    </div>
+    <div class="eco-cruce-wrap">
+      <div class="eco-cruce-title">CRUCES · prob. de que <b>${escapeHtml(eqA)}</b> gane la ronda
+        <span class="eco-note">filas = ${escapeHtml(eqA)} · columnas = ${escapeHtml(eqB)}</span>
+      </div>
+      <div class="eco-matrix">
+        <div class="eco-mrow eco-mrow-head"><span class="eco-mrow-label"></span>${colsB}</div>
+        ${filasM}
+      </div>
+    </div>`;
+}
+
 function paintLiveDetail(p, modelVersion, vigente) {
     liveDetailTitle.textContent = `${(liveMap || '').toUpperCase()} · ${liveSide === 'attack' ? 'ATK' : 'DEF'}`;
     const conf = confBand(p);
     renderScoreboard(p);
+    renderEconomia(p);
     liveCards.innerHTML = `
     <div class="live-card">
       <div class="live-card-label" style="color:var(--accent)">${escapeHtml(current.equipo_a)}</div>
@@ -750,6 +843,29 @@ function renderSerieBanner(data) {
     </div>`;
     }).join('');
 
+    // Distribución del marcador de la serie (2-0/2-1/1-2/0-2; o 3-x en Bo5).
+    const dist = (data.resultados_serie && typeof data.resultados_serie === 'object')
+        ? Object.entries(data.resultados_serie).sort((a, b) => b[1] - a[1]) : [];
+    const maxDist = dist.length ? Math.max(...dist.map(d => Number(d[1]) || 0), 0.0001) : 1;
+    const distRows = dist.map(([score, prob], i) => {
+        const pv = Number(prob) || 0;
+        const ancho = Math.max(4, Math.round((pv / maxDist) * 100));
+        const [x, y] = score.split('-').map(Number);
+        const colorA = x > y ? 'sd-a' : 'sd-b';
+        return `<div class="sd-row${i === 0 ? ' sd-top' : ''}">
+            <span class="sd-score ${colorA}">${score}</span>
+            <span class="sd-bar"><span class="${colorA}" style="width:${ancho}%"></span></span>
+            <span class="sd-pct">${(pv * 100).toFixed(1)}%</span>
+        </div>`;
+    }).join('');
+    const distBlock = dist.length
+        ? `<div class="serie-dist">
+             <div class="sd-title">DISTRIBUCIÓN DE LA SERIE
+               <span class="eco-note">marcador final más probable primero</span></div>
+             ${distRows}
+           </div>`
+        : '';
+
     seriesBanner.innerHTML = `
     <div class="sb-team ${favA}">
       <div class="sb-name">EQUIPO A</div>
@@ -770,6 +886,7 @@ function renderSerieBanner(data) {
       <div class="sb-pct">${pct(pb)}%</div>
       <div class="sb-label">PROB. GANAR SERIE</div>
     </div>
+    ${distBlock}
     ${mapRows ? `<div class="serie-maps">${mapRows}</div>` : ''}`;
 
     serieNote.innerHTML = `<strong>Serie desde caché</strong> (sin Monte Carlo). Formato <strong>${(data.formato || '').toUpperCase()}</strong> — necesario ganar <strong>${data.mapas_para_ganar}</strong> mapa(s).`;
