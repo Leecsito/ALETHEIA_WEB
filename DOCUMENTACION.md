@@ -29,13 +29,13 @@ ALETHEIA/
 │   ├── conexion.py           # Gestión centralizada de la base de datos (Turso / SQLite)
 │   ├── aletheia.db           # Base de datos SQLite local (fallback)
 │   └── aletheia_2025.db      # Base de datos SQLite de respaldo
-├── inicio/                   # Componente ETL (carga de Excel). Su /index.html REDIRIGE a /aletheia/
+├── inicio/                   # Componente CARGAR DATOS (ETL: carga de Excel) — /inicio/
 │   ├── __init__.py
 │   ├── inicio.py             # Blueprint Flask (/api/init-db, /api/etl, /api/etl-batch,
 │   │                         #   /api/etl-status/<job_id>, /api/status) — backend ETL
-│   ├── index.html            # Redirect a ../aletheia/index.html (la UI ETL ya no se usa)
-│   ├── style.css             # (huérfano; la UI ETL dejó de servirse)
-│   └── script.js             # (huérfano; la UI ETL dejó de servirse)
+│   ├── index.html            # UI "CARGAR DATOS": subir Excel, INIT DB, log, progreso
+│   ├── style.css
+│   └── script.js
 ├── tablas/                   # Componente Explorador de Tablas (Raw Data)
 │   ├── __init__.py
 │   ├── tablas.py             # Blueprint Flask (/api/tablas, /api/tabla/<nombre>, /api/tablas/reporte)
@@ -140,7 +140,7 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 
 ## 4. Catálogo de Rutas API (Backend)
 
-### 4.1. Módulo ETL / Inicio (`inicio_bp`)
+### 4.1. Módulo CARGAR DATOS / ETL (`inicio_bp`)
 - `POST /api/init-db`: Crea las tablas de la base de datos si no existen y ejecuta migraciones.
 - `POST /api/etl`: Recibe archivos Excel (`vct_partidos`, `vlr_mapas`, `vlr_rondas`, etc.) y procesa la inserción masiva. Responde `202` con un `job_id`; el ETL corre en segundo plano. Archivos globales: `vct_equipos`, `vct_jugadores`, `vct_transacciones`, `vct_stats_agentes`.
 - `POST /api/etl-batch`: Recibe múltiples archivos con su ruta relativa (subida de carpetas por torneo) y ejecuta el ETL de cada torneo. Responde `202` con `job_id`.
@@ -346,7 +346,7 @@ estas tablas). Endpoints adicionales del proxy:
 1. **Rutas Estáticas de Navegación (`backend/app.py`):**
    Las subcarpetas registradas en `FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_preparar', 'header']` se sirven automáticamente en la raíz HTTP:
    - `/` → **redirige a `/aletheia/`**
-   - `/inicio/` o `/inicio/index.html` → **redirige a `/aletheia/`** (la UI ETL ya no se usa)
+   - `/inicio/` o `/inicio/index.html` → **CARGAR DATOS** (ETL: subir Excel, INIT DB, log)
    - `/tablas/` o `/tablas/index.html`
    - `/visualizar/` o `/visualizar/index.html`
    - `/aletheia/` o `/aletheia/index.html` (**EN VIVO**)
@@ -454,18 +454,21 @@ estas tablas). Endpoints adicionales del proxy:
      <script src="../header/header.js"></script>
      ```
    - `header.js` construye el nav (`EN VIVO`, `PREPARAR PARTIDO`, `TABLAS`,
-     `VISUALIZAR`), resuelve las rutas relativas a la raíz y **marca activa** la
-     página actual según `window.location.pathname`.
+     `VISUALIZAR`, `CARGAR DATOS`), resuelve las rutas relativas a la raíz y
+     **marca activa** la página actual según `window.location.pathname`.
    - Config opcional `window.AE_HEADER`:
      - `title` / `badge`: título central (p. ej. `EN VIVO` · `PREDICTOR`).
      - `hidden`: array de ids (`'aletheia'`, `'preparar'`, `'tablas'`,
-       `'visualizar'`) para ocultar entradas concretas.
+       `'visualizar'`, `'datos'`) para ocultar entradas concretas.
    - Todas las clases del componente usan prefijo `ae-` (`.ae-header`, `.ae-nav`,
      `.ae-btn`, `.ae-logo`, `.ae-page-title`…) para no colisionar con los estilos
      propios de cada componente.
    - `header/index.html` es solo una **demo/preview** del componente.
    - **Páginas que lo usan:** `aletheia/`, `aletheia_preparar/`, `tablas/`,
-     `visualizar/`.
+     `visualizar/`, `inicio/` (CARGAR DATOS).
+   - El componente `inicio/` añade su propia barra `.db-bar` bajo el header con
+     el estado de la DB y el botón **INIT DB** (son específicos de CARGAR DATOS,
+     no del header compartido).
 
 ---
 

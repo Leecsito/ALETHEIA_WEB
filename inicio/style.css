@@ -54,36 +54,17 @@ body {
       rgba(0, 0, 0, .07) 2px, rgba(0, 0, 0, .07) 4px);
 }
 
-/* ── HEADER ── */
-header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
+/* ── BARRA DE ESTADO DB (bajo el header reutilizable) ── */
+.db-bar {
+  position: relative;
+  z-index: 5;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 40px;
-  height: 60px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(10, 10, 12, .9);
-  backdrop-filter: blur(12px);
-}
-
-.logo {
-  font-family: var(--display);
-  font-size: 28px;
-  letter-spacing: 4px;
-  color: var(--text);
-}
-
-.logo-a {
-  color: var(--accent);
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
+  justify-content: flex-end;
   gap: 20px;
+  padding: 10px 40px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(10, 10, 12, .7);
 }
 
 .db-status {

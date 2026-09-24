@@ -21,6 +21,7 @@
         { id: 'preparar', label: 'PREPARAR PARTIDO', href: 'aletheia_preparar/index.html' },
         { id: 'tablas', label: 'TABLAS', href: 'tablas/index.html' },
         { id: 'visualizar', label: 'VISUALIZAR', href: 'visualizar/index.html' },
+        { id: 'datos', label: 'CARGAR DATOS', href: 'inicio/index.html' },
     ];
 
     function basePath() {
@@ -39,6 +40,7 @@
         if (seg.includes('/aletheia')) return 'aletheia';
         if (seg.includes('/tablas')) return 'tablas';
         if (seg.includes('/visualizar')) return 'visualizar';
+        if (seg.includes('/inicio')) return 'datos';
         return null;
     }
 
