@@ -15,6 +15,9 @@ Endpoints expuestos (proxy):
     GET  /api/aletheia/prediccion      -> GET  {BASE}/api/prediccion
     GET  /api/aletheia/predicciones    -> GET  {BASE}/api/predicciones
     GET  /api/aletheia/comparacion     -> GET  {BASE}/api/comparacion
+    GET  /api/aletheia/scorecard       -> GET  {BASE}/api/scorecard
+    GET  /api/aletheia/scorecard_agregado -> GET {BASE}/api/scorecard_agregado
+    GET  /api/aletheia/dataset         -> GET  {BASE}/api/dataset
     GET  /api/aletheia/simulaciones    -> GET  {BASE}/api/simulaciones
     POST /api/aletheia/serie           -> POST {BASE}/api/serie
     POST /api/aletheia/borrar          -> POST {BASE}/api/borrar
@@ -213,6 +216,24 @@ def predicciones():
 def comparacion():
     """Proxy GET /api/comparacion (predicho vs. resultado real)."""
     return _passthrough_get('/api/comparacion')
+
+
+@aletheia_bp.route('/api/aletheia/scorecard', methods=['GET'])
+def scorecard():
+    """Proxy GET /api/scorecard (micro-eventos: economía, OT, marcador vs real)."""
+    return _passthrough_get('/api/scorecard')
+
+
+@aletheia_bp.route('/api/aletheia/scorecard_agregado', methods=['GET'])
+def scorecard_agregado():
+    """Proxy GET /api/scorecard_agregado (scorecard sumando todos los partidos)."""
+    return _passthrough_get('/api/scorecard_agregado')
+
+
+@aletheia_bp.route('/api/aletheia/dataset', methods=['GET'])
+def dataset():
+    """Proxy GET /api/dataset (dataset predicción↔resultado para reentrenar)."""
+    return _passthrough_get('/api/dataset')
 
 
 @aletheia_bp.route('/api/aletheia/simulaciones', methods=['GET'])

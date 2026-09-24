@@ -53,6 +53,11 @@ const panelComparacion = document.getElementById('panelComparacion');
 const cmpSummary = document.getElementById('cmpSummary');
 const cmpTableWrap = document.getElementById('cmpTableWrap');
 const cmpStatus = document.getElementById('cmpStatus');
+const scorecardWrap = document.getElementById('scorecardWrap');
+const scorecardAgregadoWrap = document.getElementById('scorecardAgregadoWrap');
+const btnScorecardAgregado = document.getElementById('btnScorecardAgregado');
+const btnExportDataset = document.getElementById('btnExportDataset');
+const cmpToolsStatus = document.getElementById('cmpToolsStatus');
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const pct = v => Math.round((v || 0) * 100);
@@ -309,7 +314,10 @@ async function selectSim(s) {
     renderLiveDetail();
     syncSerieBuilder();
     marcarSeriePendiente();
-    if (panelComparacion && panelComparacion.style.display !== 'none') fetchComparacion();
+    if (panelComparacion && panelComparacion.style.display !== 'none') {
+        fetchComparacion();
+        fetchScorecard();
+    }
     renderSimList();
 }
 
@@ -1023,6 +1031,122 @@ function renderComparison(data) {
     cmpStatus.textContent = `✓ comparación con modelo ${data.modelo_version || '—'}`;
 }
 
+// ─── SCORECARD (micro-eventos predichos vs reales) ──────────────────────────
+async function fetchScorecard() {
+    if (!current || !scorecardWrap) return;
+    scorecardWrap.innerHTML = '';
+    const params = new URLSearchParams();
+    if (current.match_id > 0) params.set('match_id', current.match_id);
+    else { params.set('equipo_a', current.equipo_a); params.set('equipo_b', current.equipo_b); }
+    try {
+        const res = await proxyFetch(`/scorecard?${params.toString()}`);
+        const data = await res.json();
+        if (!data.ok || !data.resumen || !data.resumen.n_mapas) return;
+        renderScorecard(data);
+    } catch { }
+}
+
+function renderScorecard(data) {
+    const r = data.resumen || {};
+    const cards = [
+        { label: 'N MAPAS', val: r.n_mapas },
+        { label: 'MAP ACCURACY', val: fmtRatio(r.map_accuracy) },
+        { label: 'MAP BRIER', val: fmtNum(r.map_brier) },
+        { label: 'OT BRIER', val: fmtNum(r.ot_brier) },
+        { label: 'MARCADOR TOP-1', val: fmtRatio(r.scoreline_top1_hit) },
+        { label: 'ECO MAE', val: r.eco_mae == null ? '—' : `${fmtNum(r.eco_mae)} (n=${r.eco_n})` },
+        { label: 'CRUCE MAE', val: r.cruce_mae == null ? '—' : `${fmtNum(r.cruce_mae)} (n=${r.cruce_n})` },
+    ];
+    const media = arr => (arr && arr.length ? arr.reduce((a, x) => a + x.erro, 0) / arr.length : null);
+    const rows = (data.detalle || []).map(m => {
+        const ecoErr = media(m.economia);
+        const cruceErr = media(m.cruces);
+        const otOk = (m.ot_pred >= 0.5 ? 1 : 0) === m.ot_real ? '✓' : '✕';
+        return `<tr>
+            <td>${escapeHtml(m.map_name)}</td>
+            <td>${m.score_a}-${m.score_b}</td>
+            <td>${pct(m.prob_victoria_a)}%</td>
+            <td>${m.gano_a ? 'A' : 'B'}</td>
+            <td>${pct(m.ot_pred)}% / ${m.ot_real ? 'sí' : 'no'} ${otOk}</td>
+            <td>${pct(m.scoreline_prob)}%</td>
+            <td>${ecoErr == null ? '—' : ecoErr.toFixed(3)}</td>
+            <td>${cruceErr == null ? '—' : cruceErr.toFixed(3)}</td>
+        </tr>`;
+    }).join('');
+    scorecardWrap.innerHTML = `
+    <div class="scorecard-title">SCORECARD · MICRO-EVENTOS
+      <span class="eco-note">predicho vs real · MAE menor = mejor (0-1)</span></div>
+    <div class="cmp-summary scorecard-cards">${cards.map(c =>
+        `<div class="cmp-card"><div class="cmp-card-label">${c.label}</div><div class="cmp-card-val">${c.val == null ? '—' : c.val}</div></div>`).join('')}</div>
+    <div class="cmp-table-wrap"><table class="cmp-table">
+        <thead><tr><th>MAPA</th><th>MARCADOR</th><th>P(A)</th><th>GANÓ</th><th>OT (PRED/REAL)</th><th>P(MARCADOR REAL)</th><th>ECO MAE</th><th>CRUCE MAE</th></tr></thead>
+        <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+// ─── SCORECARD AGREGADO (todos los partidos) + DATASET ──────────────────────
+async function fetchScorecardAgregado() {
+    if (!scorecardAgregadoWrap) return;
+    scorecardAgregadoWrap.innerHTML = '';
+    if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status warn'; cmpToolsStatus.textContent = 'Calculando agregado (puede tardar)...'; }
+    try {
+        const res = await proxyFetch('/scorecard_agregado');
+        const data = await res.json();
+        if (!data.ok || !data.resumen || !data.resumen.n_mapas) {
+            if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status warn'; cmpToolsStatus.textContent = 'Sin partidos jugados con predicción.'; }
+            return;
+        }
+        renderScorecardAgregado(data);
+        if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status ok'; cmpToolsStatus.textContent = `✓ ${data.resumen.n_partidos} partidos / ${data.resumen.n_mapas} mapas`; }
+    } catch (e) {
+        if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status err'; cmpToolsStatus.textContent = `Error: ${e.message}`; }
+    }
+}
+
+function renderScorecardAgregado(data) {
+    const r = data.resumen || {};
+    const cards = [
+        { label: 'PARTIDOS', val: r.n_partidos },
+        { label: 'MAPAS', val: r.n_mapas },
+        { label: 'MAP ACCURACY', val: fmtRatio(r.map_accuracy) },
+        { label: 'MAP BRIER', val: fmtNum(r.map_brier) },
+        { label: 'OT BRIER', val: fmtNum(r.ot_brier) },
+        { label: 'ECO MAE', val: r.eco_mae == null ? '—' : `${fmtNum(r.eco_mae)} (n=${r.eco_n})` },
+        { label: 'CRUCE MAE', val: r.cruce_mae == null ? '—' : `${fmtNum(r.cruce_mae)} (n=${r.cruce_n})` },
+    ];
+    const tabla = (titulo, filas) => `
+    <div class="scorecard-subtitle">${titulo}</div>
+    <div class="cmp-table-wrap"><table class="cmp-table">
+      <thead><tr><th>GRUPO</th><th>N</th><th>PRED MEDIA</th><th>REAL MEDIA</th><th>MAE</th></tr></thead>
+      <tbody>${(filas || []).map(f => `<tr>
+        <td>${escapeHtml(f.grupo)}</td><td>${f.n}</td>
+        <td>${pct(f.pred_media)}%</td><td>${pct(f.real_media)}%</td>
+        <td>${(Number(f.mae) * 100).toFixed(1)}%</td></tr>`).join('')}</tbody>
+    </table></div>`;
+    scorecardAgregadoWrap.innerHTML = `
+    <div class="scorecard-title">SCORECARD AGREGADO
+      <span class="eco-note">predicho vs real, sumando partidos · MAE menor = mejor</span></div>
+    <div class="cmp-summary scorecard-cards">${cards.map(c =>
+        `<div class="cmp-card"><div class="cmp-card-label">${c.label}</div><div class="cmp-card-val">${c.val == null ? '—' : c.val}</div></div>`).join('')}</div>
+    ${tabla('POR CATEGORÍA', data.por_categoria)}
+    ${tabla('POR CRUCE DE COMPRA', data.por_cruce)}`;
+}
+
+async function exportarDataset() {
+    if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status warn'; cmpToolsStatus.textContent = 'Exportando dataset...'; }
+    try {
+        const res = await proxyFetch('/dataset?guardar=1');
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || 'no se pudo exportar');
+        if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status ok'; cmpToolsStatus.textContent = `✓ ${data.n} filas guardadas en ${data.guardado || 'data/dataset_entrenamiento.csv'}`; }
+    } catch (e) {
+        if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status err'; cmpToolsStatus.textContent = `Error: ${e.message}`; }
+    }
+}
+
+if (btnScorecardAgregado) btnScorecardAgregado.addEventListener('click', fetchScorecardAgregado);
+if (btnExportDataset) btnExportDataset.addEventListener('click', exportarDataset);
+
 // ─── PESTAÑAS ─────────────────────────────────────────────────────────────────
 document.querySelectorAll('.live-tab').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -1037,6 +1161,7 @@ document.querySelectorAll('.live-tab').forEach(btn => {
             syncSerieBuilder();
         } else {
             fetchComparacion();
+            fetchScorecard();
         }
     });
 });

@@ -3847,3 +3847,48 @@ main {
 .map-queue-item .qi-left[data-idx] {
     cursor: pointer;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   SCORECARD (micro-eventos predichos vs reales)
+   ───────────────────────────────────────────────────────────────────────────── */
+.scorecard-wrap {
+    margin-top: 20px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+}
+
+.scorecard-title {
+    font-family: var(--display);
+    font-size: 16px;
+    letter-spacing: 2px;
+    color: var(--text);
+    margin-bottom: 12px;
+}
+
+.scorecard-cards {
+    margin-bottom: 14px;
+}
+
+.cmp-tools {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+}
+
+.cmp-tools .btn-nav {
+    cursor: pointer;
+    background: transparent;
+    font-family: var(--mono);
+}
+
+.scorecard-subtitle {
+    font-family: var(--display);
+    font-size: 13px;
+    letter-spacing: 2px;
+    color: var(--dim);
+    margin: 14px 0 8px;
+}

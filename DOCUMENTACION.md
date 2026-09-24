@@ -300,6 +300,19 @@ estas tablas). Endpoints adicionales del proxy:
   ```
   Clasificación: favorito = A si `p_a >= 0.5`; `max(p_a,p_b) < 0.55` → `incierto`;
   si ganó el favorito → `favorito_gano`; si no → `upset`.
+- `GET /api/aletheia/scorecard?match_id=...` → proxy de `GET {BASE}/api/scorecard`.
+  **Scorecard de micro-eventos**: por mapa compara lo predicho con lo real →
+  ganador (`map_accuracy`/`map_brier`/`map_log_loss`), overtime (`ot_brier`),
+  marcador (`scoreline_prob_media`, `scoreline_top1_hit`) y economía (`eco_mae`,
+  `cruce_mae`); `detalle[]` trae por mapa `economia` (por categoría/equipo) y
+  `cruces` (por `cat_a_vs_cat_b`, con `n`). Une `/api/comparacion` y el scorecard
+  en la sección **SCORECARD** del tab COMPARACIÓN.
+- `GET /api/aletheia/scorecard_agregado` → proxy de `GET {BASE}/api/scorecard_agregado`.
+  Scorecard **sumando todos los partidos jugados con predicción**: `resumen` +
+  `por_categoria` y `por_cruce` (`n`, `pred_media`, `real_media`, `mae`).
+- `GET /api/aletheia/dataset[?guardar=1]` → proxy de `GET {BASE}/api/dataset`.
+  Dataset predicción↔resultado por mapa; `guardar=1` lo persiste en
+  `data/dataset_entrenamiento.csv` (memoria de datos para reentrenar).
 - `GET /api/aletheia/simulaciones[?equipo=&match_id=&limite=]` → proxy de
   `GET {BASE}/api/simulaciones`. Lista los enfrentamientos ya preparados:
   ```json
@@ -454,10 +467,18 @@ estas tablas). Endpoints adicionales del proxy:
        que hace `POST /api/precalcular` con `forzar:true` **directo a
        `PREDICT_DIRECTO`** (async: `job_id` + polling de `/api/precalcular/estado`),
        refresca la lista y vuelve a leer la caché.
-     - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra tarjetas resumen
-       (accuracy, brier, log-loss, favoritos_ok, upsets, inciertos) y una tabla de
-       detalle coloreada (verde = favorito ganó, rojo = upset, ámbar = incierto);
-       si el partido no está en la DB: "sin resultado real todavía".
+      - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra tarjetas resumen
+        (accuracy, brier, log-loss, favoritos_ok, upsets, inciertos) y una tabla de
+        detalle coloreada (verde = favorito ganó, rojo = upset, ámbar = incierto);
+        si el partido no está en la DB: "sin resultado real todavía". Debajo se
+        agrega el **SCORECARD** (`GET /api/aletheia/scorecard`): tarjetas de
+        micro-eventos (MAP ACCURACY/BRIER, OT BRIER, MARCADOR TOP-1, ECO MAE,
+        CRUCE MAE) y una tabla por mapa con marcador real, `P(A)`, ganador, OT
+        (pred/real), probabilidad del marcador real y MAE de economía/cruces.
+        Además, botones **SCORECARD AGREGADO** (`GET /api/aletheia/scorecard_agregado`:
+        suma todos los partidos → tablas `por_categoria` y `por_cruce` con
+        pred/real/MAE) y **EXPORTAR DATASET** (`GET /api/aletheia/dataset?guardar=1`:
+        guarda `data/dataset_entrenamiento.csv` en el servidor de predicción).
      - Botón **"← PREPARAR PARTIDO"**.
    - Servicio apagado: cada llamada se maneja con avisos, sin romper la página.
 
