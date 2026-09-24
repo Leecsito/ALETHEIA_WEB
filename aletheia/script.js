@@ -440,10 +440,11 @@ function renderLiveMapPicker() {
     liveMapPicker.innerHTML = '';
     availableMaps.forEach(m => {
         const row = liveBulk ? liveBulk[`${m}|${liveSide}`] : null;
-        const pa = row ? row.prob_victoria_a : null;
+        const am = row && row.analisis_mapa ? row.analisis_mapa : null;
+        const paMap = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
         const ot = row ? row.prob_overtime : null;
-        const meta = pa != null
-            ? `<span class="mqp-prob">${pct(pa)}%</span><span class="mqp-ot">OT ${pct(ot)}%</span>`
+        const meta = (paMap != null && !isNaN(paMap))
+            ? `<span class="mqp-prob">${pct(paMap)}%</span><span class="mqp-ot">OT ${pct(ot)}%</span>`
             : `<span class="mqp-prob">—</span>`;
         const tile = document.createElement('button');
         tile.className = 'mqp-tile' + (m === liveMap ? ' mqp-selected' : '');
@@ -635,28 +636,38 @@ function renderEconomia(p) {
 function paintLiveDetail(p, modelVersion, vigente) {
     liveDetailTitle.textContent = `${(liveMap || '').toUpperCase()} · ${liveSide === 'attack' ? 'ATK' : 'DEF'}`;
     const conf = confBand(p);
+    const am = p && p.analisis_mapa ? p.analisis_mapa : null;
+    const pMapA = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : Number(p.prob_victoria_a);
+    const wrA = (am && am.equipo_a) ? am.equipo_a : null;
+    const wrB = (am && am.equipo_b) ? am.equipo_b : null;
     renderScoreboard(p);
     renderEconomia(p);
     liveCards.innerHTML = `
     <div class="live-card">
-      <div class="live-card-label" style="color:var(--accent)">${escapeHtml(current.equipo_a)}</div>
-      <div class="live-card-val live-a">${pct(p.prob_victoria_a)}%</div>
+      <div class="live-card-label" style="color:var(--accent)">${escapeHtml(current.equipo_a)} · ESTE MAPA</div>
+      <div class="live-card-val live-a">${pct(pMapA)}%</div>
     </div>
     <div class="live-card">
-      <div class="live-card-label" style="color:var(--blue)">${escapeHtml(current.equipo_b)}</div>
-      <div class="live-card-val live-b">${pct(p.prob_victoria_b)}%</div>
+      <div class="live-card-label" style="color:var(--blue)">${escapeHtml(current.equipo_b)} · ESTE MAPA</div>
+      <div class="live-card-val live-b">${pct(1 - pMapA)}%</div>
     </div>
     <div class="live-card">
       <div class="live-card-label">OVERTIME</div>
       <div class="live-card-val live-ot">${pct(p.prob_overtime)}%</div>
     </div>
     <div class="live-card">
-      <div class="live-card-label">CONFIANZA</div>
+      <div class="live-card-label">CONFIANZA (MOTOR)</div>
       <div class="live-card-val">${confBadge(conf) || '<span class="live-card-val">—</span>'}</div>
     </div>
     <div class="live-card">
       <div class="live-card-label">MUESTRAS</div>
       <div class="live-card-val">${p.n_sim ? Number(p.n_sim).toLocaleString() : '—'}</div>
+    </div>
+    <div class="analisis-nota">
+      <b>Análisis por mapa</b> (histórico) · motor: <b>${pct(p.prob_victoria_a)}%</b> (igual en todos los mapas) ·
+      historial en <b>${(liveMap || '').toUpperCase()}</b>:
+      ${escapeHtml(current.equipo_a)} ${wrA ? pct(wrA.winrate) + '% <span style="color:var(--dim)">(n=' + wrA.n + ')</span>' : '—'} ·
+      ${escapeHtml(current.equipo_b)} ${wrB ? pct(wrB.winrate) + '% <span style="color:var(--dim)">(n=' + wrB.n + ')</span>' : '—'}
     </div>`;
     const stale = vigente === false || current.vigente === false;
     liveStatus.className = 'live-status ' + (stale ? 'warn' : 'ok');
@@ -1005,12 +1016,11 @@ document.querySelectorAll('.live-tab').forEach(btn => {
         btn.classList.add('active');
         const tab = btn.dataset.tab;
         panelMapa.style.display = tab === 'mapa' ? 'block' : 'none';
-        panelSerie.style.display = tab === 'serie' ? 'block' : 'none';
+        panelSerie.style.display = tab === 'mapa' ? 'block' : 'none';
         panelComparacion.style.display = tab === 'comparacion' ? 'block' : 'none';
         if (tab === 'mapa') {
             renderLiveMapPicker();
             renderLiveDetail();
-        } else if (tab === 'serie') {
             syncSerieBuilder();
             updateSerie();
         } else {

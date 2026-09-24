@@ -3768,3 +3768,21 @@ main {
     text-align: right;
     color: var(--dim);
 }
+
+/* Nota de análisis por mapa (bajo las tarjetas de detalle) */
+.analisis-nota {
+    grid-column: 1 / -1;
+    font-size: 10px;
+    color: var(--text);
+    line-height: 1.7;
+    border: 1px dashed var(--border);
+    padding: 8px 10px;
+}
+
+.analisis-nota b {
+    color: var(--accent);
+}
+
+.analisis-nota span {
+    color: var(--dim);
+}

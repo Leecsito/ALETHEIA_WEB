@@ -240,8 +240,11 @@ etiqueta siempre como *estimación, no resultado seguro*.
 
 **Detalle añadido (2026-09):** por mapa, `economia` (micro-eventos de economía/
 ronda: `equipo_a`/`equipo_b` con `{n, p_gana_ronda}` por categoría, los 16 cruces
-`cat_a_vs_cat_b` con `{n, p_gana_a}` y `pistol`); y a nivel serie, `resultados_serie`
-(`{"2-0","2-1","1-2","0-2"}` en Bo3, `3-x` en Bo5, suma 1). También los exponen
+`cat_a_vs_cat_b` con `{n, p_gana_a}` y `pistol`) y `analisis_mapa` (winrate
+histórico de cada equipo **en ese mapa** + `p_mapa_a`, una P **por mapa** que
+difiere; es análisis, no la predicción calibrada del motor); a nivel serie,
+`resultados_serie` (`{"2-0","2-1","1-2","0-2"}` en Bo3, `3-x` en Bo5) y
+`caminos_serie` (secuencia mapa a mapa: `V` gana A, `D` gana B). Todo también en
 las lecturas crudas `/api/predicciones` y `/api/prediccion`.
 
 **Semántica de la banda de confianza** (la fija el backend, conservadora):
@@ -403,14 +406,17 @@ estas tablas). Endpoints adicionales del proxy:
        duplicados o preparaciones erróneas).
      - Al elegir una se leen sus filas **UNA vez** (`GET /api/aletheia/predicciones`)
        y se guardan en `liveBulk` (`map|side`).
-     - **MAPA / BANDO:** rejilla de los 13 mapas con P(A) y OT del bando elegido
-       (leídas de `liveBulk`; no llama al servicio en cada clic, solo si falta el
-       dato). Al tocar un mapa muestra `prob_victoria_a/b`, `prob_overtime`,
-       **confianza** (etiqueta con color: alta=verde, media=ámbar, baja=gris) y `n_sim`.
-       Como las filas de `/predicciones` no traen `confianza`, se deriva con la
-       misma regla conservadora del motor sobre `max(p, 1-p)` (≥0.62 alta, ≥0.55
-       media, resto baja); si el backend la manda (`/predecir`, `/serie`,
-       `/prediccion`), se usa la del backend.
+      - **MAPA / SERIE (tab único):** los tabs de la página son `MAPA / SERIE` y
+        `COMPARACIÓN`. **ARMAR SERIE dejó de ser un tab** y ahora es una **sección
+        dentro de `MAPA / SERIE`**, para ver el análisis en un solo lugar.
+      - **Explorador de mapas:** rejilla de los 13 mapas con la **P(A) por mapa**
+        (`analisis_mapa.p_mapa_a`, **difiere por mapa**) y OT del bando elegido
+        (leídas de `liveBulk`; no llama al servicio en cada clic). Al tocar un mapa
+        muestra las tarjetas A/B **por mapa** (`p_mapa_a`), `prob_overtime`,
+        **confianza del motor** (derivada si falta: `max(p,1-p)` ≥0.62 alta, ≥0.55
+        media, resto baja), `n_sim` y una **nota de análisis** con la P del motor
+        (igual en todos los mapas) y el **historial de cada equipo en ese mapa**
+        (`analisis_mapa.equipo_a/b`: `winrate`, `n`).
       - **DISTRIBUCIÓN DE MARCADOR:** bajo las tarjetas se muestra el **marcador
         más probable** (etiquetado como *estimación, no resultado seguro*) y el
         **top-3** con su % (`marcadores[]` viene del backend ordenado por prob desc;
@@ -426,13 +432,15 @@ estas tablas). Endpoints adicionales del proxy:
         `eco_vs_full_buy`. Etiquetado como *estimación condicionada a la P del mapa*.
         Si `economia` falta, el bloque se oculta y se marca **RE-PRECALCULAR**
         junto con `marcadores` (helper `detalleFaltante`).
-      - **ARMAR SERIE (BO1/BO3/BO5):** slots en orden (el último = DECIDER) con bando
-        por mapa; cada cambio hace `POST /api/aletheia/serie` y muestra el banner
-        (`prob_serie_a/b`, `confianza_serie` con color, formato, `mapas_para_ganar`,
-        `n_sim`) al instante. La tabla de mapas de la serie muestra la **confianza
-        por mapa** y el **marcador más probable** de cada mapa. Además, el banner
-        incluye la **distribución del marcador de la serie** (`resultados_serie`:
-        2-0/2-1/1-2/0-2, ordenada por prob desc y resaltando la más probable).
+      - **ARMAR SERIE (BO1/BO3/BO5)** *(sección dentro de `MAPA / SERIE`):* slots en
+        orden (el último = DECIDER) con bando por mapa; cada cambio hace
+        `POST /api/aletheia/serie` y muestra el banner (`prob_serie_a/b`,
+        `confianza_serie` con color, formato, `mapas_para_ganar`, `n_sim`) al
+        instante. La tabla de mapas de la serie muestra la **confianza por mapa** y
+        el **marcador más probable** de cada mapa. El banner incluye además la
+        **distribución de la serie** (`resultados_serie`: 2-0/2-1/1-2/0-2, ordenada
+        por prob desc) y los **caminos de la serie** (`caminos_serie`: la secuencia
+        mapa a mapa, p. ej. `V-D-D` vs `D-V-D` para un 1-2; ✓ gana A, ✗ gana B).
      - **VIGENCIA Y RE-PRECALCULAR:** la web compara `modelo_version` de cada
        enfrentamiento con `GET /api/aletheia/modelo_version` (y usa `vigente` de
        `/api/simulaciones`). Si difiere, o si las filas no traen `marcadores`,
