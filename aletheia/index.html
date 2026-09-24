@@ -45,32 +45,8 @@
                 <button class="live-tab" data-tab="comparacion">COMPARACIÓN</button>
             </div>
 
-            <!-- Tab: mapa / bando (lee de la caché, sin simular) -->
+            <!-- Tab: mapa / serie (lee de la caché, sin simular) -->
             <div class="live-panel" id="panelMapa">
-                <div class="live-controls">
-                    <div class="live-ctl">
-                        <span class="live-ctl-label">BANDO INICIAL <span id="liveTeamALabel"
-                                class="pm-team-a-label"></span></span>
-                        <div class="live-side-toggle">
-                            <button class="qi-side-btn qi-atk-active" id="liveSideAtk">⚔ ATK</button>
-                            <button class="qi-side-btn" id="liveSideDef">🛡 DEF</button>
-                        </div>
-                    </div>
-                    <div class="live-ctl">
-                        <span class="live-ctl-label">MAPA</span>
-                        <span class="live-hint">Toca un mapa · P(A) por mapa (análisis histórico) y OT</span>
-                    </div>
-                </div>
-                <div class="map-quick-picker live-map-picker" id="liveMapPicker"></div>
-                <div class="live-detail-title" id="liveDetailTitle"></div>
-                <div class="live-cards" id="liveCards"></div>
-                <div class="scoreboard-block" id="liveScoreboard"></div>
-                <div class="economia-block" id="liveEconomia"></div>
-                <div class="live-status" id="liveStatus"></div>
-            </div>
-
-            <!-- Tab: armar serie (POST /api/serie, instantáneo) -->
-            <div class="live-panel" id="panelSerie">
                 <div class="mb-header">
                     <div class="mb-title-wrap">
                         <span class="mb-title">ARMAR SERIE</span>
@@ -83,12 +59,42 @@
                     </div>
                     <div class="mb-hint">
                         Elige el formato y toca los mapas para llenar los slots en orden. El último es el
-                        <strong>DECIDER</strong>. El bando se elige por mapa.
+                        <strong>DECIDER</strong>. El bando se elige por mapa. Luego pulsa
+                        <strong>ARMAR SERIE</strong> y haz clic en cada mapa/slot para ver su análisis.
                     </div>
                 </div>
+                <div class="map-quick-picker live-map-picker" id="liveMapPicker"></div>
                 <div class="map-slots" id="serieSlots"></div>
-                <div class="series-banner" id="seriesBanner"></div>
-                <div class="methodology-note" id="serieNote"></div>
+                <div class="serie-actions">
+                    <button class="btn-armar" id="btnArmarSerie">ARMAR SERIE</button>
+                    <span class="live-hint" id="serieNote"></span>
+                </div>
+                <div class="serie-layout">
+                    <div class="serie-col serie-col-mapa">
+                        <div class="live-controls">
+                            <div class="live-ctl">
+                                <span class="live-ctl-label">BANDO INICIAL <span id="liveTeamALabel"
+                                        class="pm-team-a-label"></span></span>
+                                <div class="live-side-toggle">
+                                    <button class="qi-side-btn qi-atk-active" id="liveSideAtk">⚔ ATK</button>
+                                    <button class="qi-side-btn" id="liveSideDef">🛡 DEF</button>
+                                </div>
+                            </div>
+                            <div class="live-ctl">
+                                <span class="live-ctl-label">MAPA (ANÁLISIS)</span>
+                                <span class="live-hint">Haz clic en un mapa o en un slot</span>
+                            </div>
+                        </div>
+                        <div class="live-detail-title" id="liveDetailTitle"></div>
+                        <div class="live-cards" id="liveCards"></div>
+                        <div class="scoreboard-block" id="liveScoreboard"></div>
+                        <div class="economia-block" id="liveEconomia"></div>
+                        <div class="live-status" id="liveStatus"></div>
+                    </div>
+                    <div class="serie-col serie-col-serie">
+                        <div class="series-banner" id="seriesBanner"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Tab: comparación (predicho vs. real) -->

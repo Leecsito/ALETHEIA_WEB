@@ -408,7 +408,13 @@ estas tablas). Endpoints adicionales del proxy:
        y se guardan en `liveBulk` (`map|side`).
       - **MAPA / SERIE (tab único):** los tabs de la página son `MAPA / SERIE` y
         `COMPARACIÓN`. **ARMAR SERIE dejó de ser un tab** y ahora es una **sección
-        dentro de `MAPA / SERIE`**, para ver el análisis en un solo lugar.
+        dentro de `MAPA / SERIE`**. Layout en **dos columnas**: **izquierda** el
+        análisis del **mapa** seleccionado, **derecha** la **serie**. Arriba: selector
+        único de los 13 mapas (agrega mapas a la serie; clic = añadir + ver análisis),
+        los **slots en orden** con bando por mapa, y el botón **ARMAR SERIE**. Al
+        pulsar el botón se calcula la serie; cambiar formato/mapas/lado **invalida** el
+        banner (hay que volver a pulsar). Clic en un mapa del grid o en un slot muestra
+        su análisis a la izquierda, sin subir/bajar.
       - **Explorador de mapas:** rejilla de los 13 mapas con la **P(A) por mapa**
         (`analisis_mapa.p_mapa_a`, **difiere por mapa**) y OT del bando elegido
         (leídas de `liveBulk`; no llama al servicio en cada clic). Al tocar un mapa

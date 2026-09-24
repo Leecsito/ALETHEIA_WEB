@@ -33,7 +33,6 @@ const chkShowStale = document.getElementById('chkShowStale');
 const liveSection = document.getElementById('liveSection');
 const selSimHead = document.getElementById('selSimHead');
 const panelMapa = document.getElementById('panelMapa');
-const panelSerie = document.getElementById('panelSerie');
 
 const liveMapPicker = document.getElementById('liveMapPicker');
 const liveDetailTitle = document.getElementById('liveDetailTitle');
@@ -309,7 +308,7 @@ async function selectSim(s) {
     renderLiveMapPicker();
     renderLiveDetail();
     syncSerieBuilder();
-    updateSerie();
+    marcarSeriePendiente();
     if (panelComparacion && panelComparacion.style.display !== 'none') fetchComparacion();
     renderSimList();
 }
@@ -447,13 +446,19 @@ function renderLiveMapPicker() {
             ? `<span class="mqp-prob">${pct(paMap)}%</span><span class="mqp-ot">OT ${pct(ot)}%</span>`
             : `<span class="mqp-prob">—</span>`;
         const tile = document.createElement('button');
-        tile.className = 'mqp-tile' + (m === liveMap ? ' mqp-selected' : '');
+        const enSerie = matchMaps.some(mm => mm.map_name === m);
+        tile.className = 'mqp-tile' + (m === liveMap ? ' mqp-selected' : '') + (enSerie ? ' mqp-in-serie' : '');
         tile.innerHTML = `
       <img class="mqp-img" src="../multimedia/maps/${m.toUpperCase()}.avif" alt="${m}" onerror="this.style.display='none'">
       <span class="mqp-name">${m.toUpperCase()}</span>
       ${meta}`;
         tile.addEventListener('click', () => {
             liveMap = m;
+            if (!enSerie && matchMaps.length < maxMapsSel) {
+                matchMaps.push({ map_name: m, lado_inicial_a: liveSide });
+                syncSerieBuilder();
+                marcarSeriePendiente();
+            }
             renderLiveMapPicker();
             renderLiveDetail();
         });
@@ -686,7 +691,7 @@ function setLiveSide(side) {
 liveSideAtk.addEventListener('click', () => setLiveSide('attack'));
 liveSideDef.addEventListener('click', () => setLiveSide('defense'));
 
-// ─── SERIE (armador + POST /api/serie, instantáneo) ──────────────────────────
+// ─── SERIE (armador + POST /api/serie, con botón ARMAR SERIE) ────────────────
 document.querySelectorAll('.fmt-btn').forEach(btn => {
     btn.addEventListener('click', () => {
         document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('active'));
@@ -694,9 +699,17 @@ document.querySelectorAll('.fmt-btn').forEach(btn => {
         maxMapsSel = parseInt(btn.dataset.fmt);
         if (matchMaps.length > maxMapsSel) matchMaps = matchMaps.slice(0, maxMapsSel);
         syncSerieBuilder();
-        updateSerie();
+        marcarSeriePendiente();
     });
 });
+
+// Marca la serie como "hay que recalcular" (cambió algo).
+function marcarSeriePendiente() {
+    seriesBanner.innerHTML = '';
+    serieNote.textContent = matchMaps.length
+        ? 'Cambió la serie · pulsa ARMAR SERIE.'
+        : 'Elige los mapas y pulsa ARMAR SERIE.';
+}
 
 function syncSerieBuilder() {
     if (!serieSlots) return;
@@ -706,26 +719,6 @@ function syncSerieBuilder() {
         serieSlots.innerHTML = '<div style="padding:20px;text-align:center;font-size:10px;color:var(--dim);letter-spacing:2px">⏳ CARGANDO MAPAS...</div>';
         return;
     }
-
-    const pickerDiv = document.createElement('div');
-    pickerDiv.className = 'map-quick-picker';
-    availableMaps.forEach(m => {
-        const used = matchMaps.some(mm => mm.map_name === m);
-        const full = matchMaps.length >= maxMapsSel;
-        const tile = document.createElement('button');
-        tile.className = `mqp-tile${used ? ' mqp-used' : ''}${(!used && full) ? ' mqp-full' : ''}`;
-        tile.innerHTML = `
-      <img class="mqp-img" src="../multimedia/maps/${m.toUpperCase()}.avif" alt="${m}" onerror="this.style.display='none'">
-      <span class="mqp-name">${m.toUpperCase()}</span>`;
-        tile.disabled = used || full;
-        if (!used && !full) tile.addEventListener('click', () => {
-            matchMaps.push({ map_name: m, lado_inicial_a: 'attack' });
-            syncSerieBuilder();
-            updateSerie();
-        });
-        pickerDiv.appendChild(tile);
-    });
-    serieSlots.appendChild(pickerDiv);
 
     const queueDiv = document.createElement('div');
     queueDiv.className = 'map-queue';
@@ -748,17 +741,19 @@ function syncSerieBuilder() {
         }
 
         const row = liveBulk ? liveBulk[`${cfg.map_name}|${cfg.lado_inicial_a}`] : null;
-        const pred = row
+        const am = row && row.analisis_mapa ? row.analisis_mapa : null;
+        const paMap = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
+        const pred = (paMap != null && !isNaN(paMap))
             ? `<div class="qi-pred">
-                 <span class="qi-pred-a">${pct(row.prob_victoria_a)}%</span>
-                 <span class="qi-pred-b">${pct(row.prob_victoria_b)}%</span>
+                 <span class="qi-pred-a">${pct(paMap)}%</span>
+                 <span class="qi-pred-b">${pct(1 - paMap)}%</span>
                  <span class="qi-pred-ot">OT ${pct(row.prob_overtime)}%</span>
                </div>`
             : `<span class="qi-pred-none">sin caché</span>`;
 
-        item.className = `map-queue-item${isDecider ? ' qi-decider-row' : ''}`;
+        item.className = `map-queue-item${isDecider ? ' qi-decider-row' : ''}${cfg.map_name === liveMap ? ' qi-selected' : ''}`;
         item.innerHTML = `
-        <div class="qi-left">
+        <div class="qi-left" data-idx="${i}" title="Ver análisis de este mapa">
           <span class="qi-num">0${i + 1}</span>
           <img class="qi-map-img" src="../multimedia/maps/${cfg.map_name.toUpperCase()}.avif" onerror="this.style.display='none'">
           <span class="qi-mapname">${cfg.map_name.toUpperCase()}</span>
@@ -775,23 +770,42 @@ function syncSerieBuilder() {
     }
     serieSlots.appendChild(queueDiv);
 
+    serieSlots.querySelectorAll('.qi-left[data-idx]').forEach(el => {
+        el.addEventListener('click', e => {
+            const cfg = matchMaps[parseInt(e.currentTarget.dataset.idx)];
+            if (!cfg) return;
+            liveMap = cfg.map_name;
+            liveSide = cfg.lado_inicial_a;
+            liveSideAtk.classList.toggle('qi-atk-active', liveSide === 'attack');
+            liveSideDef.classList.toggle('qi-def-active', liveSide === 'defense');
+            serieSlots.querySelectorAll('.map-queue-item').forEach(it => it.classList.remove('qi-selected'));
+            e.currentTarget.parentElement.classList.add('qi-selected');
+            renderLiveMapPicker();
+            renderLiveDetail();
+        });
+    });
     serieSlots.querySelectorAll('.qi-side-btn').forEach(btn => {
         btn.addEventListener('click', e => {
             const idx = parseInt(e.currentTarget.dataset.idx);
             matchMaps[idx].lado_inicial_a = (e.currentTarget.dataset.side === 'atk') ? 'attack' : 'defense';
+            if (matchMaps[idx].map_name === liveMap) liveSide = matchMaps[idx].lado_inicial_a;
             syncSerieBuilder();
-            updateSerie();
+            marcarSeriePendiente();
         });
     });
     serieSlots.querySelectorAll('.qi-remove').forEach(btn => {
         btn.addEventListener('click', e => {
             matchMaps.splice(parseInt(e.currentTarget.dataset.idx), 1);
             syncSerieBuilder();
-            updateSerie();
+            marcarSeriePendiente();
         });
     });
     updateSerieState();
 }
+
+// Botón ARMAR SERIE (recalcula la serie con los mapas elegidos).
+const btnArmarSerie = document.getElementById('btnArmarSerie');
+if (btnArmarSerie) btnArmarSerie.addEventListener('click', () => updateSerie());
 
 function updateSerieState() {
     const n = matchMaps.length;
@@ -1016,13 +1030,11 @@ document.querySelectorAll('.live-tab').forEach(btn => {
         btn.classList.add('active');
         const tab = btn.dataset.tab;
         panelMapa.style.display = tab === 'mapa' ? 'block' : 'none';
-        panelSerie.style.display = tab === 'mapa' ? 'block' : 'none';
         panelComparacion.style.display = tab === 'comparacion' ? 'block' : 'none';
         if (tab === 'mapa') {
             renderLiveMapPicker();
             renderLiveDetail();
             syncSerieBuilder();
-            updateSerie();
         } else {
             fetchComparacion();
         }
