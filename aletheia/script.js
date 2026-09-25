@@ -952,26 +952,29 @@ function renderSerieBanner(data) {
 }
 
 // ─── INFORME PARA EL LLM (prompt + todos los datos + notas) ─────────────────
-const PROMPT_ANALISTA = `Eres un analista de Valorant. Recibes el JSON de abajo con las predicciones y el análisis de un enfrentamiento:
-- P del modelo por mapa (IGUAL en todos: es el motor de rating), P de overtime y confianza.
-- Winrate histórico de cada equipo EN ESE MAPA (con su n) y una P analítica por mapa (difiere por mapa).
-- Marcador más probable (distribución de marcadores) y economía/rondas por categoría y por cruce de compra.
-- Distribución y caminos de la serie.
+const PROMPT_ANALISTA = `Eres un analista de Valorant. Recibes el JSON de abajo con las predicciones y el análisis de un enfrentamiento.
 
 NOMENCLATURA (NO confundir):
-- model_p_a / model_p_b = P del MOTOR para ESE MAPA (igual en todos los mapas de la serie). NO es la P de la serie. Compara el "analítico" (p_mapa_a) SIEMPRE contra model_p_a, nunca contra prob_serie_a / prob_serie_b.
-- prob_serie_a / prob_serie_b = P de GANAR LA SERIE. Úsalas SOLO al hablar de la serie.
-- Nunca cites un "n" que no venga explícito en el bloque que estás describiendo. Si un bloque (p. ej. total_rondas) no trae su propio "n", NO inventes uno: di "sin n reportado" o usa el n_sim general.
+- model_p_a / model_p_b = P del MOTOR para ESE MAPA (igual en todos los mapas). NO es la P de la serie. Compara el "analítico" (p_mapa_a) SIEMPRE contra model_p_a, nunca contra prob_serie_a/prob_serie_b.
+- prob_serie_a / prob_serie_b = P de GANAR LA SERIE; úsalas SOLO para la serie.
+- Nunca menciones un "n" que no venga explícito en el bloque. Si el bloque no trae n (p. ej. total_rondas), NO lo menciones (ni "n alto"): di "sin n reportado" o no lo cites.
+- "certeza alta" = el estimado es estable (muestra grande), NO significa que el resultado vaya a pasar.
 
-REGLAS ESTRICTAS:
-- Razona SOLO con los números del JSON. NO inventes cambios de roster, parches ni contexto externo; si falta un dato, dilo. Si en NOTAS hay contexto, úsalo.
-- Usa n (muestra) para juzgar fiabilidad: con n<10 no afirmes nada fuerte.
-- Identifica: (a) mapas "coinflip" (p≈50% o n bajo); (b) mapas con ventaja real (brecha + n decente); (c) el mapa más propenso a upset; (d) dónde tu lectura difiere del modelo.
-- Salida BREVE (≤150 palabras): 1 línea por mapa y 1 línea de serie. Cita n.
-- Habla en probabilidades; nunca prometas resultados.
-- Reporta además los MERCADOS precalculados (ganador de serie, total de mapas,
-  marcador exacto de serie, total de rondas por mapa, pistol) con una certeza
-  (alta/media/baja) cada uno, y di si el dato alcanza para estimarlo o no.`;
+FORMATO DE SALIDA (respetar el orden):
+1) RESUMEN (directo, sin relleno). Una línea por mercado, con el pick y su %:
+   - Ganador de serie: <equipo> — <X%>
+   - Total de mapas (línea 2.5 en Bo3 / 3.5 en Bo5): Más|Menos — <X%>   (aclara: Menos = 2-0/0-2; Más = 2-1/1-2)
+   - Marcador exacto: <p. ej. 2-1 (PRX)> — <X%>
+   - Pistol por mapa: <MAPA (LADO)>: <equipo> — <X%>
+   - Total de rondas por mapa: <MAPA (LADO)>: Más|Menos de 21.5 — <X%>
+   Al final de cada línea, la certeza entre paréntesis: (alta|media|baja).
+2) ANÁLISIS BREVE: 1 línea por mapa (analítico vs model_p_a y dónde ves el upset) y 1 línea de serie. Máximo 120 palabras.
+3) Si un mercado no es estimable con los datos, escríbelo: "no estimable: <motivo>".
+
+REGLAS:
+- Razona SOLO con los números del JSON. NO inventes cambios de roster, parches ni contexto externo. Si NOTAS trae contexto, úsalo.
+- Con n<10 no afirmes nada fuerte.
+- Habla en probabilidades; nunca prometas resultados.`;
 
 function _slug(t) {
     return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
