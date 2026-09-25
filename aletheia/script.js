@@ -15,6 +15,7 @@ let availableMaps = [];    // 13 mapas del servicio (proxy /api/aletheia/mapas)
 let mapsLoading = false;
 let sims = [];             // enfrentamientos ya preparados (/api/simulaciones)
 let current = null;        // simulación seleccionada
+let ultimaSerie = null;    // último resultado de POST /api/serie (para el informe)
 let liveBulk = null;       // 'map|side' -> fila cacheada (se lee UNA vez)
 let liveSide = 'attack';   // bando inicial de A
 let liveMap = null;        // mapa seleccionado en el panel mapa/bando
@@ -845,6 +846,7 @@ async function updateSerie() {
             serieNote.textContent = `Error: ${data.error || 'no se pudo calcular la serie'}`;
             return;
         }
+        ultimaSerie = data;
         renderSerieBanner(data);
     } catch (e) {
         seriesBanner.innerHTML = '';
@@ -948,6 +950,112 @@ function renderSerieBanner(data) {
 
     serieNote.innerHTML = `<strong>Serie desde caché</strong> (sin Monte Carlo). Formato <strong>${(data.formato || '').toUpperCase()}</strong> — necesario ganar <strong>${data.mapas_para_ganar}</strong> mapa(s).`;
 }
+
+// ─── INFORME PARA EL LLM (prompt + todos los datos + notas) ─────────────────
+const PROMPT_ANALISTA = `Eres un analista de Valorant. Recibes el JSON de abajo con las predicciones y el análisis de un enfrentamiento:
+- P del modelo por mapa (IGUAL en todos: es el motor de rating), P de overtime y confianza.
+- Winrate histórico de cada equipo EN ESE MAPA (con su n) y una P analítica por mapa (difiere por mapa).
+- Marcador más probable (distribución de marcadores) y economía/rondas por categoría y por cruce de compra.
+- Distribución y caminos de la serie.
+
+REGLAS ESTRICTAS:
+- Razona SOLO con los números del JSON. NO inventes cambios de roster, parches ni contexto externo; si falta un dato, dilo. Si en NOTAS hay contexto, úsalo.
+- Usa n (muestra) para juzgar fiabilidad: con n<10 no afirmes nada fuerte.
+- Identifica: (a) mapas "coinflip" (p≈50% o n bajo); (b) mapas con ventaja real (brecha + n decente); (c) el mapa más propenso a upset; (d) dónde tu lectura difiere del modelo.
+- Salida BREVE (≤150 palabras): 1 línea por mapa y 1 línea de serie. Cita n.
+- Habla en probabilidades; nunca prometas resultados.`;
+
+function _slug(t) {
+    return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function _descargarArchivo(nombre, texto) {
+    const blob = new Blob([texto], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombre;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function descargarAnalisis() {
+    if (!current || !liveBulk) {
+        window.alert('Selecciona un enfrentamiento preparado primero.');
+        return;
+    }
+    const filas = Object.values(liveBulk).filter(Boolean);
+    const mapas = filas.map(p => ({
+        map: p.map_name,
+        lado: p.lado_inicial_a,
+        model_p_a: p.prob_victoria_a,
+        model_p_b: p.prob_victoria_b,
+        confianza: confBand(p),
+        ot: p.prob_overtime,
+        analisis_mapa: p.analisis_mapa || null,
+        marcador_top5: (p.marcadores || []).slice(0, 5),
+        economia: p.economia || null,
+        n_sim: p.n_sim,
+    })).sort((a, b) => String(a.map).localeCompare(String(b.map))
+        || String(a.lado).localeCompare(String(b.lado)));
+
+    const payload = {
+        equipo_a: current.equipo_a,
+        equipo_b: current.equipo_b,
+        match_id: current.match_id || 0,
+        modelo_version: current.modelo_version || serviceModelVersion || null,
+        resumen_serie: ultimaSerie ? {
+            formato: ultimaSerie.formato,
+            mapa_seleccionados: (ultimaSerie.mapas || []).map(m => `${m.map_name}|${m.lado_inicial_a}`),
+            prob_serie_a: ultimaSerie.prob_serie_a,
+            prob_serie_b: ultimaSerie.prob_serie_b,
+            confianza_serie: ultimaSerie.confianza_serie,
+            resultados_serie: ultimaSerie.resultados_serie,
+            caminos_serie: ultimaSerie.caminos_serie,
+        } : null,
+        mapas,
+    };
+
+    const notas = `Equipo A (${current.equipo_a}):
+- (roster, cambios recientes, forma, parche, motivación...)
+
+Equipo B (${current.equipo_b}):
+- (roster, cambios recientes, forma, parche, motivación...)
+
+Contexto del torneo / del partido:
+- (fase, formato, descanso, map pool, etc.)`;
+
+    const informe = `# ALETHEIA · Informe para análisis con LLM
+
+Partido: ${current.equipo_a} vs ${current.equipo_b} (#${current.match_id || 0}) · modelo ${payload.modelo_version || '—'}
+Generado: ${new Date().toISOString()}
+
+## 1) PROMPT (general — úsalo tal cual)
+
+${PROMPT_ANALISTA}
+
+## 2) DATOS (JSON)
+
+\`\`\`json
+${JSON.stringify(payload, null, 2)}
+\`\`\`
+
+## 3) NOTAS DE CONTEXTO (rellenar si aplica)
+
+${notas}
+`;
+
+    _descargarArchivo(
+        `aletheia_${_slug(current.equipo_a)}_vs_${_slug(current.equipo_b)}_${current.match_id || 0}.md`,
+        informe
+    );
+    serieNote.textContent = '✓ Informe descargado (prompt + datos + notas).';
+}
+
+const btnDescargarAnalisis = document.getElementById('btnDescargarAnalisis');
+if (btnDescargarAnalisis) btnDescargarAnalisis.addEventListener('click', descargarAnalisis);
 
 // ─── COMPARACIÓN (predicho vs. real) ─────────────────────────────────────────
 async function fetchComparacion() {
