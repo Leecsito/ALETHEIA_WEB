@@ -958,6 +958,11 @@ const PROMPT_ANALISTA = `Eres un analista de Valorant. Recibes el JSON de abajo 
 - Marcador más probable (distribución de marcadores) y economía/rondas por categoría y por cruce de compra.
 - Distribución y caminos de la serie.
 
+NOMENCLATURA (NO confundir):
+- model_p_a / model_p_b = P del MOTOR para ESE MAPA (igual en todos los mapas de la serie). NO es la P de la serie. Compara el "analítico" (p_mapa_a) SIEMPRE contra model_p_a, nunca contra prob_serie_a / prob_serie_b.
+- prob_serie_a / prob_serie_b = P de GANAR LA SERIE. Úsalas SOLO al hablar de la serie.
+- Nunca cites un "n" que no venga explícito en el bloque que estás describiendo. Si un bloque (p. ej. total_rondas) no trae su propio "n", NO inventes uno: di "sin n reportado" o usa el n_sim general.
+
 REGLAS ESTRICTAS:
 - Razona SOLO con los números del JSON. NO inventes cambios de roster, parches ni contexto externo; si falta un dato, dilo. Si en NOTAS hay contexto, úsalo.
 - Usa n (muestra) para juzgar fiabilidad: con n<10 no afirmes nada fuerte.
