@@ -82,7 +82,7 @@ ALETHEIA/
 La conexión a la base de datos se gestiona de forma centralizada a través de las funciones `get_conn()` y `release_conn(conn)` definidas en `backend/conexion.py`.
 
 ### Variables de Entorno Soporta:
-- `TURSO_DATABASE_URL`: URL remota de la base de datos libSQL (por defecto: `libsql://aletheia-leecsito.aws-us-east-1.turso.io`).
+- `TURSO_DATABASE_URL`: URL remota de la base de datos libSQL (por defecto: `libsql://aletheia-laperradeadrelees.aws-us-east-1.turso.io`).
 - `TURSO_AUTH_TOKEN`: Token JWT de autenticación para Turso.
 - `DATABASE_PATH`: Ruta al archivo SQLite local de respaldo (por defecto: `backend/aletheia.db`).
 

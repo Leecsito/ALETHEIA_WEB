@@ -15,11 +15,11 @@ except ImportError:
 # Credenciales de Turso (por defecto la DB en la nube proporcionada)
 TURSO_DATABASE_URL = os.environ.get(
     'TURSO_DATABASE_URL',
-    'libsql://aletheia-leecsito.aws-us-east-1.turso.io'
+    'libsql://aletheia-laperradeadrelees.aws-us-east-1.turso.io'
 )
 TURSO_AUTH_TOKEN = os.environ.get(
     'TURSO_AUTH_TOKEN',
-    'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODY1NTk2ODMsImlkIjoiMDE5ZmY3MjItZDAwMS03OWQwLWJkNWQtM2Y1NGRmMDQ2ZjU3Iiwia2lkIjoiYzhBUjBCOG9VRlF6ekFULWFFV210X3NnS1o2YlNvRHRxdHFGeWtjN2d2cyIsInJpZCI6ImY4ZjYxNWE4LWFhNmEtNGUyMy04ZGJjLTBmNTg0ZDlmNWVhMCJ9.fS0i12h8SYsyP2YpY1fbf-ktNdxQ9FCJdEkmlUqG69n5VGJqhsZ9lKUyAoP-Vho4r9pJwSA8B485gOkgUITIDw'
+    'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTAzNzA4MTgsImlkIjoiMDFhMGRhNjctMzUwMS03Y2Q4LWIzZmMtZDdjZGNkOTA1YjU4Iiwia2lkIjoiZUl5NHJsYll5Qk9CNHpUbDRpekNNbWRiRkI2a09Uc2dhTmFMQ1lrRDB5ZyIsInJpZCI6IjU5NDJlMmExLWY2YWMtNDYyMy1hNmJiLTg0OTUwNTRiMTczNiJ9.UZ0qDE1MQi2qbQHHMhqMl33r0mx0VRZJ26sBObcI0iF-6g7sbcy4UubNUtgOmHsBoTGgJO7D5mFBB619htWmAw'
 )
 
 # Ruta local de reserva (fallback)
