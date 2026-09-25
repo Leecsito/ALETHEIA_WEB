@@ -461,12 +461,15 @@ estas tablas). Endpoints adicionales del proxy:
         por prob desc) y los **caminos de la serie** (`caminos_serie`: la secuencia
         mapa a mapa, p. ej. `V-D-D` vs `D-V-D` para un 1-2; ✓ gana A, ✗ gana B).
       - **DESCARGAR ANÁLISIS (.md):** botón que genera y descarga un `.md` con
-        **(1) el prompt general** para un LLM, **(2) TODOS los datos** del
-        enfrentamiento en JSON (por mapa×lado: P del modelo, OT, confianza,
-        marcador top-5, economía por categoría y cruce, `analisis_mapa` por mapa; y
-        la serie: probabilidades, `resultados_serie`, `caminos_serie`) y **(3) un
-        apartado de notas** para contexto de los equipos. Se usa con el JSON del
-        `liveBulk` (no requiere llamadas extra).
+        **(1) el prompt general** para un LLM, **(2) los MERCADOS** precalculados
+        (ganador de serie, total de mapas Más/Menos, marcador exacto de serie,
+        total de rondas por mapa derivado de la distribución de marcadores, y
+        pistol), **(3) TODOS los datos** en JSON (por mapa×lado: P del modelo, OT,
+        confianza, marcador, `total_rondas`, `pistol`, economía por categoría y
+        cruce, `analisis_mapa`; y la serie: probabilidades, `resultados_serie`,
+        `caminos_serie`) y **(4) un apartado de notas** para contexto de los
+        equipos. Se arma con el `liveBulk` + la última serie (conviene pulsar
+        ARMAR SERIE antes).
      - **VIGENCIA Y RE-PRECALCULAR:** la web compara `modelo_version` de cada
        enfrentamiento con `GET /api/aletheia/modelo_version` (y usa `vigente` de
        `/api/simulaciones`). Si difiere, o si las filas no traen `marcadores`,

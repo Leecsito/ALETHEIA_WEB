@@ -963,7 +963,10 @@ REGLAS ESTRICTAS:
 - Usa n (muestra) para juzgar fiabilidad: con n<10 no afirmes nada fuerte.
 - Identifica: (a) mapas "coinflip" (p≈50% o n bajo); (b) mapas con ventaja real (brecha + n decente); (c) el mapa más propenso a upset; (d) dónde tu lectura difiere del modelo.
 - Salida BREVE (≤150 palabras): 1 línea por mapa y 1 línea de serie. Cita n.
-- Habla en probabilidades; nunca prometas resultados.`;
+- Habla en probabilidades; nunca prometas resultados.
+- Reporta además los MERCADOS precalculados (ganador de serie, total de mapas,
+  marcador exacto de serie, total de rondas por mapa, pistol) con una certeza
+  (alta/media/baja) cada uno, y di si el dato alcanza para estimarlo o no.`;
 
 function _slug(t) {
     return String(t || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
@@ -981,6 +984,61 @@ function _descargarArchivo(nombre, texto) {
     URL.revokeObjectURL(url);
 }
 
+// Mercados: total de rondas por mapa desde la distribución de marcadores.
+function _totalRondas(marcadores) {
+    let exp = 0, mas215 = 0, mas245 = 0, n = 0;
+    for (const m of (marcadores || [])) {
+        const t = (Number(m.marcador_a) || 0) + (Number(m.marcador_b) || 0);
+        const p = Number(m.prob) || 0;
+        exp += t * p; n++;
+        if (t > 21.5) mas215 += p;
+        if (t > 24.5) mas245 += p;
+    }
+    if (!n) return null;
+    return {
+        esperado: Number(exp.toFixed(2)),
+        mas_21_5: Number(mas215.toFixed(4)),
+        menos_21_5: Number((1 - mas215).toFixed(4)),
+        mas_24_5_ot: Number(mas245.toFixed(4)),
+    };
+}
+
+function _totalMapas(serie) {
+    const dist = (serie && serie.resultados_serie) || {};
+    const fmt = String((serie && serie.formato) || '').toLowerCase();
+    const linea = fmt === 'bo5' ? 3.5 : (fmt === 'bo1' ? 1.5 : 2.5);
+    let menos = 0, mas = 0;
+    for (const [k, v] of Object.entries(dist)) {
+        const total = k.split('-').map(Number).reduce((a, b) => a + b, 0);
+        if (total <= Math.floor(linea)) menos += v; else mas += v;
+    }
+    return { linea, menos: Number(menos.toFixed(4)), mas: Number(mas.toFixed(4)) };
+}
+
+function _mercadosTexto(payload) {
+    const m = payload.mercados || {};
+    if (!m.ganador_serie) {
+        return '(Sin serie armada: pulsa ARMAR SERIE antes de descargar para incluir ganador, total de mapas y marcador exacto.)';
+    }
+    const f = v => (v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`);
+    const g = m.ganador_serie, tm = m.total_mapas || {};
+    const out = [];
+    out.push(`Ganador de serie: ${payload.equipo_a} ${f(g.equipo_a)} · ${payload.equipo_b} ${f(g.equipo_b)}`);
+    out.push(`Total de mapas (línea ${tm.linea}): Menos ${f(tm.menos)} · Más ${f(tm.mas)}`);
+    if (m.marcador_exacto_serie) {
+        out.push('Marcador exacto de serie: ' + Object.entries(m.marcador_exacto_serie)
+            .map(([k, v]) => `${k}: ${f(v)}`).join(' · '));
+    }
+    out.push('Total de rondas y pistol por mapa:');
+    for (const mp of (m.por_mapa || [])) {
+        const tr = mp.total_rondas || {}, pis = mp.pistol || {};
+        out.push(`  - ${mp.map} (${mp.lado}): rondas≈${tr.esperado != null ? tr.esperado : '—'}`
+            + ` · >21.5 ${f(tr.mas_21_5)} · OT ${f(tr.mas_24_5_ot)}`
+            + ` · pistol ${payload.equipo_a} ${f(pis.p_a)} (n=${pis.n != null ? pis.n : '—'})`);
+    }
+    return out.join('\n');
+}
+
 function descargarAnalisis() {
     if (!current || !liveBulk) {
         window.alert('Selecciona un enfrentamiento preparado primero.');
@@ -995,11 +1053,25 @@ function descargarAnalisis() {
         confianza: confBand(p),
         ot: p.prob_overtime,
         analisis_mapa: p.analisis_mapa || null,
+        total_rondas: _totalRondas(p.marcadores),
+        pistol: (p.economia && p.economia.pistol)
+            ? { p_a: p.economia.pistol.p_gana_a, n: p.economia.pistol.n } : null,
         marcador_top5: (p.marcadores || []).slice(0, 5),
         economia: p.economia || null,
         n_sim: p.n_sim,
     })).sort((a, b) => String(a.map).localeCompare(String(b.map))
         || String(a.lado).localeCompare(String(b.lado)));
+
+    const mercados = {
+        ganador_serie: ultimaSerie
+            ? { equipo_a: ultimaSerie.prob_serie_a, equipo_b: ultimaSerie.prob_serie_b } : null,
+        total_mapas: ultimaSerie ? _totalMapas(ultimaSerie) : null,
+        marcador_exacto_serie: ultimaSerie ? ultimaSerie.resultados_serie : null,
+        por_mapa: mapas.map(m => ({
+            map: m.map, lado: m.lado,
+            total_rondas: m.total_rondas, pistol: m.pistol, marcador_top5: m.marcador_top5,
+        })),
+    };
 
     const payload = {
         equipo_a: current.equipo_a,
@@ -1015,6 +1087,7 @@ function descargarAnalisis() {
             resultados_serie: ultimaSerie.resultados_serie,
             caminos_serie: ultimaSerie.caminos_serie,
         } : null,
+        mercados,
         mapas,
     };
 
@@ -1036,13 +1109,17 @@ Generado: ${new Date().toISOString()}
 
 ${PROMPT_ANALISTA}
 
-## 2) DATOS (JSON)
+## 2) MERCADOS (estimaciones precalculadas)
+
+${_mercadosTexto(payload)}
+
+## 3) DATOS (JSON)
 
 \`\`\`json
 ${JSON.stringify(payload, null, 2)}
 \`\`\`
 
-## 3) NOTAS DE CONTEXTO (rellenar si aplica)
+## 4) NOTAS DE CONTEXTO (rellenar si aplica)
 
 ${notas}
 `;
@@ -1051,7 +1128,7 @@ ${notas}
         `aletheia_${_slug(current.equipo_a)}_vs_${_slug(current.equipo_b)}_${current.match_id || 0}.md`,
         informe
     );
-    serieNote.textContent = '✓ Informe descargado (prompt + datos + notas).';
+    serieNote.textContent = '✓ Informe descargado (prompt + mercados + datos + notas).';
 }
 
 const btnDescargarAnalisis = document.getElementById('btnDescargarAnalisis');
