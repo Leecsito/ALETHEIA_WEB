@@ -958,7 +958,7 @@ NOMENCLATURA (NO confundir):
 - model_p_a / model_p_b = P del MOTOR para ESE MAPA (igual en todos los mapas). NO es la P de la serie. Compara el "analítico" (p_mapa_a) SIEMPRE contra model_p_a, nunca contra prob_serie_a/prob_serie_b.
 - prob_serie_a / prob_serie_b = P de GANAR LA SERIE; úsalas SOLO para la serie.
 - Nunca menciones un "n" que no venga explícito en el bloque. Si el bloque no trae n (p. ej. total_rondas), NO lo menciones (ni "n alto"): di "sin n reportado" o no lo cites.
-- "certeza alta" = el estimado es estable (muestra grande), NO significa que el resultado vaya a pasar.
+- Certeza (de la RECOMENDACIÓN, no del resultado): **baja** si el pick < 57% (cerca de coinflip); **media** si 57–65%; **alta** si > 65%. EXCEPCIÓN: "marcador exacto" y "pistol" son mercados dispersos → NUNCA "alta" (máximo "media"), aunque la probabilidad sea alta. "certeza alta" = el estimado es estable, NO significa que el resultado vaya a pasar.
 
 FORMATO DE SALIDA (respetar el orden):
 1) RESUMEN (directo, sin relleno). Una línea por mercado, con el pick y su %:
