@@ -968,7 +968,8 @@ FORMATO DE SALIDA (respetar el orden):
    - Pistol por mapa: <MAPA (LADO)>: <equipo> — <X%>
    - Total de rondas por mapa: <MAPA (LADO)>: Más|Menos de 21.5 — <X%>
    Al final de cada línea, la certeza entre paréntesis: (alta|media|baja).
-2) ANÁLISIS BREVE: 1 línea por mapa (analítico vs model_p_a y dónde ves el upset) y 1 línea de serie. Máximo 120 palabras.
+2) ANÁLISIS BREVE: 1 línea por mapa (analítico vs model_p_a) y 1 línea de serie. Máximo 120 palabras.
+   - El mapa MÁS propenso a upset es el de p_mapa_a MÁS CERCANA a 0.50 (el más parejo). Si p_mapa_a se aleja del modelo HACIA el favorito, ese mapa es MENOS propenso a upset (NO es "valor" para el no-favorito).
 3) Si un mercado no es estimable con los datos, escríbelo: "no estimable: <motivo>".
 
 REGLAS:
