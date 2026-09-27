@@ -77,12 +77,12 @@ ALETHEIA/
 ├── eventos/                  # Componente EVENTOS (lista + detalle con partidos/mapas/agentes)
 │   ├── eventos.py            # Blueprint (/api/eventos, /api/evento)
 │   ├── index.html, style.css, script.js
-├── media/                    # Imágenes de equipos/jugadores (no es una página)
+├── media/                    # Enlaces a logos/fotos de vlr.gg (no es una página)
 │   ├── media.py              # Blueprint (/api/media/equipo/<id>, /api/media/jugador/<id>, /api/media/estado)
-├── multimedia/               # Archivos multimedia / imágenes (maps/, agents/, cache/)
+│   └── urls_cache.json       # Caché de ENLACES resueltos (solo texto, ignorada por git)
+├── multimedia/               # Archivos multimedia / imágenes
 │   ├── agents/               # 28 retratos de agentes (.avif, locales, usados en scoreboards)
-│   ├── maps/                 # 13 imágenes de mapas (.avif, locales, usadas en tabs de mapa)
-│   └── cache/                # Caché de logos/fotos descargados de vlr.gg (ignorada por git)
+│   └── maps/                 # 13 imágenes de mapas (.avif, locales, usadas en tabs de mapa)
 ├── wsgi.py                   # Punto de entrada WSGI para Gunicorn
 ├── render.yaml               # Configuración de despliegue en Render
 ├── requirements.txt          # Dependencias de Python
@@ -406,12 +406,13 @@ estas tablas). Endpoints adicionales del proxy:
 - `GET /api/eventos`: lista de **torneos** (no solo los 14 `events`) con `matches`, `teams`, fechas, `event_id`/`event_name` cuando existe alias. Query: `q`.
 - `GET /api/evento?event_id=<id>` o `?torneo=<nombre>`: detalle. Devuelve `evento` (nombre, torneos/aliases, fechas, partidos, equipos), `partidos`, `equipos` (récord y mapas V-D), `mapas` (jugados, picks, bans, deciders; `atk_win_pct`/`def_win_pct` solo si hay `event_map_stats`) y `agentes` (pickrate por mapa desde `event_agent_pickrate`; si el torneo no tiene meta, se **calcula** la presencia % desde `player_stats`).
 
-### 4.9. Módulo Media (`media_bp`) — logos y fotos (no es una página)
-- `GET /api/media/equipo/<team_id>`: sirve el logo del equipo. Si no está en caché, baja **bajo demanda** la página `vlr.gg/team/<id>` (mismo id que `teams.team_id`), extrae la imagen de `team-header-logo` (fallback `og:image`), la descarga a `multimedia/cache/equipos/<id>.<ext>` y la sirve. `404` con `{"ok":false,"estado":"miss|busy|error"}` si no hay imagen.
-- `GET /api/media/jugador/<player_id>`: igual para la foto (`player-header`, fallback `og:image`) en `multimedia/cache/jugadores/`.
-- `GET /api/media/estado`: conteo de cacheadas / sin imagen por tipo.
-- **Reglas:** máximo 2 descargas simultáneas y 0.3 s entre requests a vlr.gg; los "sin imagen"/404 reales se marcan `.miss` y no se reintentan por 24 h; los errores de red **no** se marcan (se reintenta en la próxima visita); tope de 8 MB por imagen.
-- **Precarga opcional:** `python cachear_media.py --equipos|--jugadores|--todo [--limite N] [--delay S]` (1 s entre descargas por defecto). No es necesario: el sitio cachea solo al mostrar cada imagen.
+### 4.9. Módulo Media (`media_bp`) — logos y fotos por enlace (no es una página)
+- **No descarga ni guarda imágenes.** Resuelve el enlace directo desde vlr.gg y hace `302 redirect` para que el navegador cargue la imagen desde el CDN (`owcdn.net`). Solo se cachea el **enlace** en `media/urls_cache.json` (~80 bytes por entidad, regenerable).
+- `GET /api/media/equipo/<team_id>`: si no hay enlace resuelto, baja **bajo demanda** la página `vlr.gg/team/<id>` (mismo id que `teams.team_id`), extrae la imagen de `team-header-logo` (fallback `og:image`) y redirige. `404` con `{"ok":false,"estado":"miss|busy|error"}` si no hay imagen.
+- `GET /api/media/jugador/<player_id>`: igual para la foto (`player-header`, fallback `og:image`).
+- `GET /api/media/estado`: conteo de enlaces resueltos / sin imagen y tamaño del JSON.
+- **Reglas:** máximo 2 resoluciones simultáneas y 0.3 s entre requests a vlr.gg; los "sin imagen"/404 reales se marcan y no se reintentan por 24 h; los errores de red **no** se marcan (se reintenta en la próxima visita); el redirect se cachea 7 días en el navegador.
+- **Precarga opcional de enlaces:** `python cachear_media.py --equipos|--jugadores|--todo [--limite N] [--delay S]` (1 s entre resoluciones por defecto). No es necesario: el sitio resuelve enlaces solo al mostrar cada imagen.
 - El frontend usa el fallback si la imagen falla: **lozenge con siglas** del equipo (colores por hash del nombre) y **avatar con iniciales** del jugador. `VCT.imgError` reintenta una vez a los 3 s y luego quita la imagen.
 
 ---
@@ -617,7 +618,8 @@ estas tablas). Endpoints adicionales del proxy:
      tabs PARTIDOS / EQUIPOS / MAPAS / AGENTES.
    - **Imágenes:** los lozenges de equipo y los avatares de jugador usan
      `VCT.lozenge(name, tag, cls, teamId)` y `VCT.avatar(playerId, nickname, cls)`,
-     que pintan `<img>` desde `/api/media/...` con fallback a siglas/iniciales
+     que pintan `<img src="/api/media/...">`; ese endpoint **redirige al CDN de
+     vlr.gg** (no se guardan imágenes) y el fallback es siglas/iniciales
      (`VCT.imgError`). Los agentes (`VCT.agentIcon`) y mapas (`VCT.mapIcon`)
      usan los `.avif` locales de `multimedia/agents/` y `multimedia/maps/`.
    - **`tablas/` no se toca**: sigue siendo el explorador raw; los componentes
@@ -650,4 +652,4 @@ Al recibir una nueva tarea o solicitud de cambio:
 5. **Recuerda los módulos eliminados**: `predecir/` y `exportar/` no existen; no los referencies.
 6. **Prioriza siempre la tasa de acierto** (principio rector, §1): ningún cambio debe degradar la precisión de las predicciones. Si un cambio la empeora, descártalo o revíerte.
 7. **Para vistas nuevas del estilo VCT**: reutiliza el core `comun/` (`vct.css` + `vct.js`) en lugar de duplicar estilos o helpers; agrega los endpoints en el blueprint del componente correspondiente y registra la carpeta en `FRONTEND_FOLDERS` si es una página nueva. No modifiques `tablas/` para esto.
-8. **Imágenes de equipos/jugadores**: usa siempre `/api/media/equipo/<id>` y `/api/media/jugador/<id>` (caché bajo demanda desde vlr.gg). No scrapees Google Images ni descargues en masa; si necesitas precargar, usa `cachear_media.py` con `--delay`.
+8. **Imágenes de equipos/jugadores**: usa siempre `/api/media/equipo/<id>` y `/api/media/jugador/<id>` (resuelven el enlace y redirigen al CDN; **no se descargan imágenes**). No scrapees Google Images ni guardes archivos de imagen; la caché es solo de enlaces (`media/urls_cache.json`). Si necesitas precargar enlaces, usa `cachear_media.py` con `--delay`.

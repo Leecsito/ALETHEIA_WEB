@@ -1,9 +1,10 @@
 """
-ALETHEIA — Precarga de imágenes (logos de equipos y fotos de jugadores)
+ALETHEIA — Precarga de ENLACES de imágenes (logos de equipos y fotos de jugadores)
 
-Descarga desde vlr.gg y cachea en `multimedia/cache/`. El sitio web ya cachea
-bajo demanda (la primera vez que se muestra una imagen); este script sirve para
-"calentar" la caché de golpe de forma educada (1 request/segundo por defecto).
+NO descarga imágenes: solo resuelve el enlace directo desde vlr.gg y lo guarda
+en `media/urls_cache.json` (~80 bytes por entidad). El sitio web resuelve enlaces
+bajo demanda igualmente; este script sirve para "calentar" la caché de golpe de
+forma educada (1 request/segundo por defecto).
 
 Uso:
     python cachear_media.py --equipos              # equipos con partidos jugados
@@ -77,9 +78,10 @@ def procesar(kind, items, delay):
     for i, item in enumerate(items, 1):
         eid = item['team_id'] if kind == 'equipos' else item['player_id']
         nombre = item.get('team_name') or item.get('nickname') or str(eid)
-        estado, _ = ensure(kind, eid, f"https://www.vlr.gg/{'team' if kind == 'equipos' else 'player'}/{eid}")
+        estado, url = ensure(kind, eid, f"https://www.vlr.gg/{'team' if kind == 'equipos' else 'player'}/{eid}")
         resumen[estado] = resumen.get(estado, 0) + 1
-        print(f"  [{i:>4}/{total}] {kind[:-1]:8} {eid:<7} {nombre[:34]:<34} -> {estado}")
+        detalle = estado if estado != 'ok' else (url or '')
+        print(f"  [{i:>4}/{total}] {eid:<7} {nombre[:32]:<32} -> {detalle}")
         if estado in ('ok', 'error') and delay > 0:
             time.sleep(delay)
     print(f"  resumen {kind}: " + "  ".join(f"{k}={v}" for k, v in resumen.items()))
@@ -87,12 +89,12 @@ def procesar(kind, items, delay):
 
 
 def main():
-    ap = argparse.ArgumentParser(description='Precarga logos/fotos desde vlr.gg a multimedia/cache/.')
-    ap.add_argument('--equipos', action='store_true', help='cachear logos de equipos con partidos')
-    ap.add_argument('--jugadores', action='store_true', help='cachear fotos de jugadores con nickname')
+    ap = argparse.ArgumentParser(description='Resuelve enlaces de logos/fotos desde vlr.gg a media/urls_cache.json.')
+    ap.add_argument('--equipos', action='store_true', help='resolver logos de equipos con partidos')
+    ap.add_argument('--jugadores', action='store_true', help='resolver fotos de jugadores con nickname')
     ap.add_argument('--todo', action='store_true', help='equivale a --equipos --jugadores')
     ap.add_argument('--limite', type=int, default=0, help='máximo de items por grupo (0 = todos)')
-    ap.add_argument('--delay', type=float, default=1.0, help='segundos de espera entre descargas (default 1.0)')
+    ap.add_argument('--delay', type=float, default=1.0, help='segundos de espera entre resoluciones (default 1.0)')
     args = ap.parse_args()
 
     if not (args.equipos or args.jugadores or args.todo):
@@ -105,7 +107,7 @@ def main():
         procesar('equipos', equipos(limite), args.delay)
     if args.jugadores or args.todo:
         procesar('jugadores', jugadores(limite), args.delay)
-    print(f"\nListo en {time.time() - t0:.1f}s. Caché en multimedia/cache/")
+    print(f"\nListo en {time.time() - t0:.1f}s. Enlaces en media/urls_cache.json")
 
 
 if __name__ == '__main__':

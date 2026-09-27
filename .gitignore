@@ -18,5 +18,5 @@ venv/
 # Variables de entorno locales
 .env
 
-# Caché de imágenes descargadas (logos/fotos desde vlr.gg)
-multimedia/cache/
+# Caché de enlaces de imágenes (logos/fotos desde vlr.gg; solo texto, regenerable)
+media/urls_cache.json
