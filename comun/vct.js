@@ -1,0 +1,276 @@
+/**
+ * ALETHEIA — Core JS compartido para los componentes VCT
+ * (partidos/, equipos/, jugadores/, eventos/).
+ *
+ * Expone el objeto global `VCT` con helpers de API, formato y render.
+ */
+
+const VCT = (() => {
+    'use strict';
+
+    const API = `${window.location.origin}/api`;
+
+    /* ── API ─────────────────────────────────────────────────────────────── */
+    async function api(path) {
+        const res = await fetch(`${API}${path}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+    }
+
+    /* ── TEXTO / HTML ────────────────────────────────────────────────────── */
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
+
+    function param(name) {
+        return new URLSearchParams(window.location.search).get(name);
+    }
+
+    function debounce(fn, ms = 300) {
+        let t;
+        return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    }
+
+    /* ── PAÍSES ──────────────────────────────────────────────────────────── */
+    const COUNTRY_NAMES = {
+        'united states': 'us', 'brazil': 'br', 'china': 'cn', 'india': 'in',
+        'indonesia': 'id', 'japan': 'jp', 'philippines': 'ph', 'singapore': 'sg',
+        'south korea': 'kr', 'thailand': 'th', 'türkiye': 'tr', 'turkiye': 'tr',
+        'argentina': 'ar', 'europe': '', 'united kingdom': 'gb', 'canada': 'ca',
+        'australia': 'au', 'france': 'fr', 'germany': 'de', 'spain': 'es',
+        'sweden': 'se', 'poland': 'pl', 'russia': 'ru', 'vietnam': 'vn',
+    };
+
+    function flag(country) {
+        if (!country) return '';
+        const raw = String(country).trim();
+        const code = raw.length === 2 ? raw.toLowerCase() : (COUNTRY_NAMES[raw.toLowerCase()] ?? '');
+        if (!code) return '';
+        const base = 0x1F1E6;
+        return String.fromCodePoint(base + code.charCodeAt(0) - 97, base + code.charCodeAt(1) - 97);
+    }
+
+    function flagHtml(country) {
+        const f = flag(country);
+        return f ? `<span class="v-pl-flag" title="${esc(country)}">${f}</span>` : '';
+    }
+
+    /* ── EQUIPOS ─────────────────────────────────────────────────────────── */
+    function teamColor(name) {
+        let h = 0;
+        for (const ch of String(name || '?')) h = (h * 31 + ch.charCodeAt(0)) % 360;
+        return `hsl(${h} 55% 55%)`;
+    }
+
+    function initials(name) {
+        const s = String(name || '?').replace(/[^a-z0-9]/gi, '');
+        return (s.slice(0, 3) || '?').toUpperCase();
+    }
+
+    function lozenge(name, tag, cls = '') {
+        return `<span class="v-lozenge ${cls}" style="--c:${teamColor(name)}">${esc((tag || initials(name)).slice(0, 4))}</span>`;
+    }
+
+    const teamHref = id => `../equipos/index.html?team=${id}`;
+    const playerHref = id => `../jugadores/index.html?player=${id}`;
+    const matchHref = id => `../partidos/index.html?match=${id}`;
+    const eventHref = (eventId, torneo) => eventId
+        ? `../eventos/index.html?event=${eventId}`
+        : `../eventos/index.html?torneo=${encodeURIComponent(torneo || '')}`;
+
+    function teamCell(id, name, tag) {
+        if (!id || !name) return `<span class="muted">—</span>`;
+        return `<a href="${teamHref(id)}">${esc(tag || initials(name))}</a>`;
+    }
+
+    function playerCell(id, nickname) {
+        if (!id || !nickname) return `<span class="muted">—</span>`;
+        return `<a href="${playerHref(id)}">${esc(nickname)}</a>`;
+    }
+
+    /* ── FECHAS ──────────────────────────────────────────────────────────── */
+    const MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+    const DAYS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+
+    function parseDate(iso) {
+        if (!iso) return null;
+        const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number);
+        if (!y || !m || !d) return null;
+        return new Date(y, m - 1, d);
+    }
+
+    function fmtDate(iso) {
+        const dt = parseDate(iso);
+        if (!dt) return iso || '—';
+        return `${dt.getDate()} ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+    }
+
+    function todayIso() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function dayLabel(iso) {
+        const dt = parseDate(iso);
+        if (!dt) return iso || 'SIN FECHA';
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const diff = Math.round((today - dt) / 86400000);
+        if (diff === 0) return 'HOY';
+        if (diff === 1) return 'AYER';
+        return `${DAYS[dt.getDay()]} ${dt.getDate()} ${MONTHS[dt.getMonth()]}`;
+    }
+
+    /* ── COLORES / MÉTRICAS ──────────────────────────────────────────────── */
+    function ratingClass(v) {
+        v = parseFloat(v);
+        if (isNaN(v)) return 'muted';
+        if (v >= 1.15) return 'v-val-high';
+        if (v >= 1.0) return 'v-val-mid';
+        return 'v-val-low';
+    }
+
+    function wrClass(v) {
+        v = parseFloat(v);
+        if (isNaN(v)) return 'muted';
+        if (v >= 55) return 'v-val-high';
+        if (v >= 45) return 'v-val-mid';
+        return 'v-val-low';
+    }
+
+    function kdColor(k, d) {
+        const v = (k || 0) - (d || 0);
+        if (v > 0) return 'v-val-high';
+        if (v < 0) return 'v-val-low';
+        return 'muted';
+    }
+
+    const fmt = (v, dec = 2) => (v === null || v === undefined || v === '' || isNaN(parseFloat(v)))
+        ? '—' : parseFloat(v).toFixed(dec);
+
+    const pct = (v, dec = 0) => (v === null || v === undefined || v === '' || isNaN(parseFloat(v)))
+        ? '—' : `${parseFloat(v).toFixed(dec)}%`;
+
+    function boLabel(maps) {
+        maps = parseInt(maps) || 0;
+        if (!maps) return '—';
+        if (maps <= 1) return 'BO1';
+        if (maps <= 3) return 'BO3';
+        return 'BO5';
+    }
+
+    const bar = (val, cls = '') => `<div class="v-bar ${cls}"><i style="width:${Math.max(0, Math.min(100, parseFloat(val) || 0))}%"></i></div>`;
+
+    const empty = msg => `<div class="v-empty">${esc(msg)}</div>`;
+
+    function stat(label, value, cls = '') {
+        return `<div class="v-stat"><span class="label">${esc(label)}</span><span class="value ${cls}">${value}</span></div>`;
+    }
+
+    /* ── FILAS DE PARTIDO ────────────────────────────────────────────────── */
+    function matchRow(m, opts = {}) {
+        const winA = m.winner_id && m.winner_id === m.team_a_id;
+        const winB = m.winner_id && m.winner_id === m.team_b_id;
+        const done = !!m.winner_id;
+        const maps = m.maps_played || 0;
+        const href = matchHref(m.match_id);
+        const linkOpen = opts.noLink ? '<div class="v-match no-link">' : `<div class="v-match" data-href="${href}">`;
+
+        return `
+        ${linkOpen}
+            <div class="v-match-when">
+                <b>${boLabel(maps)}</b>
+                <span>${maps} MAPA${maps === 1 ? '' : 'S'}</span>
+            </div>
+            <div class="v-match-teams">
+                <div class="v-mt ${winA ? 'win' : ''}">
+                    ${lozenge(m.team_a, m.team_a_tag)}
+                    <span class="v-mt-name">${esc(m.team_a || 'TBD')}</span>
+                    <span class="v-mt-score">${m.score_a ?? '-'}</span>
+                </div>
+                <div class="v-mt ${winB ? 'win' : ''}">
+                    ${lozenge(m.team_b, m.team_b_tag || (m.team_b ? null : 'TBD'))}
+                    <span class="v-mt-name">${esc(m.team_b || 'TBD')}</span>
+                    <span class="v-mt-score">${m.score_b ?? '-'}</span>
+                </div>
+            </div>
+            <div class="v-match-status">
+                ${done ? '<span class="v-pill done">FINALIZADO</span>' : '<span class="v-pill soon">PENDIENTE</span>'}
+            </div>
+            <div class="v-match-meta">
+                <a class="v-event-link" href="${eventHref(m.event_id, m.tournament)}">${esc(m.event_name || m.tournament || '—')}</a>
+                <span class="v-phase">${esc(m.phase || '')}</span>
+            </div>
+        </div>`;
+    }
+
+    function renderMatchList(container, matches, opts = {}) {
+        if (!container) return;
+        if (!matches || !matches.length) {
+            container.innerHTML = empty('Sin partidos.');
+            return;
+        }
+        let html = '';
+        let current = null;
+        const hoy = todayIso();
+        for (const m of matches) {
+            const key = m.match_date || '';
+            if (key !== current) {
+                current = key;
+                html += `<div class="v-day${key === hoy ? ' today' : ''}">
+                    <b>${dayLabel(key)}</b><span>${key ? fmtDate(key) : ''}</span>
+                </div>`;
+            }
+            html += matchRow(m, opts);
+        }
+        container.innerHTML = html;
+    }
+
+    /* ── NAVEGACIÓN / UI ─────────────────────────────────────────────────── */
+    function bindLinks(root = document) {
+        root.addEventListener('click', e => {
+            if (e.target.closest('a')) return;
+            const el = e.target.closest('[data-href]');
+            if (el && !el.classList.contains('no-link')) window.location.href = el.dataset.href;
+        });
+    }
+
+    function loading(show) {
+        const el = document.getElementById('vLoading');
+        if (el) el.classList.toggle('hidden', !show);
+    }
+
+    function tabs(root, onSelect) {
+        const buttons = root.querySelectorAll('button[data-tab]');
+        buttons.forEach(btn => btn.addEventListener('click', () => {
+            buttons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.v-tab-panel').forEach(p => p.classList.remove('active'));
+            const panel = document.getElementById(`tab-${btn.dataset.tab}`);
+            if (panel) panel.classList.add('active');
+            if (onSelect) onSelect(btn.dataset.tab);
+        }));
+    }
+
+    function activateTab(name) {
+        const btn = document.querySelector(`button[data-tab="${name}"]`);
+        if (btn) btn.click();
+    }
+
+    function showError(container, err) {
+        if (container) container.innerHTML = empty(`Error: ${err.message || err}`);
+        console.error(err);
+    }
+
+    return {
+        API, api, esc, param, debounce,
+        flag, flagHtml, teamColor, initials, lozenge,
+        teamHref, playerHref, matchHref, eventHref,
+        teamCell, playerCell,
+        parseDate, fmtDate, todayIso, dayLabel,
+        ratingClass, wrClass, kdColor, fmt, pct, boLabel, bar, empty, stat,
+        matchRow, renderMatchList,
+        bindLinks, loading, tabs, activateTab, showError,
+    };
+})();

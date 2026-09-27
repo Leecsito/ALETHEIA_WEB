@@ -1,0 +1,33 @@
+/* ALETHEIA — Componente JUGADORES (ajustes propios) */
+
+#vistaDetalle .v-banner { border-left: 3px solid var(--purple); }
+
+.v-player-hero { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+
+.v-agent-role {
+    display: inline-block;
+    margin-left: 8px;
+    padding: 1px 7px;
+    font-size: 9px;
+    letter-spacing: 1px;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    text-transform: uppercase;
+}
+
+.v-result {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    line-height: 20px;
+    text-align: center;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.v-result.win { background: rgba(74, 222, 128, .15); color: var(--green); border: 1px solid rgba(74, 222, 128, .35); }
+.v-result.loss { background: rgba(255, 71, 87, .12); color: var(--accent2); border: 1px solid rgba(255, 71, 87, .35); }
+
+.v-use-bar { display: flex; align-items: center; gap: 8px; min-width: 130px; }
+.v-use-bar .v-bar { flex: 1; }
+.v-use-bar span { color: var(--dim); font-size: 10px; }

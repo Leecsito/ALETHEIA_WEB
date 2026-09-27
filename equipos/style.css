@@ -1,0 +1,40 @@
+/* ALETHEIA — Componente EQUIPOS (ajustes propios) */
+
+.v-team-grid-card .v-card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.v-team-grid-card .record {
+    font-family: var(--display);
+    font-size: 24px;
+    letter-spacing: 2px;
+}
+
+.v-team-grid-card .record small { color: var(--dim); font-size: 14px; }
+
+.v-team-hero {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+
+.v-team-hero .v-record { text-align: right; margin-left: auto; }
+
+#vistaDetalle .v-banner { border-left: 3px solid var(--c, var(--accent)); }
+
+.v-roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px; }
+
+.v-dos-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .v-dos-col { grid-template-columns: 1fr; }
+}

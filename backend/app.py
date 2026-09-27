@@ -25,8 +25,13 @@ from inicio    import inicio_bp
 from tablas    import tablas_bp
 from visualizar import visualizar_bp
 from aletheia import aletheia_bp
+from partidos  import partidos_bp
+from equipos   import equipos_bp
+from jugadores import jugadores_bp
+from eventos   import eventos_bp
 
-FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_preparar', 'header']
+FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_preparar', 'header',
+                    'partidos', 'equipos', 'jugadores', 'eventos']
 
 # static_folder=ROOT sirve automáticamente CSS/JS/imágenes desde la raíz del proyecto
 app = Flask(__name__, static_folder=ROOT, static_url_path='')
@@ -36,6 +41,10 @@ app.register_blueprint(inicio_bp)
 app.register_blueprint(tablas_bp)
 app.register_blueprint(visualizar_bp)
 app.register_blueprint(aletheia_bp)
+app.register_blueprint(partidos_bp)
+app.register_blueprint(equipos_bp)
+app.register_blueprint(jugadores_bp)
+app.register_blueprint(eventos_bp)
 
 # -- RUTAS PARA SERVIR LAS PÁGINAS HTML --
 @app.route('/')

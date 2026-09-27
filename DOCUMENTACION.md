@@ -62,6 +62,21 @@ ALETHEIA/
 │   ├── index.html            # Demo/preview del componente
 │   ├── header.css            # Estilos del header (clases `ae-*`)
 │   └── header.js             # Inyecta el header en `#aeHeaderMount` y marca el nav activo
+├── comun/                    # Core visual VCT compartido (no es una página)
+│   ├── vct.css               # Design system de los componentes VCT (clases `v-*`)
+│   └── vct.js                # Helpers globales `VCT` (API, formato, filas de partido, tabs)
+├── partidos/                 # Componente PARTIDOS estilo vlr.gg (lista + detalle)
+│   ├── partidos.py           # Blueprint (/api/partidos, /api/partidos/filtros, /api/partido/<id>)
+│   ├── index.html, style.css, script.js
+├── equipos/                  # Componente EQUIPOS (grid + detalle con roster/tabs)
+│   ├── equipos.py            # Blueprint (/api/equipos, /api/equipo/<id>)
+│   ├── index.html, style.css, script.js
+├── jugadores/                # Componente JUGADORES (lista + detalle con agentes)
+│   ├── jugadores.py          # Blueprint (/api/jugadores, /api/jugador/<id>)
+│   ├── index.html, style.css, script.js
+├── eventos/                  # Componente EVENTOS (lista + detalle con partidos/mapas/agentes)
+│   ├── eventos.py            # Blueprint (/api/eventos, /api/evento)
+│   ├── index.html, style.css, script.js
 ├── multimedia/               # Archivos multimedia / imágenes (maps/, agents/)
 ├── wsgi.py                   # Punto de entrada WSGI para Gunicorn
 ├── render.yaml               # Configuración de despliegue en Render
@@ -127,6 +142,14 @@ La conexión a la base de datos se gestiona de forma centralizada a través de l
 13. **`player_agent_stats`**: Rendimiento agregado por jugador y agente (ventana temporal).
     - `id` (INTEGER, PK AUTO), `player_id` (FK players), `agent` (TEXT), `date_start`/`date_end` (TEXT `YYYY-MM-DD`), `use_count`, `rnd`, `rating`, `acs`, `kd`, `kast`, `adr`, `kpr`, `apr`, `fk_fd`, `k`, `d`, `a`, `fk`, `fd`. `UNIQUE(player_id, agent, date_start, date_end)`.
     - Fuente: `vct_stats_agentes.xlsx` (global). El ETL hace UPSERT por `(player_id, agent, date_start, date_end)` (idempotente) y crea `players` stub si el id no existe.
+
+**4 tablas + 1 vista de EVENTOS/META** (las escribe el ETL; las usan los componentes `eventos/` y `partidos/`):
+
+14. **`events`**: catálogo de eventos (`event_id` de vlr.gg, `event_name`). Fuente: `vct_evento_map_stats` / `vct_evento_agent_pickrate`.
+15. **`event_map_stats`**: meta de mapas por evento. PK `(event_id, map_name)`; `matches_played`, `atk_win_pct`, `def_win_pct`.
+16. **`event_agent_pickrate`**: pickrate de agentes por evento y mapa. PK `(event_id, map_name, agent_name)`; `pick_pct`.
+17. **`tournament_aliases`**: alias `tournament_name` → `event_id` (para cruzar `matches.tournament` con `events`).
+- **Vista `v_matches_events`**: `matches` + `event_id` resuelto por alias o por nombre exacto (LOWER/TRIM). Es la base de los listados de `partidos/` y `eventos/`. **Ojo:** solo 588/1098 partidos resuelven `event_id` (los torneos 2025 y Champions/Masters no tienen evento cargado); `event_name` puede venir `NULL`.
 
 **2 tablas del servicio ALETHEIA_PREDICT** (ALETHEIA **solo las consulta/muestra**; las crea y escribe el servicio externo). `match_id` es el id del partido de **vlr.gg** (ej. `753455`) y es el mismo para todo el partido.
 
@@ -361,22 +384,40 @@ estas tablas). Endpoints adicionales del proxy:
    `GET /api/aletheia/modelo_version`; si difiere, esas filas quedan
    `vigente:false` y la web marca **RE-PREPARAR** (que envía `forzar:true`).
 
+### 4.5. Módulo Partidos (`partidos_bp`) — componente `/partidos/`
+- `GET /api/partidos`: lista paginada estilo vlr.gg. Query: `page`, `limit` (máx 200, def 60), `q` (equipo/sigla/torneo/fase), `torneo` (nombre exacto), `year`, `event_id`, `orden` (`recientes|antiguos`). Cada fila trae equipos con tag/país, `event_id`/`event_name` resueltos y `maps_played`.
+- `GET /api/partidos/filtros`: `torneos` (30, con `event_id`, `n`, fechas) y `years` (2025/2026) para los selects.
+- `GET /api/partido/<match_id>`: detalle completo → `partido` (header), `veto` (ordenado), `maps[]` y, anidado por mapa, `rounds[]` (timeline de rondas), `players[]` (scoreboard agregado de los 2 lados: K/D/A, rating, ACS, KAST, ADR, HS%, FK/FD) y `economy[]` (pistol/eco/semi-eco/semi-buy/full-buy). `404` si no existe.
+
+### 4.6. Módulo Equipos (`equipos_bp`) — componente `/equipos/`
+- `GET /api/equipos`: equipos con `matches`, `wins`, fechas y `regiones` (para chips). Query: `q`, `region`. Solo equipos con partidos jugados.
+- `GET /api/equipo/<team_id>`: `equipo` (info), `record` (V-D), `roster` (players con `team_id`), `transacciones` (roster_transactions, últimas 80), `partidos` (últimos 120 con evento), `jugadores` (promedios por jugador del equipo), `mapas` (jugados/ganados por mapa + avg rondas) y `eventos` (torneos jugados con récord).
+
+### 4.7. Módulo Jugadores (`jugadores_bp`) — componente `/jugadores/`
+- `GET /api/jugadores`: jugadores con stats (JOIN `player_stats`), nickname obligatorio. Query: `q` (nick/real/equipo), `orden` (`rating|acs|kd|matches|nombre`, allowlist).
+- `GET /api/jugador/<player_id>`: `jugador` (info + equipo actual), `totales`, `multikills` (k2..k5, v1..v5, plants, defuses), `agentes` (**una fila por agente con la ventana temporal más amplia** de `player_agent_stats` + `role` de `agents`), `partidos` (últimos 30 agrupados por partido con rival/resultado), `mapas` (rendimiento por mapa) y `equipos` (historial de `roster_transactions`).
+
+### 4.8. Módulo Eventos (`eventos_bp`) — componente `/eventos/`
+- `GET /api/eventos`: lista de **torneos** (no solo los 14 `events`) con `matches`, `teams`, fechas, `event_id`/`event_name` cuando existe alias. Query: `q`.
+- `GET /api/evento?event_id=<id>` o `?torneo=<nombre>`: detalle. Devuelve `evento` (nombre, torneos/aliases, fechas, partidos, equipos), `partidos`, `equipos` (récord y mapas V-D), `mapas` (jugados, picks, bans, deciders; `atk_win_pct`/`def_win_pct` solo si hay `event_map_stats`) y `agentes` (pickrate por mapa desde `event_agent_pickrate`; si el torneo no tiene meta, se **calcula** la presencia % desde `player_stats`).
+
 ---
 
 ## 5. Estructura y Reglas del Frontend
 
 1. **Rutas Estáticas de Navegación (`backend/app.py`):**
-   Las subcarpetas registradas en `FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_preparar', 'header']` se sirven automáticamente en la raíz HTTP:
+   Las subcarpetas registradas en `FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_preparar', 'header', 'partidos', 'equipos', 'jugadores', 'eventos']` se sirven automáticamente en la raíz HTTP:
    - `/` → **redirige a `/aletheia/`**
    - `/inicio/` o `/inicio/index.html` → **CARGAR DATOS** (ETL: subir Excel, INIT DB, log)
    - `/tablas/` o `/tablas/index.html`
    - `/visualizar/` o `/visualizar/index.html`
    - `/aletheia/` o `/aletheia/index.html` (**EN VIVO**)
    - `/aletheia_preparar/` o `/aletheia_preparar/index.html` (**PREPARAR**)
+   - `/partidos/`, `/equipos/`, `/jugadores/`, `/eventos/` → **componentes VCT** (lista + detalle en la misma página vía query param: `?match=`, `?team=`, `?player=`, `?event=`/`?torneo=`)
    - `/header/` o `/header/index.html` (demo del componente header)
-   - `header/header.css` y `header/header.js` se sirven como estáticos desde la raíz
-     (`static_url_path=''`).
+   - `header/header.css`, `header/header.js`, `comun/vct.css` y `comun/vct.js` se sirven como estáticos desde la raíz (`static_url_path=''`).
    > Los módulos `predecir/` y `exportar/` **ya no existen**.
+   > `comun/` **no es una página**: es el core visual compartido (CSS `v-*` + objeto JS global `VCT`); no está en `FRONTEND_FOLDERS` y no debe registrarse blueprint.
 
 2. **Configuración de Host API Dinámico:**
    En todos los archivos JavaScript del frontend (`script.js`), la variable `API` está configurada como:
@@ -515,22 +556,54 @@ estas tablas). Endpoints adicionales del proxy:
      <script>window.AE_HEADER = { title: 'EN VIVO', badge: 'PREDICTOR' };</script>
      <script src="../header/header.js"></script>
      ```
-   - `header.js` construye el nav (`EN VIVO`, `PREPARAR PARTIDO`, `TABLAS`,
+   - `header.js` construye el nav (`EN VIVO`, `PREPARAR PARTIDO`, `VCT`, `TABLAS`,
      `VISUALIZAR`, `CARGAR DATOS`), resuelve las rutas relativas a la raíz y
      **marca activa** la página actual según `window.location.pathname`.
+     La entrada `VCT` apunta a `/partidos/` y queda activa en los 4 componentes
+     VCT (`partidos`, `equipos`, `jugadores`, `eventos`).
    - Config opcional `window.AE_HEADER`:
      - `title` / `badge`: título central (p. ej. `EN VIVO` · `PREDICTOR`).
-     - `hidden`: array de ids (`'aletheia'`, `'preparar'`, `'tablas'`,
+     - `hidden`: array de ids (`'aletheia'`, `'preparar'`, `'vct'`, `'tablas'`,
        `'visualizar'`, `'datos'`) para ocultar entradas concretas.
    - Todas las clases del componente usan prefijo `ae-` (`.ae-header`, `.ae-nav`,
      `.ae-btn`, `.ae-logo`, `.ae-page-title`…) para no colisionar con los estilos
      propios de cada componente.
    - `header/index.html` es solo una **demo/preview** del componente.
    - **Páginas que lo usan:** `aletheia/`, `aletheia_preparar/`, `tablas/`,
-     `visualizar/`, `inicio/` (CARGAR DATOS).
+     `visualizar/`, `inicio/` (CARGAR DATOS), `partidos/`, `equipos/`,
+     `jugadores/` y `eventos/`.
    - El componente `inicio/` añade su propia barra `.db-bar` bajo el header con
      el estado de la DB y el botón **INIT DB** (son específicos de CARGAR DATOS,
      no del header compartido).
+
+6. **Componentes VCT (`partidos/`, `equipos/`, `jugadores/`, `eventos/`):**
+   Navegación visual estilo vlr.gg (densa, oscura, sin depender de tablas raw).
+   - Cada página incluye, bajo el header, una **sub-navegación propia**
+     `.vct-tabs` (PARTIDOS · EQUIPOS · JUGADORES · EVENTOS) con enlaces
+     relativos entre componentes.
+   - **Lista + detalle en la misma página** mediante query param
+     (`?match=753444`, `?team=120`, `?player=3885`, `?event=2977` o
+     `?torneo=Valorant%20Champions%202026`). El detalle se pinta en
+     `#vistaDetalle` y oculta `#vistaLista`; "← VOLVER" es un enlace normal
+     (sin history API) para que el botón atrás del navegador funcione.
+   - **Core compartido `comun/`:** `vct.css` define tokens y clases `v-*`
+     (filas de partido, banners, tabs internas, scoreboards, barras, chips);
+     `vct.js` expone el global `VCT` (`VCT.api`, `VCT.matchRow`,
+     `VCT.renderMatchList`, `VCT.lozenge`, `VCT.flag`, `VCT.tabs`,
+     `VCT.bindLinks`, formateadores…). Las páginas cargan
+     `../comun/vct.css` + `../comun/vct.js` **antes** de su `script.js`.
+   - `partidos/`: lista con filtros (búsqueda, torneo, año, orden) + paginación;
+     detalle con veto, tabs por mapa, timeline de rondas (color = equipo,
+     tooltip = tipo), economía por categoría y scoreboard por equipo.
+   - `equipos/`: grid con récord/winrate; detalle con tabs RESUMEN / ROSTER /
+     PARTIDOS / ESTADÍSTICAS.
+   - `jugadores/`: tabla ordenable (server-side) y detalle con tabs AGENTES /
+     PARTIDOS / MAPAS / EQUIPOS (la tabla de agentes usa la ventana temporal
+     más amplia de `player_agent_stats`).
+   - `eventos/`: lista de torneos (con `event_id` cuando existe) y detalle con
+     tabs PARTIDOS / EQUIPOS / MAPAS / AGENTES.
+   - **`tablas/` no se toca**: sigue siendo el explorador raw; los componentes
+     VCT son la vista "bonita" sobre los mismos datos.
 
 ---
 
@@ -558,3 +631,4 @@ Al recibir una nueva tarea o solicitud de cambio:
 4. **No dupliques el header**: usa el componente `header/` (`#aeHeaderMount` + `header.js`).
 5. **Recuerda los módulos eliminados**: `predecir/` y `exportar/` no existen; no los referencies.
 6. **Prioriza siempre la tasa de acierto** (principio rector, §1): ningún cambio debe degradar la precisión de las predicciones. Si un cambio la empeora, descártalo o revíerte.
+7. **Para vistas nuevas del estilo VCT**: reutiliza el core `comun/` (`vct.css` + `vct.js`) en lugar de duplicar estilos o helpers; agrega los endpoints en el blueprint del componente correspondiente y registra la carpeta en `FRONTEND_FOLDERS` si es una página nueva. No modifiques `tablas/` para esto.

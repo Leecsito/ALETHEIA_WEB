@@ -19,6 +19,7 @@
     const ITEMS = [
         { id: 'aletheia', label: 'EN VIVO', href: 'aletheia/index.html' },
         { id: 'preparar', label: 'PREPARAR PARTIDO', href: 'aletheia_preparar/index.html' },
+        { id: 'vct', label: 'VCT', href: 'partidos/index.html' },
         { id: 'tablas', label: 'TABLAS', href: 'tablas/index.html' },
         { id: 'visualizar', label: 'VISUALIZAR', href: 'visualizar/index.html' },
         { id: 'datos', label: 'CARGAR DATOS', href: 'inicio/index.html' },
@@ -38,6 +39,8 @@
         const seg = window.location.pathname.toLowerCase();
         if (seg.includes('/aletheia_preparar')) return 'preparar';
         if (seg.includes('/aletheia')) return 'aletheia';
+        if (seg.includes('/partidos') || seg.includes('/equipos') ||
+            seg.includes('/jugadores') || seg.includes('/eventos')) return 'vct';
         if (seg.includes('/tablas')) return 'tablas';
         if (seg.includes('/visualizar')) return 'visualizar';
         if (seg.includes('/inicio')) return 'datos';

@@ -1,0 +1,33 @@
+/* ALETHEIA — Componente EVENTOS (ajustes propios) */
+
+#vistaDetalle .v-banner { border-left: 3px solid var(--orange); }
+
+.v-event-card .v-card-head { margin-bottom: 10px; }
+
+.v-event-dates {
+    font-family: var(--display);
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: var(--text);
+}
+
+.v-agent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 2px;
+}
+
+.v-agent-row {
+    display: grid;
+    grid-template-columns: 110px 1fr 46px;
+    gap: 10px;
+    align-items: center;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 9px 12px;
+    font-size: 11px;
+}
+
+.v-agent-row .name { text-transform: capitalize; }
+.v-agent-row .role { color: var(--dim); font-size: 9px; letter-spacing: 1px; }
+.v-agent-row .pct { text-align: right; color: var(--accent); }
