@@ -5,10 +5,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ALETHEIA — En Vivo</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0a0c'/%3E%3Ctext x='16' y='25' font-size='24' text-anchor='middle' fill='%23e8ff47' font-family='sans-serif'%3EA%3C/text%3E%3C/svg%3E" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%230a0a0c'/%3E%3Ctext x='16' y='25' font-size='24' text-anchor='middle' fill='%2338bdf8' font-family='sans-serif'%3EA%3C/text%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Russo+One&family=Chakra+Petch:wght@300;400;500;600;700&family=DM+Mono:wght@300;400;500&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="../header/header.css" />
     <link rel="stylesheet" href="style.css" />
@@ -21,6 +21,18 @@
     <div id="aeHeaderMount"></div>
 
     <main>
+
+        <!-- ── HERO (canvas animado; solo portada) ── -->
+        <section class="ae-hero">
+            <canvas class="ae-hero-canvas" id="aeHeroCanvas" aria-hidden="true"></canvas>
+            <div class="ae-hero-inner">
+                <h1 class="ae-hero-title">
+                    <span class="ae-hero-outline">ALETHEIA</span>
+                    <span class="ae-hero-accent">EN VIVO</span>
+                </h1>
+                <p class="ae-hero-sub">PREDICCIÓN VCT · GLICKO-2 + MONTE CARLO · CACHÉ EN TIEMPO REAL</p>
+            </div>
+        </section>
 
         <!-- ── LISTA DE SIMULACIONES PREPARADAS ── -->
         <section class="sim-browser">
@@ -119,6 +131,7 @@
 
     <script>window.AE_HEADER = { title: 'EN VIVO', badge: 'PREDICTOR' };</script>
     <script src="../header/header.js"></script>
+    <script src="../comun/hero.js"></script>
     <script src="script.js"></script>
 </body>
 

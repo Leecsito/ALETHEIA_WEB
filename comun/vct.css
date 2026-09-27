@@ -9,26 +9,39 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-    --bg: #0a0a0c;
-    --surface: #111114;
-    --surface2: #16161a;
-    --surface3: #1c1c22;
-    --card-grad: linear-gradient(180deg, #17171d 0%, #101014 100%);
-    --hero-grad: linear-gradient(135deg, #181820 0%, #101014 55%, #0c0c10 100%);
-    --border: #23232b;
-    --border-soft: #1d1d24;
-    --accent: #e8ff47;
-    --accent2: #ff4757;
+    /* Fondos (DS: dark #0F0F23) */
+    --bg: #0f0f23;
+    --surface: #15152b;
+    --surface2: #1b1b33;
+    --surface3: #232340;
+    --card-grad: linear-gradient(180deg, #1e1c35 0%, #16142a 100%);
+    --hero-grad: linear-gradient(135deg, #201d3d 0%, #14122a 55%, #0f0f23 100%);
+    --border: #2e2b4d;
+    --border-soft: #262343;
+    /* Acentos DS: violeta primario, cian CTA, rosa solo EN VIVO */
+    --primary: #7c3aed;
+    --secondary: #a78bfa;
+    --accent: #38bdf8;
+    --accent2: #ef4444;
+    --live: #f43f5e;
     --green: #4ade80;
     --orange: #fb923c;
     --blue: #38bdf8;
     --purple: #a78bfa;
-    --text: #d4d4d8;
-    --dim: #5b5b66;
+    --text: #e2e8f0;
+    --dim: #94a3b8;
     --mono: 'DM Mono', monospace;
-    --display: 'Bebas Neue', sans-serif;
-    --glow-accent: 0 0 24px rgba(232, 255, 71, .18);
-    --shadow-card: 0 10px 30px rgba(0, 0, 0, .45);
+    --body: 'Chakra Petch', sans-serif;
+    --display: 'Russo One', sans-serif;
+    --glow-accent: 0 0 24px rgba(56, 189, 248, .18);
+    --glow-primary: 0 0 26px rgba(124, 58, 237, .28);
+    --shadow-card: 0 10px 30px rgba(5, 5, 20, .55);
+    /* Glass tokens (MASTER.md) */
+    --glass-bg: rgba(30, 28, 53, .42);
+    --glass-bg-strong: rgba(30, 28, 53, .66);
+    --glass-border: rgba(255, 255, 255, .10);
+    --glass-highlight: rgba(255, 255, 255, .06);
+    --glass-blur: 14px;
 }
 
 html { scroll-behavior: smooth; }
@@ -48,9 +61,9 @@ body {
     z-index: 0;
     pointer-events: none;
     background-image:
-        radial-gradient(900px 340px at 50% -120px, rgba(232, 255, 71, .05), transparent 70%),
-        linear-gradient(rgba(232, 255, 71, .018) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(232, 255, 71, .018) 1px, transparent 1px);
+        radial-gradient(900px 340px at 50% -120px, rgba(56, 189, 248, .05), transparent 70%),
+        linear-gradient(rgba(56, 189, 248, .018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(56, 189, 248, .018) 1px, transparent 1px);
     background-size: auto, 40px 40px, 40px 40px;
 }
 
@@ -164,8 +177,8 @@ main.v-main.wide { max-width: 1500px; }
 .v-select { cursor: pointer; }
 
 .v-input:focus, .v-select:focus {
-    border-color: rgba(232, 255, 71, .45);
-    box-shadow: 0 0 0 3px rgba(232, 255, 71, .06);
+    border-color: rgba(56, 189, 248, .45);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, .06);
 }
 
 .v-input::placeholder { color: var(--dim); }
@@ -186,15 +199,15 @@ main.v-main.wide { max-width: 1500px; }
 }
 
 .v-btn:hover {
-    border-color: rgba(232, 255, 71, .45);
+    border-color: rgba(56, 189, 248, .45);
     color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(232, 255, 71, .05);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, .05);
 }
 
 .v-btn.active {
-    border-color: rgba(232, 255, 71, .5);
+    border-color: rgba(56, 189, 248, .5);
     color: var(--accent);
-    background: linear-gradient(180deg, rgba(232, 255, 71, .1), rgba(232, 255, 71, .03));
+    background: linear-gradient(180deg, rgba(56, 189, 248, .1), rgba(56, 189, 248, .03));
 }
 
 .v-btn.small { padding: 5px 11px; font-size: 10px; }
@@ -562,7 +575,7 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-pill.done { color: var(--green); border-color: rgba(74, 222, 128, .3); background: rgba(74, 222, 128, .06); }
 .v-pill.live { color: var(--accent2); border-color: rgba(255, 71, 87, .4); background: rgba(255, 71, 87, .08); box-shadow: 0 0 14px rgba(255, 71, 87, .15); }
-.v-pill.next { color: var(--accent); border-color: rgba(232, 255, 71, .3); background: rgba(232, 255, 71, .06); }
+.v-pill.next { color: var(--accent); border-color: rgba(56, 189, 248, .3); background: rgba(56, 189, 248, .06); }
 .v-pill.soon { color: var(--orange); border-color: rgba(251, 146, 60, .35); background: rgba(251, 146, 60, .07); }
 
 .v-match-meta { display: flex; flex-direction: column; gap: 4px; text-align: right; min-width: 0; }
@@ -599,7 +612,7 @@ main.v-main.wide { max-width: 1500px; }
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: radial-gradient(560px 220px at 8% 0%, rgba(232, 255, 71, .055), transparent 65%);
+    background: radial-gradient(560px 220px at 8% 0%, rgba(56, 189, 248, .055), transparent 65%);
 }
 
 /* VS: degradado con el color de cada equipo para diferenciarlos. */
@@ -737,7 +750,7 @@ main.v-main.wide { max-width: 1500px; }
 .v-tabs button.active, .v-tabs a.active {
     color: var(--accent);
     border-bottom-color: var(--accent);
-    background: linear-gradient(180deg, transparent, rgba(232, 255, 71, .05));
+    background: linear-gradient(180deg, transparent, rgba(56, 189, 248, .05));
     text-shadow: var(--glow-accent);
 }
 
@@ -920,7 +933,7 @@ main.v-main.wide { max-width: 1500px; }
 
 /* ── BARRAS ── */
 .v-bar { height: 4px; background: var(--border); position: relative; overflow: hidden; }
-.v-bar > i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 8px rgba(232, 255, 71, .35); }
+.v-bar > i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 8px rgba(56, 189, 248, .35); }
 .v-bar.green > i { background: var(--green); box-shadow: 0 0 8px rgba(74, 222, 128, .35); }
 .v-bar.blue > i { background: var(--blue); box-shadow: 0 0 8px rgba(56, 189, 248, .35); }
 .v-bar.red > i { background: var(--accent2); box-shadow: 0 0 8px rgba(255, 71, 87, .35); }
@@ -966,9 +979,9 @@ main.v-main.wide { max-width: 1500px; }
     background: linear-gradient(160deg,
         color-mix(in srgb, var(--c, #1b1b22) 26%, #14141a) 0%,
         #14141a 62%);
-    border-color: rgba(232, 255, 71, .3);
+    border-color: rgba(56, 189, 248, .3);
     transform: translateY(-2px);
-    box-shadow: var(--shadow-card), 0 0 0 1px rgba(232, 255, 71, .08);
+    box-shadow: var(--shadow-card), 0 0 0 1px rgba(56, 189, 248, .08);
 }
 
 .v-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
@@ -1005,7 +1018,7 @@ main.v-main.wide { max-width: 1500px; }
 }
 
 .v-player-card:hover {
-    border-color: rgba(232, 255, 71, .35);
+    border-color: rgba(56, 189, 248, .35);
     transform: translateY(-2px);
     box-shadow: var(--shadow-card);
 }
@@ -1053,9 +1066,9 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-chip.active {
     color: var(--accent);
-    border-color: rgba(232, 255, 71, .4);
-    background: linear-gradient(180deg, rgba(232, 255, 71, .1), rgba(232, 255, 71, .03));
-    box-shadow: 0 0 14px rgba(232, 255, 71, .08);
+    border-color: rgba(56, 189, 248, .4);
+    background: linear-gradient(180deg, rgba(56, 189, 248, .1), rgba(56, 189, 248, .03));
+    box-shadow: 0 0 14px rgba(56, 189, 248, .08);
 }
 
 /* ── TRANSACCIONES ── */
@@ -1130,4 +1143,112 @@ main.v-main.wide { max-width: 1500px; }
     .v-econ { grid-template-columns: 1fr; }
     .v-tabs { margin-left: -14px; margin-right: -14px; padding-left: 14px; }
     .v-banner::after { background-size: 190px auto, 190px auto; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   DS ALETHEIA (fases 1-2) — Glassmorphism + tipografía + radios + outline
+   Fuente de verdad: design-system/aletheia/MASTER.md
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+body { font-family: var(--body); }
+
+/* ── Fondo con blobs violeta/azul/magenta ── */
+.v-bg {
+    background:
+        radial-gradient(760px 440px at 12% -12%, rgba(124, 58, 237, .34), transparent 66%),
+        radial-gradient(680px 400px at 88% 4%, rgba(56, 189, 248, .20), transparent 62%),
+        radial-gradient(600px 360px at 50% 114%, rgba(217, 70, 239, .14), transparent 66%),
+        linear-gradient(rgba(124, 58, 237, .022) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(124, 58, 237, .022) 1px, transparent 1px);
+    background-size: auto, auto, auto, 40px 40px, 40px 40px;
+}
+
+/* ── Superficies glass (solo contenedores grandes; filas de datos quedan opacas) ── */
+.v-card, .v-panel, .v-stat, .v-banner {
+    background: var(--glass-bg);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    border: 1px solid var(--glass-border);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-card);
+}
+
+.v-card { border-radius: 10px; }
+.v-panel { border-radius: 12px; }
+.v-stat { border-radius: 10px; }
+.v-banner { border-radius: 12px; }
+
+.v-card:hover {
+    border-color: rgba(124, 58, 237, .5);
+    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-card), var(--glow-primary);
+}
+
+/* ── Datos: opacos, monoespaciados y legibles ── */
+.v-table { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.v-table th { background: #17172c; }
+.v-table td { background: rgba(13, 13, 30, .88); }
+.v-board { background: linear-gradient(180deg, #1b1930, #131126); }
+.v-board .v-table th { background: #1f1d38; }
+.v-board .v-table td { background: transparent; }
+.v-table tbody tr:hover td { background: var(--surface2); }
+
+/* ── Radios coherentes ── */
+.v-btn, .v-input, .v-select, .v-chip { border-radius: 8px; }
+.v-veto-item, .v-player-card, .v-econ-team, .v-map-btn:first-child { border-radius: 10px; }
+.v-pill { border-radius: 999px; }
+.v-round { border-radius: 3px; }
+
+/* ── Títulos outline (solo títulos de sección) ── */
+.v-title h1 {
+    color: transparent;
+    -webkit-text-stroke: 1.5px rgba(226, 232, 240, .92);
+    letter-spacing: 5px;
+}
+
+.v-title::before { background: linear-gradient(180deg, var(--primary), var(--accent)); box-shadow: var(--glow-primary); }
+
+@supports not (-webkit-text-stroke: 1px #fff) {
+    .v-title h1 { color: var(--text); -webkit-text-stroke: 0; }
+}
+
+/* ── Barra de tabs VCT con blur ── */
+.vct-tabs {
+    background: var(--glass-bg-strong);
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.vct-tabs a.active { text-shadow: 0 0 18px rgba(56, 189, 248, .45); }
+
+/* ── Botones/accesos con acento cian + halo violeta ── */
+.v-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, .10);
+}
+
+.v-input:focus, .v-select:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, .14);
+}
+
+.v-chip.active {
+    color: var(--accent);
+    border-color: rgba(56, 189, 248, .45);
+    background: linear-gradient(180deg, rgba(56, 189, 248, .12), rgba(56, 189, 248, .04));
+    box-shadow: 0 0 16px rgba(56, 189, 248, .10);
+}
+
+/* ── Focus accesible ── */
+.v-btn:focus-visible, .v-input:focus-visible, .v-select:focus-visible,
+.v-chip:focus-visible, .vct-tabs a:focus-visible, .v-map-btn:focus-visible,
+.v-tabs button:focus-visible, a:focus-visible, [data-href]:focus-visible {
+    outline: 2px solid var(--secondary);
+    outline-offset: 2px;
+}
+
+/* ── Fallback sin backdrop-filter ── */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .v-card, .v-panel, .v-stat, .v-banner { background: #17162e; }
+    .vct-tabs { background: #14132a; }
 }

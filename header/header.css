@@ -19,23 +19,24 @@
     gap: 16px;
     padding: 0 36px;
     height: 56px;
-    border-bottom: 1px solid var(--ae-border, var(--border, #222228));
-    background: rgba(10, 10, 12, .96);
-    backdrop-filter: blur(12px);
-    font-family: var(--ae-mono, 'DM Mono', monospace);
+    border-bottom: 1px solid var(--ae-border, rgba(255, 255, 255, .10));
+    background: var(--ae-glass, rgba(15, 15, 35, .66));
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    backdrop-filter: blur(14px) saturate(140%);
+    font-family: var(--ae-body, 'Chakra Petch', 'DM Mono', monospace);
 }
 
 .ae-logo {
-    font-family: var(--ae-display, 'Bebas Neue', sans-serif);
+    font-family: var(--ae-display, 'Russo One', 'Bebas Neue', sans-serif);
     font-size: 24px;
     letter-spacing: 4px;
-    color: var(--ae-text, var(--text, #d4d4d8));
+    color: var(--ae-text, #e2e8f0);
     text-decoration: none;
     white-space: nowrap;
 }
 
 .ae-logo-a {
-    color: var(--ae-accent, var(--accent, #e8ff47));
+    color: var(--ae-accent, #38bdf8);
 }
 
 .ae-nav {
@@ -47,10 +48,10 @@
 }
 
 .ae-nav .ae-title {
-    font-family: var(--ae-display, 'Bebas Neue', sans-serif);
+    font-family: var(--ae-display, 'Russo One', 'Bebas Neue', sans-serif);
     font-size: 18px;
     letter-spacing: 3px;
-    color: var(--ae-text, var(--text, #d4d4d8));
+    color: var(--ae-text, #e2e8f0);
     display: flex;
     align-items: center;
     gap: 10px;
@@ -58,19 +59,20 @@
 }
 
 .ae-nav .ae-badge {
-    font-family: var(--ae-mono, 'DM Mono', monospace);
+    font-family: var(--ae-body, 'Chakra Petch', 'DM Mono', monospace);
     font-size: 10px;
     letter-spacing: 2px;
-    color: var(--ae-accent, var(--accent, #e8ff47));
-    border: 1px solid rgba(232, 255, 71, .3);
-    background: rgba(232, 255, 71, .07);
+    color: var(--ae-accent, #38bdf8);
+    border: 1px solid rgba(56, 189, 248, .3);
+    background: rgba(56, 189, 248, .07);
     padding: 2px 8px;
 }
 
 .ae-btn {
-    padding: 5px 14px;
-    border: 1px solid var(--ae-border, var(--border, #222228));
-    color: var(--ae-dim, var(--dim, var(--text-dim, #52525b)));
+    padding: 6px 14px;
+    border: 1px solid var(--ae-border, rgba(255, 255, 255, .10));
+    border-radius: 8px;
+    color: var(--ae-dim, #94a3b8);
     background: transparent;
     text-decoration: none;
     font-family: inherit;
@@ -81,15 +83,22 @@
     white-space: nowrap;
 }
 
+.ae-btn:focus-visible,
+.ae-logo:focus-visible {
+    outline: 2px solid var(--ae-secondary, #a78bfa);
+    outline-offset: 2px;
+}
+
 .ae-btn:hover {
-    border-color: var(--ae-accent, var(--accent, #e8ff47));
-    color: var(--ae-accent, var(--accent, #e8ff47));
+    border-color: var(--ae-accent, #38bdf8);
+    color: var(--ae-accent, #38bdf8);
 }
 
 .ae-btn.active {
-    border-color: var(--ae-accent, var(--accent, #e8ff47));
-    color: var(--ae-accent, var(--accent, #e8ff47));
-    background: rgba(232, 255, 71, .08);
+    border-color: var(--ae-accent, #38bdf8);
+    color: var(--ae-accent, #38bdf8);
+    background: linear-gradient(180deg, rgba(56, 189, 248, .14), rgba(56, 189, 248, .04));
+    box-shadow: 0 0 0 3px rgba(56, 189, 248, .07);
 }
 
 /* Título de página que antes vivía dentro del header (p. ej. TABLAS).
@@ -98,18 +107,18 @@
     position: relative;
     z-index: 2;
     text-align: center;
-    font-family: var(--ae-display, 'Bebas Neue', sans-serif);
+    font-family: var(--ae-display, 'Russo One', 'Bebas Neue', sans-serif);
     font-size: 18px;
     letter-spacing: 4px;
-    color: var(--ae-dim, var(--dim, var(--text-dim, #52525b)));
+    color: var(--ae-dim, #94a3b8);
     padding: 10px 16px;
-    border-bottom: 1px solid var(--ae-border, var(--border, #222228));
+    border-bottom: 1px solid var(--ae-border, rgba(255, 255, 255, .10));
     background: rgba(10, 10, 12, .97);
     transition: color .3s;
 }
 
 .ae-page-title.active {
-    color: var(--ae-accent, var(--accent, #e8ff47));
+    color: var(--ae-accent, #38bdf8);
 }
 
 @media (max-width: 820px) {
@@ -123,4 +132,9 @@
     .ae-nav {
         justify-content: flex-start;
     }
+}
+
+/* ── DS ALETHEIA: fallback sin backdrop-filter ── */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .ae-header { background: #14132a; }
 }

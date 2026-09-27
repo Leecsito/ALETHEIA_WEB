@@ -64,8 +64,9 @@ ALETHEIA/
 │   ├── header.css            # Estilos del header (clases `ae-*`)
 │   └── header.js             # Inyecta el header en `#aeHeaderMount` y marca el nav activo
 ├── comun/                    # Core visual VCT compartido (no es una página)
-│   ├── vct.css               # Design system de los componentes VCT (clases `v-*`)
-│   └── vct.js                # Helpers globales `VCT` (API, formato, filas de partido, tabs)
+│   ├── vct.css               # Design system de los componentes VCT (clases `v-*`, glass DS)
+│   ├── vct.js                # Helpers globales `VCT` (API, formato, filas de partido, tabs)
+│   └── hero.js               # Hero canvas 2D (wireframe de partículas; solo EN VIVO)
 ├── partidos/                 # Componente PARTIDOS estilo vlr.gg (lista + detalle)
 │   ├── partidos.py           # Blueprint (/api/partidos, /api/partidos/filtros, /api/partido/<id>)
 │   ├── index.html, style.css, script.js
@@ -410,7 +411,8 @@ estas tablas). Endpoints adicionales del proxy:
 
 ### 4.6. Módulo Equipos (`equipos_bp`) — componente `/equipos/`
 - `GET /api/equipos`: equipos con `matches`, `wins`, fechas y `regiones` (para chips). Query: `q`, `region`. Solo equipos con partidos jugados.
-- `GET /api/equipo/<team_id>`: `equipo` (info), `record` (V-D), `roster` (players con `team_id`), `transacciones` (roster_transactions, últimas 80), `partidos` (últimos 120 con evento), `jugadores` (promedios por jugador del equipo), `mapas` (jugados/ganados por mapa + avg rondas) y `eventos` (torneos jugados con récord).
+- `GET /api/equipo/<team_id>`: `equipo` (info), `record` (V-D), `roster`, `transacciones` (últimas 40), `partidos` (últimos 60 con evento), `jugadores` (promedios por jugador del equipo), `mapas` (jugados/ganados por mapa + avg rondas) y `eventos` (torneos jugados con récord).
+  - **`roster` (regla):** jugadores cuyo **último movimiento global** en `roster_transactions` es `JOIN` **hacia este equipo** (se excluyen `LEAVE`/`INACTIVE`). Si el equipo **no tiene transacciones cargadas**, se cae al criterio `players.team_id` para no dejar el roster vacío.
 
 ### 4.7. Módulo Jugadores (`jugadores_bp`) — componente `/jugadores/`
 - `GET /api/jugadores`: jugadores con stats (JOIN `player_stats`), nickname obligatorio y **paginado** (`page`, `limit` máx 200 def 60; responde `total`/`pages`). Query: `q` (nick/real/equipo), `orden` (`rating|acs|kd|matches|nombre`, allowlist). El frontend carga por lotes de 60 con botón **CARGAR MÁS**.
@@ -671,6 +673,36 @@ estas tablas). Endpoints adicionales del proxy:
    - **`tablas/` no se toca**: sigue siendo el explorador raw; los componentes
      VCT son la vista "bonita" sobre los mismos datos.
 
+7. **Design System ALETHEIA — Glassmorphism (fases 1–3 aplicadas):**
+   Fuente de verdad: **`design-system/aletheia/MASTER.md`** (generado con la skill
+   `ui-ux-pro-max` + persistido). Resumen:
+   - **Paleta:** violeta primario `#7C3AED`, violeta claro `#A78BFA`, **cian CTA
+     `#38BDF8`**, fondo `#0F0F23`, card `#1E1C35`; verde/rojo solo semánticos
+     (V/D); rosa `#F43F5E` reservado a “EN VIVO”. **El lima `#e8ff47` quedó
+     eliminado** en header, VCT y EN VIVO.
+   - **Tipografía:** **Russo One** (display, soporta outline), **Chakra Petch**
+     (UI/cuerpo), **DM Mono** solo en datos numéricos. Se cargan las 3 familias
+     en un único request de Google Fonts.
+   - **Glass tokens:** `--glass-bg`, `--glass-border`, `--glass-blur:14px`,
+     `--glass-highlight`; blobs violeta/azul/magenta en `.v-bg` y `.bg-grid`.
+   - **Glass aplicado a:** `.ae-header` (header.css), `.v-card`, `.v-panel`,
+     `.v-stat`, `.v-banner`, `.vct-tabs` (vct.css) y `.sim-browser`,
+     `.live-section`, `.live-tabs`, `.mb-header`, `.series-banner` (aletheia).
+   - **Datos siempre legibles:** `.v-table`, `.v-board`, scoreboards y
+     `tablas/` quedan **opacos** (nada de blur bajo texto pequeño).
+   - **Outline:** `.v-title h1` y el título del hero usan `-webkit-text-stroke`
+     con fallback `@supports` a relleno sólido.
+   - **Hero animado:** `comun/hero.js` (canvas 2D vanilla, sin librerías) —
+     solo en `aletheia/` (EN VIVO): ~30 fps, 30–70 partículas según área,
+     `devicePixelRatio` tope 1.5, pausa con `IntersectionObserver` +
+     `visibilitychange`, respeta `prefers-reduced-motion` y no bloquea clics
+     (`pointer-events:none`).
+   - **Fallback:** `@supports not (backdrop-filter)` deja fondos opacos.
+   - **Pendiente (fase 4):** cuando exista `estilos/`, adaptar sus componentes
+     (navbars/footers/CTAs/animaciones/bento) a `ae-*`/`v-*`. Páginas aún no
+     migradas al DS: `inicio/`, `visualizar/`, `aletheia_preparar/` (siguen con
+     lima hasta esa fase). `tablas/` no se migra.
+
 ---
 
 ## 6. Configuración de Despliegue (Render & Gunicorn)
@@ -701,3 +733,4 @@ Al recibir una nueva tarea o solicitud de cambio:
 8. **Imágenes de equipos/jugadores/eventos**: usa siempre `/api/media/meta` (enlaces+color, 1 request por render) y los endpoints `/api/media/...` como fallback (resuelven y redirigen al CDN; **no se descargan ni guardan imágenes**). No scrapees Google Images ni guardes archivos de imagen; la caché es solo de enlaces/color (`media/urls_cache.json`). Si necesitas precargar enlaces, usa `cachear_media.py` con `--delay`.
 9. **Rendimiento**: para blueprints de solo lectura usa `fetch_all` (`backend.conexion`) + `@ttl_cache(120)` (`backend.cache`); no abras conexiones nuevas por consulta ni paralelices consultas a Turso (el cliente serializa). Mantén gzip (`flask-compress`) y paginación en listados grandes.
 10. **Enlaces internos**: navega siempre con `/componente/` (o relativo `../componente/`, `./`), **nunca** `/componente/index.html` (regla de estética de URL, §5.1). Al añadir una vista dentro de una página, usa query params (`?team=`, `?match=`…), no nuevas carpetas con `index.html` en el enlace.
+11. **Cambios visuales**: la fuente de verdad es `design-system/aletheia/MASTER.md` (Glassmorphism, violeta/cian, Russo One + Chakra Petch + DM Mono). No cambies clases `ae-*`/`v-*` ni la lógica JS; aplica glass solo a contenedores grandes (tablas y scoreboards quedan opacos) y no toques `tablas/`. Para animaciones usa canvas 2D vanilla (`comun/hero.js` como referencia), nunca Three.js/particles.js, y respeta `prefers-reduced-motion`.
