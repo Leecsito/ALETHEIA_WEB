@@ -231,12 +231,12 @@ const VCT = (() => {
         }
     }
 
-    const teamHref = id => `../equipos/index.html?team=${id}`;
-    const playerHref = id => `../jugadores/index.html?player=${id}`;
-    const matchHref = id => `../partidos/index.html?match=${id}`;
+    const teamHref = id => `../equipos/?team=${id}`;
+    const playerHref = id => `../jugadores/?player=${id}`;
+    const matchHref = id => `../partidos/?match=${id}`;
     const eventHref = (eventId, torneo) => eventId
-        ? `../eventos/index.html?event=${eventId}`
-        : `../eventos/index.html?torneo=${encodeURIComponent(torneo || '')}`;
+        ? `../eventos/?event=${eventId}`
+        : `../eventos/?torneo=${encodeURIComponent(torneo || '')}`;
 
     function teamCell(id, name, tag) {
         if (!id || !name) return `<span class="muted">—</span>`;

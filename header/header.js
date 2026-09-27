@@ -17,12 +17,12 @@
     'use strict';
 
     const ITEMS = [
-        { id: 'aletheia', label: 'EN VIVO', href: 'aletheia/index.html' },
-        { id: 'preparar', label: 'PREPARAR PARTIDO', href: 'aletheia_preparar/index.html' },
-        { id: 'vct', label: 'VCT', href: 'partidos/index.html' },
-        { id: 'tablas', label: 'TABLAS', href: 'tablas/index.html' },
-        { id: 'visualizar', label: 'VISUALIZAR', href: 'visualizar/index.html' },
-        { id: 'datos', label: 'CARGAR DATOS', href: 'inicio/index.html' },
+        { id: 'aletheia', label: 'EN VIVO', href: 'aletheia/' },
+        { id: 'preparar', label: 'PREPARAR PARTIDO', href: 'aletheia_preparar/' },
+        { id: 'vct', label: 'VCT', href: 'partidos/' },
+        { id: 'tablas', label: 'TABLAS', href: 'tablas/' },
+        { id: 'visualizar', label: 'VISUALIZAR', href: 'visualizar/' },
+        { id: 'datos', label: 'CARGAR DATOS', href: 'inicio/' },
     ];
 
     function basePath() {
@@ -57,7 +57,7 @@
         const active = currentId();
 
         let html = `
-            <a href="${base}aletheia/index.html" class="ae-logo"><span class="ae-logo-a">A</span>LETHEIA</a>
+            <a href="${base}aletheia/" class="ae-logo"><span class="ae-logo-a">A</span>LETHEIA</a>
             <nav class="ae-nav">`;
 
         if (cfg.title) {

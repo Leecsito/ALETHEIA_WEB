@@ -31,8 +31,8 @@ function estadoEvento(e) {
 
 function linkEvento(e) {
     return e.event_id
-        ? `index.html?event=${e.event_id}`
-        : `index.html?torneo=${encodeURIComponent(e.tournament)}`;
+        ? `?event=${e.event_id}`
+        : `?torneo=${encodeURIComponent(e.tournament)}`;
 }
 
 function pintarGrid(rows) {
@@ -180,7 +180,7 @@ function pintarDetalle(d) {
 
     const el = document.getElementById('vistaDetalle');
     el.innerHTML = `
-        <a class="v-back" href="index.html">← VOLVER A EVENTOS</a>
+        <a class="v-back" href="./">← VOLVER A EVENTOS</a>
 
         <div class="v-banner" ${e.event_id ? `data-c-evento="${e.event_id}" data-wm="evento:${e.event_id}"` : `data-c-nombre="${VCT.esc(e.nombre)}" data-wm="nombre:${VCT.esc(e.nombre)}"`}>
             ${VCT.eventLogo(e.event_id, e.nombre, 'big')}

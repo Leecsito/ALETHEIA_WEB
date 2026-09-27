@@ -42,7 +42,7 @@ function pintarGrid(equipos) {
     gridEl.innerHTML = equipos.map(t => {
         const wr = t.matches ? Math.round(t.wins * 100 / t.matches) : 0;
         const losses = t.matches - t.wins;
-        return `<a class="v-card v-team-grid-card" href="index.html?team=${t.team_id}" data-c-equipo="${t.team_id}">
+        return `<a class="v-card v-team-grid-card" href="?team=${t.team_id}" data-c-equipo="${t.team_id}">
             <div class="v-card-head">
                 ${VCT.lozenge(t.team_name, t.tag, 'md', t.team_id)}
                 <div style="min-width:0">
@@ -174,7 +174,7 @@ function pintarDetalle(d) {
 
     const el = document.getElementById('vistaDetalle');
     el.innerHTML = `
-        <a class="v-back" href="index.html">← VOLVER A EQUIPOS</a>
+        <a class="v-back" href="./">← VOLVER A EQUIPOS</a>
 
         <div class="v-banner" data-c-equipo="${t.team_id}" data-wm="equipo:${t.team_id}">
             ${VCT.lozenge(t.team_name, t.tag, 'big', t.team_id)}

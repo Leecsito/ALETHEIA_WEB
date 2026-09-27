@@ -452,6 +452,14 @@ estas tablas). Endpoints adicionales del proxy:
    > Los módulos `predecir/` y `exportar/` **ya no existen**.
    > `comun/` **no es una página**: es el core visual compartido (CSS `v-*` + objeto JS global `VCT`); no está en `FRONTEND_FOLDERS` y no debe registrarse blueprint.
 
+   > **Regla de enlaces (estética de URL):** todos los enlaces de navegación entre
+   > páginas deben apuntar a **`/componente/`** (relativo `../componente/` o `./`
+   > para la misma página), **nunca** a `/componente/index.html`. El `index.html`
+   > existe solo para que Flask sirva la carpeta; no debe verse en la barra del
+   > navegador. Ejemplos: `../equipos/?team=120`, `../partidos/?match=753444`,
+   > `?player=3885` (misma página), `./` (volver a la lista). Los `<link>`/`<script>`
+   > a CSS/JS sí usan la ruta de archivo normal (`../comun/vct.js`).
+
 2. **Configuración de Host API Dinámico:**
    En todos los archivos JavaScript del frontend (`script.js`), la variable `API` está configurada como:
    ```javascript
@@ -692,3 +700,4 @@ Al recibir una nueva tarea o solicitud de cambio:
 7. **Para vistas nuevas del estilo VCT**: reutiliza el core `comun/` (`vct.css` + `vct.js`) en lugar de duplicar estilos o helpers; agrega los endpoints en el blueprint del componente correspondiente y registra la carpeta en `FRONTEND_FOLDERS` si es una página nueva. No modifiques `tablas/` para esto.
 8. **Imágenes de equipos/jugadores/eventos**: usa siempre `/api/media/meta` (enlaces+color, 1 request por render) y los endpoints `/api/media/...` como fallback (resuelven y redirigen al CDN; **no se descargan ni guardan imágenes**). No scrapees Google Images ni guardes archivos de imagen; la caché es solo de enlaces/color (`media/urls_cache.json`). Si necesitas precargar enlaces, usa `cachear_media.py` con `--delay`.
 9. **Rendimiento**: para blueprints de solo lectura usa `fetch_all` (`backend.conexion`) + `@ttl_cache(120)` (`backend.cache`); no abras conexiones nuevas por consulta ni paralelices consultas a Turso (el cliente serializa). Mantén gzip (`flask-compress`) y paginación en listados grandes.
+10. **Enlaces internos**: navega siempre con `/componente/` (o relativo `../componente/`, `./`), **nunca** `/componente/index.html` (regla de estética de URL, §5.1). Al añadir una vista dentro de una página, usa query params (`?team=`, `?match=`…), no nuevas carpetas con `index.html` en el enlace.

@@ -21,6 +21,7 @@ async function cargarLista(reset = true) {
         estado.acumulado = reset ? d.data : estado.acumulado.concat(d.data);
         countEl.textContent = `${estado.total} JUGADORES`;
         pintarLista(estado.acumulado);
+        VCT.aplicarMedia(listaEl);
         pintarMas();
     } catch (e) {
         VCT.showError(listaEl, e);
@@ -57,7 +58,7 @@ function pintarLista(rows) {
         </thead>
         <tbody>${rows.map(j => {
             const kd = j.deaths ? (j.kills / j.deaths).toFixed(2) : '—';
-            return `<tr data-href="index.html?player=${j.player_id}" style="cursor:pointer">
+            return `<tr data-href="?player=${j.player_id}" style="cursor:pointer">
                 <td><span class="v-pl">${VCT.avatar(j.player_id, j.nickname, 'sm')}<span>${VCT.flagHtml(j.country)} <b>${VCT.esc(j.nickname)}</b> <span class="muted">${VCT.esc(j.real_name || '')}</span></span></span></td>
                 <td>${j.team_id ? `<a href="${VCT.teamHref(j.team_id)}">${VCT.esc(j.tag || j.team_name)}</a>` : '<span class="muted">—</span>'}</td>
                 <td class="num muted">${j.matches}</td>
@@ -215,7 +216,7 @@ function pintarDetalle(d) {
 
     const el = document.getElementById('vistaDetalle');
     el.innerHTML = `
-        <a class="v-back" href="index.html">← VOLVER A JUGADORES</a>
+        <a class="v-back" href="./">← VOLVER A JUGADORES</a>
 
         <div class="v-banner" data-wm="jugador:${p.player_id}">
             ${VCT.avatar(p.player_id, p.nickname, 'big')}

@@ -93,7 +93,7 @@ function pintarDetalle(d) {
 
     const el = document.getElementById('vistaDetalle');
     el.innerHTML = `
-        <a class="v-back" href="index.html">← VOLVER A PARTIDOS</a>
+        <a class="v-back" href="./">← VOLVER A PARTIDOS</a>
 
         <div class="v-banner vs" data-c-equipo="${p.team_a_id}" data-c-equipo2="${p.team_b_id}" data-wm="equipo:${p.team_a_id}" data-wm2="equipo:${p.team_b_id}">
             ${VCT.lozenge(p.team_a, p.team_a_tag, 'big', p.team_a_id)}
@@ -282,6 +282,8 @@ function pintarMapa(d, i) {
                    </div>`
                 : VCT.empty('Sin scoreboard para este mapa.')}
         </div>`;
+
+    VCT.aplicarMedia(document.getElementById('map-panel'));
 }
 
 /* ── INIT ───────────────────────────────────────────────────────────────── */
