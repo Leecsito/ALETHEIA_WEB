@@ -68,17 +68,22 @@ const VCT = (() => {
         return (s.slice(0, 3) || '?').toUpperCase();
     }
 
+    /* Logo de equipo: PNG transparente SIN caja; el mismo logo difuminado
+       hace de glow de fondo. Si el logo es oscuro, el glow se invierte. */
     function lozenge(name, tag, cls = '', teamId = null) {
         const img = teamId
-            ? `<img data-media="equipo:${teamId}" data-fallback="/api/media/equipo/${teamId}" alt="" loading="lazy" decoding="async" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            ? `<img class="v-lozenge-bg" data-media="equipo:${teamId}" data-fallback="/api/media/equipo/${teamId}" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">` +
+              `<img class="v-lozenge-fg" data-media="equipo:${teamId}" data-fallback="/api/media/equipo/${teamId}" alt="${esc(name || '')}" loading="lazy" decoding="async" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         const attr = teamId ? ` data-c-equipo="${teamId}"` : '';
         return `<span class="v-lozenge ${cls}"${attr}>${img}<span class="v-lozenge-txt">${esc((tag || initials(name)).slice(0, 4))}</span></span>`;
     }
 
+    /* Foto de jugador: contain (sin recorte) + la misma foto difuminada detrás. */
     function avatar(playerId, nickname, cls = '') {
         const img = playerId
-            ? `<img data-media="jugador:${playerId}" data-fallback="/api/media/jugador/${playerId}" alt="" loading="lazy" decoding="async" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            ? `<img class="v-avatar-bg" data-media="jugador:${playerId}" data-fallback="/api/media/jugador/${playerId}" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">` +
+              `<img class="v-avatar-fg" data-media="jugador:${playerId}" data-fallback="/api/media/jugador/${playerId}" alt="${esc(nickname || '')}" loading="lazy" decoding="async" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         return `<span class="v-avatar ${cls}">${img}<span class="v-avatar-txt">${esc(initials(nickname))}</span></span>`;
     }
@@ -99,7 +104,8 @@ const VCT = (() => {
             ? ` data-c-evento="${eventId}"`
             : ` data-c-nombre="${esc(name || '')}"`;
         const img = (eventId || name)
-            ? `<img data-media="${esc(key)}" data-fallback="${fallback}" alt="" loading="lazy" decoding="async" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            ? `<img class="v-elogo-bg" data-media="${esc(key)}" data-fallback="${fallback}" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">` +
+              `<img class="v-elogo-fg" data-media="${esc(key)}" data-fallback="${fallback}" alt="${esc(name || '')}" loading="lazy" decoding="async" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         return `<span class="v-elogo ${cls}"${attr}>${img}<span class="v-elogo-txt">${esc(initialsEvent(name))}</span></span>`;
     }
@@ -153,7 +159,11 @@ const VCT = (() => {
                 if (info?.u) {
                     if (img.src !== info.u) img.src = info.u;   // directo al CDN
                 } else {
-                    if (!img.src) img.src = img.dataset.fallback; // resuelve bajo demanda
+                    // Sin enlace aún: solo el foreground usa el fallback (evita duplicar).
+                    const esBg = img.classList.contains('v-lozenge-bg')
+                        || img.classList.contains('v-elogo-bg')
+                        || img.classList.contains('v-avatar-bg');
+                    if (!img.src && !esBg) img.src = img.dataset.fallback;
                     pendientes++;
                 }
             });

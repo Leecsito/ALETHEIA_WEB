@@ -359,7 +359,6 @@ main.v-main.wide { max-width: 1500px; }
 /* ── LOGOS (lozenge hexagonal para equipos) ── */
 .v-lozenge {
     position: relative;
-    overflow: hidden;
     width: 42px;
     height: 42px;
     display: inline-flex;
@@ -369,11 +368,8 @@ main.v-main.wide { max-width: 1500px; }
     font-weight: 700;
     letter-spacing: .5px;
     color: var(--text);
-    background: var(--c, #26262e);
-    border: 1px solid rgba(255, 255, 255, .07);
-    border-radius: 2px;
+    background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, .07), transparent 72%);
     flex-shrink: 0;
-    transition: filter .2s;
 }
 
 .v-lozenge.md {
@@ -390,30 +386,48 @@ main.v-main.wide { max-width: 1500px; }
     letter-spacing: 1px;
 }
 
-.v-lozenge img {
+/* El mismo logo, difuminado, hace de glow detrás (los PNG son transparentes). */
+.v-lozenge-bg {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: contain;
-    padding: 2px;
+    filter: blur(8px) saturate(1.35);
+    opacity: .5;
+    transform: scale(1.05);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.v-lozenge-fg {
+    position: absolute;
+    inset: 4%;
+    width: 92%;
+    height: 92%;
+    object-fit: contain;
     z-index: 1;
 }
 
-.v-lozenge.has-img {
-    background: #14141a;
-    background: color-mix(in srgb, var(--c, #26262e) 22%, #0d0d11);
+/* Halo claro: los logos negros se ven incluso antes de conocer su color. */
+.v-lozenge-fg,
+.v-elogo-fg {
+    filter: drop-shadow(0 0 5px rgba(255, 255, 255, .25)) drop-shadow(0 0 16px rgba(255, 255, 255, .1));
 }
 
-.v-lozenge.has-img.on-light { background: #ececf0; border-color: rgba(0, 0, 0, .18); }
+.v-lozenge.has-img { background: transparent; }
 .v-lozenge.has-img .v-lozenge-txt { display: none; }
+
+/* Logo oscuro: halo claro + glow invertido para que se vea */
+.v-lozenge.on-light { background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, .5), transparent 76%); }
+.v-lozenge.on-light .v-lozenge-bg { filter: blur(9px) invert(1) brightness(1.5); opacity: .45; }
 .v-lozenge.on-light .v-lozenge-txt { color: #0a0a0c; }
+
 .v-lozenge-txt { position: relative; z-index: 1; }
 
 /* ── LOGOS DE EVENTO (tile cuadrado) ── */
 .v-elogo {
     position: relative;
-    overflow: hidden;
     width: 64px;
     height: 64px;
     display: inline-flex;
@@ -423,8 +437,7 @@ main.v-main.wide { max-width: 1500px; }
     font-size: 24px;
     letter-spacing: 1px;
     color: var(--text);
-    background: linear-gradient(160deg, var(--c, #26262e), #101014 140%);
-    border: 1px solid rgba(255, 255, 255, .06);
+    background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, .07), transparent 72%);
     flex-shrink: 0;
 }
 
@@ -434,23 +447,35 @@ main.v-main.wide { max-width: 1500px; }
     font-size: 42px;
 }
 
-.v-elogo img {
+.v-elogo-bg {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: contain;
-    padding: 6px;
+    filter: blur(9px) saturate(1.35);
+    opacity: .5;
+    transform: scale(1.06);
+    z-index: 0;
+    pointer-events: none;
 }
 
-.v-elogo.has-img {
-    background: #14141a;
-    background: color-mix(in srgb, var(--c, #26262e) 18%, #0d0d11);
+.v-elogo-fg {
+    position: absolute;
+    inset: 3%;
+    width: 94%;
+    height: 94%;
+    object-fit: contain;
+    z-index: 1;
 }
 
-.v-elogo.has-img.on-light { background: #e9e9ee; }
+.v-elogo.has-img { background: transparent; }
 .v-elogo.has-img .v-elogo-txt { display: none; }
+
+.v-elogo.on-light { background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, .5), transparent 76%); }
+.v-elogo.on-light .v-elogo-bg { filter: blur(10px) invert(1) brightness(1.5); opacity: .45; }
 .v-elogo.on-light .v-elogo-txt { color: #0a0a0c; }
+
 .v-elogo-txt { position: relative; z-index: 1; }
 
 /* ── AVATARES DE JUGADOR ── */
@@ -462,8 +487,7 @@ main.v-main.wide { max-width: 1500px; }
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(circle at 50% 20%, #22222c, #0e0e12 80%);
-    border: 1px solid var(--border);
+    background: radial-gradient(circle at 50% 25%, rgba(255, 255, 255, .06), transparent 75%);
     font-family: var(--display);
     font-size: 20px;
     letter-spacing: 1px;
@@ -473,7 +497,29 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-avatar.sm { width: 36px; height: 36px; font-size: 13px; }
 .v-avatar.big { width: 148px; height: 148px; font-size: 48px; }
-.v-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+
+/* La misma foto difuminada rellena el fondo; la foto nítida va contain (sin recorte). */
+.v-avatar-bg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(12px);
+    opacity: .55;
+    transform: scale(1.18);
+    z-index: 0;
+}
+
+.v-avatar-fg {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    z-index: 1;
+}
+
 .v-avatar.has-img .v-avatar-txt { display: none; }
 .v-avatar-txt { position: relative; z-index: 1; }
 

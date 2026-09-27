@@ -52,7 +52,8 @@ PAGE_TIMEOUT = 20
 IMG_TIMEOUT = 25
 MAX_BYTES = 8 * 1024 * 1024   # 8 MB de tope
 REDIRECT_MAX_AGE = 7 * 24 * 3600
-COLOR_DARK_LUM = 0.5          # debajo de esto el logo es oscuro -> fondo claro (contraste)
+COLOR_DARK_LUM = 0.5          # debajo de esto el logo es oscuro -> halo claro (contraste)
+COLOR_VERSION = 2             # subir si cambia el cálculo: invalida colores cacheados
 
 SEM = threading.BoundedSemaphore(2)
 RATE_LOCK = threading.Lock()
@@ -155,8 +156,8 @@ def media_meta():
     def info(kind, eid):
         e = _entrada(kind, eid)
         if e and e.get('u'):
-            # Enlace resuelto pero sin color: calcularlo en segundo plano.
-            if kind in ('equipos', 'eventos') and not e.get('c') and not e.get('cc'):
+            # Enlace resuelto pero sin color (o con versión vieja): recalcular en 2º plano.
+            if _color_pendiente(kind, e):
                 _lanzar_color(kind, eid, e['u'])
             return {'u': e['u'], 'c': e.get('c'), 'd': bool(e.get('d'))}
         return None
@@ -220,8 +221,18 @@ def _guardar(kind, eid, url, color=None, dark=None):
         if color:
             entrada['c'] = color
             entrada['d'] = bool(dark)
+            entrada['cv'] = COLOR_VERSION
         _cache.setdefault(kind, {})[str(eid)] = entrada
         _guardar_cache()
+
+
+def _color_pendiente(kind, entrada):
+    """¿Hay que (re)calcular el color? (falta, o se calculó con versión vieja)."""
+    if kind not in ('equipos', 'eventos') or not entrada or not entrada.get('u'):
+        return False
+    if entrada.get('c'):
+        return entrada.get('cv') != COLOR_VERSION
+    return not entrada.get('cc')
 
 
 def _miss_vigente(entrada):
@@ -323,6 +334,8 @@ def _completar_color(kind, eid, url):
                     entrada['c'] = color
                     entrada['d'] = bool(dark)
                     entrada['cc'] = True
+                    if color:
+                        entrada['cv'] = COLOR_VERSION
                     _guardar_cache()
         finally:
             SEM.release()
@@ -347,7 +360,7 @@ def ensure(kind, eid, page_url):
     """
     entrada = _entrada(kind, eid)
     if entrada and entrada.get('u'):
-        if kind in ('equipos', 'eventos') and not entrada.get('c') and not entrada.get('cc'):
+        if _color_pendiente(kind, entrada):
             _lanzar_color(kind, eid, entrada['u'])
         return 'cache', entrada['u']
     if _miss_vigente(entrada):
@@ -393,7 +406,7 @@ def ensure_evento_nombre(nombre):
     key = 'n:' + _slug(nombre)
     entrada = _entrada('eventos', key)
     if entrada and entrada.get('u'):
-        if not entrada.get('c') and not entrada.get('cc'):
+        if _color_pendiente('eventos', entrada):
             _lanzar_color('eventos', key, entrada['u'])
         return 'cache', entrada['u']
     if _miss_vigente(entrada):

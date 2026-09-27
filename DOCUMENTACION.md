@@ -422,7 +422,7 @@ estas tablas). Endpoints adicionales del proxy:
 
 ### 4.9. Módulo Media (`media_bp`) — logos y fotos por enlace (no es una página)
 - **No guarda imágenes.** Resuelve el enlace directo desde vlr.gg y hace `302 redirect` para que el navegador cargue la imagen desde el CDN (`owcdn.net`). Solo se cachean **metadatos** en `media/urls_cache.json` (~100 bytes por entidad, regenerable): enlace (`u`), color medio (`c`), si es oscuro (`d`) y marca de color calculado (`cc`).
-- **Color medio sin guardar la imagen:** para equipos y eventos se lee la imagen UNA vez **en memoria** (Pillow, máx 48×48, ignorando transparencia), se calcula el color medio y la luminancia, y se descarta. `d:true` (luminancia < 0.28) indica logo oscuro → el frontend usa fondo claro (`on-light`). No aplica a jugadores.
+- **Color medio sin guardar la imagen:** para equipos y eventos se lee la imagen UNA vez **en memoria** (Pillow, máx 48×48, ignorando transparencia), se calcula el color medio y la luminancia, y se descarta. `d:true` (luminancia < **0.5**) indica logo oscuro → el frontend usa halo claro (`on-light`). No aplica a jugadores. Los colores guardan `cv` (`COLOR_VERSION`): al subir la versión se recalculan solos (evita quedar con umbrales viejos).
 - `GET /api/media/equipo/<team_id>`: si no hay enlace resuelto, baja **bajo demanda** la página `vlr.gg/team/<id>` (mismo id que `teams.team_id`), extrae la imagen de `team-header-logo` (fallback `og:image`) y redirige. `404` con `{"ok":false,"estado":"miss|busy|error"}` si no hay imagen.
 - `GET /api/media/jugador/<player_id>`: igual para la foto (`player-header`, fallback `og:image`).
 - `GET /api/media/evento/<event_id>`: igual para el logo del evento (`event-header`, fallback `og:image`).
@@ -634,15 +634,20 @@ estas tablas). Endpoints adicionales del proxy:
      más amplia de `player_agent_stats`).
    - `eventos/`: lista de torneos (con `event_id` cuando existe) y detalle con
      tabs PARTIDOS / EQUIPOS / MAPAS / AGENTES.
-   - **Imágenes:** los lozenges de equipo, los avatares de jugador y los logos
-     de evento usan `VCT.lozenge(name, tag, cls, teamId)`,
-     `VCT.avatar(playerId, nickname, cls)` y `VCT.eventLogo(eventId, name, cls)`,
-     que pintan `<img src="/api/media/...">`; ese endpoint **redirige al CDN de
-     vlr.gg** (no se guardan imágenes) y el fallback es siglas/iniciales/monograma
-     (`VCT.imgError`). Los agentes (`VCT.agentIcon`) y mapas (`VCT.mapIcon`)
-     usan los `.avif` locales de `multimedia/agents/` y `multimedia/maps/`.
+   - **Imágenes (PNG transparentes, sin caja):** los lozenges de equipo,
+     avatares y logos de evento usan `VCT.lozenge(name, tag, cls, teamId)`,
+     `VCT.avatar(playerId, nickname, cls)` y `VCT.eventLogo(eventId, name, cls)`.
+     Cada uno pinta **dos** `<img>` (misma URL, un solo request): el `*-fg`
+     nítido con `object-fit: contain` (nunca recorta) y el `*-bg` **igual pero
+     difuminado** (`blur(8-12px)`, escala leve) como glow de fondo. No hay
+     cuadros ni bordes. Los logos oscuros se ven por dos vías: un
+     `drop-shadow` blanco sutil en el `*-fg` (siempre) y, cuando se conoce el
+     color, la clase `on-light` (halo claro + glow invertido `invert(1)`).
+     Fallback: siglas/iniciales/monograma (`VCT.imgError`). Los agentes
+     (`VCT.agentIcon`) y mapas (`VCT.mapIcon`) usan los `.avif` locales de
+     `multimedia/agents/` y `multimedia/maps/`.
      Tamaños: lozenge 42px (`md` 60, `big` 104), avatar 56px (`sm` 36, `big` 148),
-     elogo 64px (`big` 116), agente 32px, mapa 30px (`big` 76).
+     elogo 64px (`big` 116), agente 34×44px, mapa 40×23px (`big` 96×54).
    - **Carga de imágenes (1 solo request por render):** los `<img>` se pintan sin
      `src` con `data-media="equipo:120|jugador:4|evento:2766|nombre:<torneo>"`
      (y `data-fallback="/api/media/..."`). `VCT.aplicarMedia(root)` pide
