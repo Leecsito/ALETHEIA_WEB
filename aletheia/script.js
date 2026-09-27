@@ -24,6 +24,14 @@ let maxMapsSel = 3;        // slots del formato (1/3/5)
 let showStale = false;     // mostrar simulaciones no vigentes
 let serviceModelVersion = null;  // modelo vigente (GET /modelo_version)
 let recalculating = false;       // evita doble RE-PRECALCULAR
+let recalcStopped = false;       // cancelar la espera del job de re-precalculo
+let liveBulkError = null;        // error al leer /predicciones (null = ok)
+let mapsError = null;            // error al cargar /mapas (null = ok)
+let modelVersionError = null;    // error al leer /modelo_version (null = ok)
+
+// Cota del job de RE-PRECALCULAR en EN VIVO (evita poll infinito si se cuelga).
+const RECALC_POLL_MS = 2000;
+const RECALC_TIMEOUT_MS = 30 * 60 * 1000;
 
 // ─── DOM ──────────────────────────────────────────────────────────────────────
 const simList = document.getElementById('simList');
@@ -61,7 +69,13 @@ const btnExportDataset = document.getElementById('btnExportDataset');
 const cmpToolsStatus = document.getElementById('cmpToolsStatus');
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
-const pct = v => Math.round((v || 0) * 100);
+// Devuelve el % redondeado o '—' si el dato falta (no lo convierte en 0%).
+function pct(v) {
+    if (v == null || v === '') return '—';
+    const n = Number(v);
+    if (isNaN(n)) return '—';
+    return `${Math.round(n * 100)}%`;
+}
 
 function proxyFetch(path, options = {}) {
     return fetch(`${API}/aletheia/${String(path).replace(/^\/+/, '')}`, options);
@@ -127,11 +141,15 @@ function confBadge(conf) {
 // ─── MAPAS (proxy) ────────────────────────────────────────────────────────────
 async function loadAvailableMaps() {
     mapsLoading = true;
+    mapsError = null;
     try {
         const res = await fetch(`${API}/aletheia/mapas`);
         const data = await res.json();
-        if (data.ok) availableMaps = data.mapas || [];
-    } catch { }
+        if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        availableMaps = data.mapas || [];
+    } catch (e) {
+        mapsError = e.message || 'servicio no disponible';
+    }
     mapsLoading = false;
     renderLiveMapPicker();
     syncSerieBuilder();
@@ -149,7 +167,10 @@ async function loadSimulaciones() {
             simListStatus.textContent = `Error: ${data.error || 'no se pudo leer /api/simulaciones'}`;
             return;
         }
-        if (data.modelo_version) serviceModelVersion = data.modelo_version;
+        if (data.modelo_version) {
+            serviceModelVersion = data.modelo_version;
+            modelVersionError = null;
+        }
         sims = data.simulaciones || [];
         // Marca no vigentes también por comparación de modelo_version (aunque el
         // backend no lo hubiera marcado), para ofrecer RE-PRECALCULAR.
@@ -160,8 +181,11 @@ async function loadSimulaciones() {
         });
         renderSimList();
         const vigentes = sims.filter(s => s.vigente !== false).length;
-        simListStatus.className = 'live-status ok';
-        simListStatus.textContent = `${vigentes} vigentes · ${sims.length} totales · modelo ${data.modelo_version || '—'}`;
+        simListStatus.className = modelVersionError ? 'live-status warn' : 'live-status ok';
+        simListStatus.textContent = `${vigentes} vigentes · ${sims.length} totales · modelo ${data.modelo_version || '—'}`
+            + (modelVersionError
+                ? ` · ⚠ no se pudo leer /modelo_version (${modelVersionError}); vigencia según el servicio`
+                : '');
     } catch (e) {
         simListStatus.className = 'live-status err';
         simListStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
@@ -248,11 +272,15 @@ async function borrarSim(sim) {
 
 // Modelo vigente del servicio (GET /modelo_version, vía proxy).
 async function loadModeloVersion() {
+    modelVersionError = null;
     try {
         const res = await proxyFetch('/modelo_version');
         const data = await res.json();
-        if (data.ok) serviceModelVersion = data.modelo_version;
-    } catch { }
+        if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        serviceModelVersion = data.modelo_version;
+    } catch (e) {
+        modelVersionError = e.message || 'servicio no disponible';
+    }
 }
 
 // ¿La simulación seleccionada está desactualizada? (su modelo_version difiere
@@ -327,10 +355,12 @@ async function selectSim(s) {
 async function reprecalcular(s) {
     if (!s || recalculating) return;
     recalculating = true;
+    recalcStopped = false;
     const btn = document.getElementById('btnReprecalcular');
     if (btn) { btn.disabled = true; btn.textContent = '↻ RECALCULANDO…'; }
     simListStatus.className = 'live-status warn';
     simListStatus.textContent = `Re-precalculando ${s.equipo_a} vs ${s.equipo_b}… no cierres la pestaña.`;
+    const t0 = Date.now();
     try {
         const res = await predictFetch('/api/precalcular', {
             method: 'POST',
@@ -351,8 +381,12 @@ async function reprecalcular(s) {
         }
         // Async (202): poll del job; sync: ya terminó.
         if (data.job_id) {
-            const ok = await pollPrecalcular(data.job_id, s);
-            if (!ok) return;
+            const ok = await pollPrecalcular(data.job_id, t0);
+            if (!ok) {
+                // Restaura el botón para poder reintentar sin recargar la página.
+                renderSimHead(s, simIsStale(s) || detalleFaltante().marcadores || detalleFaltante().economia);
+                return;
+            }
         }
         simListStatus.className = 'live-status ok';
         simListStatus.textContent = '✓ Re-precalculo listo.';
@@ -367,10 +401,17 @@ async function reprecalcular(s) {
     }
 }
 
-// Poll simple del job de precalculo (mismo contrato que PREPARAR).
-async function pollPrecalcular(jobId, s) {
+// Poll del job de precalculo con cota de tiempo y cancelación (mismo contrato
+// que PREPARAR). t0 marca el inicio del POST para medir el total transcurrido.
+async function pollPrecalcular(jobId, t0) {
     let fails = 0;
-    while (true) {
+    while (!recalcStopped) {
+        const elapsed = Math.floor((Date.now() - t0) / 1000);
+        if (Date.now() - t0 > RECALC_TIMEOUT_MS) {
+            simListStatus.className = 'live-status err';
+            simListStatus.textContent = `⚠ El re-precalculo superó el límite de ${Math.round(RECALC_TIMEOUT_MS / 60000)} min (${elapsed}s). Pulsa RE-PRECALCULAR para reintentar.`;
+            return false;
+        }
         let r, jd;
         try {
             r = await predictFetch(`/api/precalcular/estado?job_id=${encodeURIComponent(jobId)}`);
@@ -384,8 +425,8 @@ async function pollPrecalcular(jobId, s) {
         } catch {
             fails++;
             simListStatus.className = 'live-status warn';
-            simListStatus.textContent = `⚠ Sin conexión (reintento #${fails})… puedes dejarlo abierto.`;
-            await new Promise(r2 => setTimeout(r2, Math.min(2000 + fails * 500, 10000)));
+            simListStatus.innerHTML = `⚠ Sin conexión (reintento #${fails}) · ${elapsed}s · <button class="link-cancel" id="btnCancelRecalc">cancelar espera</button>`;
+            await new Promise(r2 => setTimeout(r2, Math.min(RECALC_POLL_MS + fails * 500, 10000)));
             continue;
         }
         const job = jd && jd.job;
@@ -394,21 +435,26 @@ async function pollPrecalcular(jobId, s) {
             simListStatus.textContent = `Error: ${(jd && jd.error) || 'job no encontrado'}`;
             return false;
         }
-        const pctProg = Math.round((job.progreso || 0) * 100);
+        const prog = Math.round((job.progreso || 0) * 100);
         simListStatus.className = 'live-status warn';
-        simListStatus.textContent = `↻ ${pctProg}% · mapa ${job.mapas_hechos || 0}/${Math.ceil((job.total || 26) / 2)} · no cierres la pestaña.`;
+        simListStatus.innerHTML = `↻ ${prog}% · mapa ${job.mapas_hechos || 0}/${Math.ceil((job.total || 26) / 2)} · ${elapsed}s · <button class="link-cancel" id="btnCancelRecalc">cancelar espera</button>`;
         if (job.estado === 'listo') return true;
         if (job.estado === 'error') {
             simListStatus.className = 'live-status err';
             simListStatus.textContent = `Error: ${job.error || 'no se pudo re-precalcular'}`;
             return false;
         }
-        await new Promise(r2 => setTimeout(r2, 2000));
+        await new Promise(r2 => setTimeout(r2, RECALC_POLL_MS));
     }
+    simListStatus.className = 'live-status warn';
+    simListStatus.textContent = 'Espera cancelada. Pulsa RE-PRECALCULAR para reintentar.';
+    return false;
 }
 
 async function loadLiveBulkForCurrent() {
     if (!current) return;
+    liveBulk = {};
+    liveBulkError = null;
     const params = new URLSearchParams();
     if (current.match_id > 0) {
         params.set('match_id', current.match_id);
@@ -419,8 +465,8 @@ async function loadLiveBulkForCurrent() {
     try {
         const res = await proxyFetch(`/predicciones?${params.toString()}`);
         const data = await res.json();
-        liveBulk = {};
-        if (data.ok && Array.isArray(data.predicciones)) {
+        if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        if (Array.isArray(data.predicciones)) {
             data.predicciones.forEach(p => {
                 if (p && p.map_name) liveBulk[`${p.map_name}|${p.lado_inicial_a}`] = p;
             });
@@ -428,19 +474,33 @@ async function loadLiveBulkForCurrent() {
         // `data.modelo_version` es la versión VIGENTE del servicio, no la de las
         // filas. La versión real de la cache de este enfrentamiento está en cada
         // fila (`p.modelo_version`), y es la que determina la vigencia.
-        if (data.modelo_version) serviceModelVersion = data.modelo_version;
+        if (data.modelo_version) {
+            serviceModelVersion = data.modelo_version;
+            modelVersionError = null;
+        }
         const filas = Object.values(liveBulk);
         const fila = filas.find(p => p && p.modelo_version);
         if (fila) current.modelo_version = fila.modelo_version;
-    } catch {
+    } catch (e) {
         liveBulk = {};
+        liveBulkError = e.message || 'servicio no disponible';
     }
 }
 
 // ─── PANEL MAPA / BANDO (lee de liveBulk, no llama al servicio en cada clic) ──
 function renderLiveMapPicker() {
-    if (!availableMaps.length) {
+    if (mapsLoading) {
         liveMapPicker.innerHTML = '<div class="live-hint" style="padding:12px">Cargando mapas...</div>';
+        return;
+    }
+    if (mapsError) {
+        liveMapPicker.innerHTML = `<div class="live-hint" style="padding:12px;color:var(--red)">No se pudieron cargar los mapas (${escapeHtml(mapsError)}). <button class="link-cancel" id="btnRetryMaps">reintentar</button></div>`;
+        const retry = document.getElementById('btnRetryMaps');
+        if (retry) retry.addEventListener('click', loadAvailableMaps);
+        return;
+    }
+    if (!availableMaps.length) {
+        liveMapPicker.innerHTML = '<div class="live-hint" style="padding:12px">Sin mapas disponibles.</div>';
         return;
     }
     if (!liveMap || !availableMaps.includes(liveMap)) liveMap = availableMaps[0];
@@ -448,11 +508,18 @@ function renderLiveMapPicker() {
     liveMapPicker.innerHTML = '';
     availableMaps.forEach(m => {
         const row = liveBulk ? liveBulk[`${m}|${liveSide}`] : null;
+        // Motor = predicción calibrada (misma en todos los mapas); hist = análisis
+        // histórico del mapa (contrato: "no es la predicción del motor").
+        const motorP = row ? row.prob_victoria_a : null;
         const am = row && row.analisis_mapa ? row.analisis_mapa : null;
-        const paMap = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
+        const histP = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
         const ot = row ? row.prob_overtime : null;
-        const meta = (paMap != null && !isNaN(paMap))
-            ? `<span class="mqp-prob">${pct(paMap)}%</span><span class="mqp-ot">OT ${pct(ot)}%</span>`
+        const meta = row
+            ? `<span class="mqp-prob" title="Predicción del motor (calibrada, igual en todos los mapas)">MOTOR ${pct(motorP)}</span>`
+            + `<span class="mqp-ot" title="P(overtime) del motor">OT ${pct(ot)}</span>`
+            + ((histP != null && !isNaN(histP))
+                ? `<span class="mqp-hist" title="Análisis histórico del mapa (no es la predicción del motor)">hist ${pct(histP)}</span>`
+                : '')
             : `<span class="mqp-prob">—</span>`;
         const tile = document.createElement('button');
         const enSerie = matchMaps.some(mm => mm.map_name === m);
@@ -477,6 +544,14 @@ function renderLiveMapPicker() {
 
 function renderLiveDetail() {
     if (!current || !liveMap) return;
+    if (liveBulkError) {
+        liveCards.innerHTML = '';
+        if (liveScoreboard) { liveScoreboard.className = 'scoreboard-block'; liveScoreboard.innerHTML = ''; }
+        if (liveEconomia) { liveEconomia.className = 'economia-block'; liveEconomia.innerHTML = ''; }
+        liveStatus.className = 'live-status err';
+        liveStatus.textContent = `No se pudieron leer las predicciones cacheadas: ${liveBulkError}. Reintenta con ACTUALIZAR o RE-PRECALCULAR.`;
+        return;
+    }
     const key = `${liveMap}|${liveSide}`;
     const row = liveBulk ? liveBulk[key] : null;
     if (row) {
@@ -651,37 +726,45 @@ function paintLiveDetail(p, modelVersion, vigente) {
     liveDetailTitle.textContent = `${(liveMap || '').toUpperCase()} · ${liveSide === 'attack' ? 'ATK' : 'DEF'}`;
     const conf = confBand(p);
     const am = p && p.analisis_mapa ? p.analisis_mapa : null;
-    const pMapA = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : Number(p.prob_victoria_a);
+    // Motor: P calibrada del backend (independiente del lado). Histórico: p_mapa_a
+    // del analisis_mapa, que el contrato marca como análisis, no predicción.
+    const motorA = (p && p.prob_victoria_a != null) ? Number(p.prob_victoria_a) : null;
+    const motorB = (p && p.prob_victoria_b != null)
+        ? Number(p.prob_victoria_b)
+        : ((motorA != null && !isNaN(motorA)) ? 1 - motorA : null);
+    const histP = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
     const wrA = (am && am.equipo_a) ? am.equipo_a : null;
     const wrB = (am && am.equipo_b) ? am.equipo_b : null;
     renderScoreboard(p);
     renderEconomia(p);
     liveCards.innerHTML = `
     <div class="live-card">
-      <div class="live-card-label" style="color:var(--accent)">${escapeHtml(current.equipo_a)} · ESTE MAPA</div>
-      <div class="live-card-val live-a">${pct(pMapA)}%</div>
+      <div class="live-card-label" style="color:var(--accent)">MOTOR · ${escapeHtml(current.equipo_a)} GANA EL MAPA</div>
+      <div class="live-card-val live-a">${pct(motorA)}</div>
     </div>
     <div class="live-card">
-      <div class="live-card-label" style="color:var(--blue)">${escapeHtml(current.equipo_b)} · ESTE MAPA</div>
-      <div class="live-card-val live-b">${pct(1 - pMapA)}%</div>
+      <div class="live-card-label" style="color:var(--blue)">MOTOR · ${escapeHtml(current.equipo_b)} GANA EL MAPA</div>
+      <div class="live-card-val live-b">${pct(motorB)}</div>
     </div>
     <div class="live-card">
-      <div class="live-card-label">OVERTIME</div>
-      <div class="live-card-val live-ot">${pct(p.prob_overtime)}%</div>
+      <div class="live-card-label">OVERTIME (MOTOR)</div>
+      <div class="live-card-val live-ot">${pct(p && p.prob_overtime)}</div>
     </div>
     <div class="live-card">
       <div class="live-card-label">CONFIANZA (MOTOR)</div>
-      <div class="live-card-val">${confBadge(conf) || '<span class="live-card-val">—</span>'}</div>
+      <div class="live-card-val">${confBadge(conf) || '—'}</div>
     </div>
     <div class="live-card">
       <div class="live-card-label">MUESTRAS</div>
       <div class="live-card-val">${p.n_sim ? Number(p.n_sim).toLocaleString() : '—'}</div>
     </div>
-    <div class="analisis-nota">
-      <b>Análisis por mapa</b> (histórico) · motor: <b>${pct(p.prob_victoria_a)}%</b> (igual en todos los mapas) ·
+    <div class="analisis-nota analisis-nota-hist">
+      <b>ANÁLISIS HISTÓRICO</b> (no es la predicción del motor) ·
+      ${histP != null && !isNaN(histP) ? `p_mapa_a: <b>${pct(histP)}</b>` : 'p_mapa_a: —'} ·
       historial en <b>${(liveMap || '').toUpperCase()}</b>:
-      ${escapeHtml(current.equipo_a)} ${wrA ? pct(wrA.winrate) + '% <span style="color:var(--dim)">(n=' + wrA.n + ')</span>' : '—'} ·
-      ${escapeHtml(current.equipo_b)} ${wrB ? pct(wrB.winrate) + '% <span style="color:var(--dim)">(n=' + wrB.n + ')</span>' : '—'}
+      ${escapeHtml(current.equipo_a)} ${wrA ? pct(wrA.winrate) + ' <span style="color:var(--dim)">(n=' + wrA.n + ')</span>' : '—'} ·
+      ${escapeHtml(current.equipo_b)} ${wrB ? pct(wrB.winrate) + ' <span style="color:var(--dim)">(n=' + wrB.n + ')</span>' : '—'}
+      <br><span style="color:var(--dim)">La predicción del motor (tarjetas de arriba) es la misma en todos los mapas y lados del enfrentamiento.</span>
     </div>`;
     const stale = vigente === false || current.vigente === false;
     liveStatus.className = 'live-status ' + (stale ? 'warn' : 'ok');
@@ -728,6 +811,10 @@ function syncSerieBuilder() {
         serieSlots.innerHTML = '<div style="padding:20px;text-align:center;font-size:10px;color:var(--dim);letter-spacing:2px">⏳ CARGANDO MAPAS...</div>';
         return;
     }
+    if (mapsError) {
+        serieSlots.innerHTML = `<div style="padding:20px;text-align:center;font-size:10px;color:var(--red);letter-spacing:2px">MAPAS NO DISPONIBLES: ${escapeHtml(mapsError)}</div>`;
+        return;
+    }
 
     const queueDiv = document.createElement('div');
     queueDiv.className = 'map-queue';
@@ -751,12 +838,18 @@ function syncSerieBuilder() {
 
         const row = liveBulk ? liveBulk[`${cfg.map_name}|${cfg.lado_inicial_a}`] : null;
         const am = row && row.analisis_mapa ? row.analisis_mapa : null;
-        const paMap = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
-        const pred = (paMap != null && !isNaN(paMap))
+        const motorA = row ? Number(row.prob_victoria_a) : null;
+        const motorB = (row && row.prob_victoria_b != null)
+            ? Number(row.prob_victoria_b)
+            : ((motorA != null && !isNaN(motorA)) ? 1 - motorA : null);
+        const histP = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
+        const pred = row
             ? `<div class="qi-pred">
-                 <span class="qi-pred-a">${pct(paMap)}%</span>
-                 <span class="qi-pred-b">${pct(1 - paMap)}%</span>
-                 <span class="qi-pred-ot">OT ${pct(row.prob_overtime)}%</span>
+                 <span class="qi-pred-tag" title="Predicción del motor (calibrada, igual en todos los mapas)">MOTOR</span>
+                 <span class="qi-pred-a">${pct(motorA)}</span>
+                 <span class="qi-pred-b">${pct(motorB)}</span>
+                 <span class="qi-pred-ot" title="P(overtime) del motor">OT ${pct(row.prob_overtime)}</span>
+                 ${histP != null && !isNaN(histP) ? `<span class="qi-pred-hist" title="Análisis histórico del mapa (no es la predicción del motor)">hist ${pct(histP)}</span>` : ''}
                </div>`
             : `<span class="qi-pred-none">sin caché</span>`;
 
@@ -869,9 +962,9 @@ function renderSerieBanner(data) {
     <div class="serie-map-row">
       <span class="smr-name">${m.map_name.toUpperCase()}</span>
       <span class="smr-side">${m.lado_inicial_a === 'attack' ? 'ATK' : 'DEF'}</span>
-      <span class="smr-a">${pct(m.prob_victoria_a)}%</span>
-      <span class="smr-b">${pct(m.prob_victoria_b)}%</span>
-      <span class="smr-ot">OT ${pct(m.prob_overtime)}%</span>
+      <span class="smr-a">${pct(m.prob_victoria_a)}</span>
+      <span class="smr-b">${pct(m.prob_victoria_b)}</span>
+      <span class="smr-ot">OT ${pct(m.prob_overtime)}</span>
       <span class="smr-marcador">${marcadorTxt}</span>
       <span class="smr-conf ${conf || ''}">${conf ? `<span class="conf-dot"></span>${conf}` : ''}</span>
       <span class="smr-fuente">${m.fuente || 'cache'}</span>
@@ -928,7 +1021,7 @@ function renderSerieBanner(data) {
     <div class="sb-team ${favA}">
       <div class="sb-name">EQUIPO A</div>
       <div class="sb-abbrev">${escapeHtml(current.equipo_a)}</div>
-      <div class="sb-pct">${pct(pa)}%</div>
+      <div class="sb-pct">${pct(pa)}</div>
       <div class="sb-label">PROB. GANAR SERIE</div>
     </div>
     <div class="sb-center">
@@ -941,12 +1034,12 @@ function renderSerieBanner(data) {
     <div class="sb-team ${favB}" style="text-align:right;align-items:flex-end">
       <div class="sb-name">EQUIPO B</div>
       <div class="sb-abbrev">${escapeHtml(current.equipo_b)}</div>
-      <div class="sb-pct">${pct(pb)}%</div>
+      <div class="sb-pct">${pct(pb)}</div>
       <div class="sb-label">PROB. GANAR SERIE</div>
     </div>
     ${distBlock}
     ${caminosBlock}
-    ${mapRows ? `<div class="serie-maps">${mapRows}</div>` : ''}`;
+    ${mapRows ? `<div class="serie-maps"><div class="sd-title">MAPAS · PREDICCIÓN DEL MOTOR <span class="eco-note">P calibrada · misma en todos los mapas y lados · hist no incluido aquí</span></div>${mapRows}</div>` : ''}`;
 
     serieNote.innerHTML = `<strong>Serie desde caché</strong> (sin Monte Carlo). Formato <strong>${(data.formato || '').toUpperCase()}</strong> — necesario ganar <strong>${data.mapas_para_ganar}</strong> mapa(s).`;
 }
@@ -958,7 +1051,8 @@ NOMENCLATURA (NO confundir):
 - model_p_a / model_p_b = P del MOTOR para ESE MAPA (igual en todos los mapas). NO es la P de la serie. Compara el "analítico" (p_mapa_a) SIEMPRE contra model_p_a, nunca contra prob_serie_a/prob_serie_b.
 - prob_serie_a / prob_serie_b = P de GANAR LA SERIE; úsalas SOLO para la serie.
 - Nunca menciones un "n" que no venga explícito en el bloque. Si el bloque no trae n (p. ej. total_rondas), NO lo menciones (ni "n alto"): di "sin n reportado" o no lo cites.
-- Certeza (de la RECOMENDACIÓN, no del resultado): **baja** si el pick < 57% (cerca de coinflip); **media** si 57–65%; **alta** si > 65%. EXCEPCIÓN: "marcador exacto" y "pistol" son mercados dispersos → NUNCA "alta" (máximo "media"), aunque la probabilidad sea alta. "certeza alta" = el estimado es estable, NO significa que el resultado vaya a pasar.
+- ot (por mapa) = P(overtime) del MOTOR. total_rondas.mas_24_5 = P(rondas totales > 24.5) deducida de la distribución de marcadores: NO es el campo "ot"; no los mezcles.
+- Certeza (de la RECOMENDACIÓN, no del resultado; mismos umbrales que la banda del motor sobre el favorito): **baja** si el pick < 55% (cerca de coinflip); **media** si 55%–<62%; **alta** si >= 62%. EXCEPCIÓN: "marcador exacto" y "pistol" son mercados dispersos → NUNCA "alta" (máximo "media"), aunque la probabilidad sea alta. "certeza alta" = el estimado es estable, NO significa que el resultado vaya a pasar.
 
 FORMATO DE SALIDA (respetar el orden):
 1) RESUMEN (directo, sin relleno). Una línea por mercado, con el pick y su %:
@@ -1008,7 +1102,7 @@ function _totalRondas(marcadores) {
         esperado: Number(exp.toFixed(2)),
         mas_21_5: Number(mas215.toFixed(4)),
         menos_21_5: Number((1 - mas215).toFixed(4)),
-        mas_24_5_ot: Number(mas245.toFixed(4)),
+        mas_24_5: Number(mas245.toFixed(4)),
     };
 }
 
@@ -1042,7 +1136,7 @@ function _mercadosTexto(payload) {
     for (const mp of (m.por_mapa || [])) {
         const tr = mp.total_rondas || {}, pis = mp.pistol || {};
         out.push(`  - ${mp.map} (${mp.lado}): rondas≈${tr.esperado != null ? tr.esperado : '—'}`
-            + ` · >21.5 ${f(tr.mas_21_5)} · OT ${f(tr.mas_24_5_ot)}`
+            + ` · >21.5 ${f(tr.mas_21_5)} · rondas>24.5 ${f(tr.mas_24_5)}`
             + ` · pistol ${payload.equipo_a} ${f(pis.p_a)} (n=${pis.n != null ? pis.n : '—'})`);
     }
     return out.join('\n');
@@ -1201,9 +1295,9 @@ function renderComparison(data) {
       <tr class="cmp-row ${tipoClass(d.tipo)}">
         <td>${escapeHtml(d.map_name)}</td>
         <td>${d.lado_inicial_a === 'attack' ? 'ATK' : 'DEF'}</td>
-        <td class="cmp-a">${pct(d.prob_victoria_a)}%</td>
-        <td class="cmp-b">${pct(d.prob_victoria_b)}%</td>
-        <td>${pct(d.prob_overtime)}%</td>
+        <td class="cmp-a">${pct(d.prob_victoria_a)}</td>
+        <td class="cmp-b">${pct(d.prob_victoria_b)}</td>
+        <td>${pct(d.prob_overtime)}</td>
         <td>${escapeHtml(ganador)}</td>
         <td>${tipoLabel(d.tipo)}</td>
         <td>${d.resultado === 'acierto' ? '✓' : '✕'} ${escapeHtml(d.resultado)}</td>
@@ -1232,16 +1326,26 @@ async function fetchScorecard() {
     const params = new URLSearchParams();
     if (current.match_id > 0) params.set('match_id', current.match_id);
     else { params.set('equipo_a', current.equipo_a); params.set('equipo_b', current.equipo_b); }
+    // Defaults documentados del endpoint de micro-eventos.
+    params.set('cruces', '1');
+    params.set('tol_cruce', '6');
     try {
         const res = await proxyFetch(`/scorecard?${params.toString()}`);
         const data = await res.json();
-        if (!data.ok || !data.resumen || !data.resumen.n_mapas) return;
+        if (!data.ok) {
+            scorecardWrap.innerHTML = `<div class="live-status err">No se pudo cargar el SCORECARD: ${escapeHtml(data.error || `HTTP ${res.status}`)}</div>`;
+            return;
+        }
+        if (!data.resumen || !data.resumen.n_mapas) return;
         renderScorecard(data);
-    } catch { }
+    } catch (e) {
+        scorecardWrap.innerHTML = `<div class="live-status err">No se pudo cargar el SCORECARD: ${escapeHtml(e.message || 'servicio no disponible')}</div>`;
+    }
 }
 
 function renderScorecard(data) {
     const r = data.resumen || {};
+    const sinCruces = r.cruce_mae == null;
     const cards = [
         { label: 'N MAPAS', val: r.n_mapas },
         { label: 'MAP ACCURACY', val: fmtRatio(r.map_accuracy) },
@@ -1249,7 +1353,7 @@ function renderScorecard(data) {
         { label: 'OT BRIER', val: fmtNum(r.ot_brier) },
         { label: 'MARCADOR TOP-1', val: fmtRatio(r.scoreline_top1_hit) },
         { label: 'ECO MAE', val: r.eco_mae == null ? '—' : `${fmtNum(r.eco_mae)} (n=${r.eco_n})` },
-        { label: 'CRUCE MAE', val: r.cruce_mae == null ? '—' : `${fmtNum(r.cruce_mae)} (n=${r.cruce_n})` },
+        { label: 'CRUCE MAE', val: sinCruces ? '— (sin cruces)' : `${fmtNum(r.cruce_mae)} (n=${r.cruce_n})` },
     ];
     const media = arr => (arr && arr.length ? arr.reduce((a, x) => a + x.erro, 0) / arr.length : null);
     const rows = (data.detalle || []).map(m => {
@@ -1259,21 +1363,21 @@ function renderScorecard(data) {
         return `<tr>
             <td>${escapeHtml(m.map_name)}</td>
             <td>${m.score_a}-${m.score_b}</td>
-            <td>${pct(m.prob_victoria_a)}%</td>
+            <td>${pct(m.prob_victoria_a)}</td>
             <td>${m.gano_a ? 'A' : 'B'}</td>
-            <td>${pct(m.ot_pred)}% / ${m.ot_real ? 'sí' : 'no'} ${otOk}</td>
-            <td>${pct(m.scoreline_prob)}%</td>
+            <td>${pct(m.ot_pred)} / ${m.ot_real ? 'sí' : 'no'} ${otOk}</td>
+            <td>${pct(m.scoreline_prob)}</td>
             <td>${ecoErr == null ? '—' : ecoErr.toFixed(3)}</td>
             <td>${cruceErr == null ? '—' : cruceErr.toFixed(3)}</td>
         </tr>`;
     }).join('');
     scorecardWrap.innerHTML = `
     <div class="scorecard-title">SCORECARD · MICRO-EVENTOS
-      <span class="eco-note">predicho vs real · MAE menor = mejor (0-1)</span></div>
+      <span class="eco-note">predicho vs real · MAE menor = mejor (0-1)${sinCruces ? ' · sin datos de cruces (cruces=1)' : ''}</span></div>
     <div class="cmp-summary scorecard-cards">${cards.map(c =>
         `<div class="cmp-card"><div class="cmp-card-label">${c.label}</div><div class="cmp-card-val">${c.val == null ? '—' : c.val}</div></div>`).join('')}</div>
     <div class="cmp-table-wrap"><table class="cmp-table">
-        <thead><tr><th>MAPA</th><th>MARCADOR</th><th>P(A)</th><th>GANÓ</th><th>OT (PRED/REAL)</th><th>P(MARCADOR REAL)</th><th>ECO MAE</th><th>CRUCE MAE</th></tr></thead>
+        <thead><tr><th>MAPA</th><th>MARCADOR</th><th>P(A)</th><th>GANÓ</th><th>OT ≥50% (PRED/REAL)</th><th>P(MARCADOR REAL)</th><th>ECO MAE</th><th>CRUCE MAE</th></tr></thead>
         <tbody>${rows}</tbody>
     </table></div>`;
 }
@@ -1284,14 +1388,23 @@ async function fetchScorecardAgregado() {
     scorecardAgregadoWrap.innerHTML = '';
     if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status warn'; cmpToolsStatus.textContent = 'Calculando agregado (puede tardar)...'; }
     try {
-        const res = await proxyFetch('/scorecard_agregado');
+        const res = await proxyFetch('/scorecard_agregado?cruces=1&tol_cruce=6');
         const data = await res.json();
-        if (!data.ok || !data.resumen || !data.resumen.n_mapas) {
+        if (!data.ok) {
+            if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status err'; cmpToolsStatus.textContent = `Error: ${data.error || `HTTP ${res.status}`}`; }
+            return;
+        }
+        if (!data.resumen || !data.resumen.n_mapas) {
             if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status warn'; cmpToolsStatus.textContent = 'Sin partidos jugados con predicción.'; }
             return;
         }
         renderScorecardAgregado(data);
-        if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status ok'; cmpToolsStatus.textContent = `✓ ${data.resumen.n_partidos} partidos / ${data.resumen.n_mapas} mapas`; }
+        const r = data.resumen;
+        const nPart = r.n_partidos != null ? r.n_partidos : r.n;
+        if (cmpToolsStatus) {
+            cmpToolsStatus.className = 'live-status ok';
+            cmpToolsStatus.textContent = `✓ ${nPart != null ? nPart + ' partidos / ' : ''}${r.n_mapas} mapas`;
+        }
     } catch (e) {
         if (cmpToolsStatus) { cmpToolsStatus.className = 'live-status err'; cmpToolsStatus.textContent = `Error: ${e.message}`; }
     }
@@ -1299,14 +1412,15 @@ async function fetchScorecardAgregado() {
 
 function renderScorecardAgregado(data) {
     const r = data.resumen || {};
+    const sinCruces = r.cruce_mae == null;
     const cards = [
-        { label: 'PARTIDOS', val: r.n_partidos },
+        { label: 'PARTIDOS', val: r.n_partidos != null ? r.n_partidos : r.n },
         { label: 'MAPAS', val: r.n_mapas },
         { label: 'MAP ACCURACY', val: fmtRatio(r.map_accuracy) },
         { label: 'MAP BRIER', val: fmtNum(r.map_brier) },
         { label: 'OT BRIER', val: fmtNum(r.ot_brier) },
         { label: 'ECO MAE', val: r.eco_mae == null ? '—' : `${fmtNum(r.eco_mae)} (n=${r.eco_n})` },
-        { label: 'CRUCE MAE', val: r.cruce_mae == null ? '—' : `${fmtNum(r.cruce_mae)} (n=${r.cruce_n})` },
+        { label: 'CRUCE MAE', val: sinCruces ? '— (sin cruces)' : `${fmtNum(r.cruce_mae)} (n=${r.cruce_n})` },
     ];
     const tabla = (titulo, filas) => `
     <div class="scorecard-subtitle">${titulo}</div>
@@ -1314,12 +1428,12 @@ function renderScorecardAgregado(data) {
       <thead><tr><th>GRUPO</th><th>N</th><th>PRED MEDIA</th><th>REAL MEDIA</th><th>MAE</th></tr></thead>
       <tbody>${(filas || []).map(f => `<tr>
         <td>${escapeHtml(f.grupo)}</td><td>${f.n}</td>
-        <td>${pct(f.pred_media)}%</td><td>${pct(f.real_media)}%</td>
+        <td>${pct(f.pred_media)}</td><td>${pct(f.real_media)}</td>
         <td>${(Number(f.mae) * 100).toFixed(1)}%</td></tr>`).join('')}</tbody>
     </table></div>`;
     scorecardAgregadoWrap.innerHTML = `
     <div class="scorecard-title">SCORECARD AGREGADO
-      <span class="eco-note">predicho vs real, sumando partidos · MAE menor = mejor</span></div>
+      <span class="eco-note">predicho vs real, sumando partidos · MAE menor = mejor${sinCruces ? ' · sin datos de cruces (cruces=1)' : ''}</span></div>
     <div class="cmp-summary scorecard-cards">${cards.map(c =>
         `<div class="cmp-card"><div class="cmp-card-label">${c.label}</div><div class="cmp-card-val">${c.val == null ? '—' : c.val}</div></div>`).join('')}</div>
     ${tabla('POR CATEGORÍA', data.por_categoria)}
@@ -1365,6 +1479,10 @@ btnRefreshSims.addEventListener('click', loadSimulaciones);
 chkShowStale.addEventListener('change', () => {
     showStale = chkShowStale.checked;
     renderSimList();
+});
+// Cancelar la espera del job de re-precalculo (botón inyectado en el estado).
+simListStatus.addEventListener('click', e => {
+    if (e.target && e.target.id === 'btnCancelRecalc') recalcStopped = true;
 });
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────

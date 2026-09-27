@@ -25,6 +25,8 @@ let preparedModelVersion = null; // hash del modelo con el que se preparó
 let serviceModelVersion = null;  // hash del modelo vigente en el servicio
 let prepareBusy = false;
 let jobStopped = false;          // permite cancelar la espera del job
+let cacheError = null;           // error al leer la caché (null = ok)
+let modelVersionError = null;    // error al leer /modelo_version (null = ok)
 
 // ─── DOM ──────────────────────────────────────────────────────────────────────
 const gridA = document.getElementById('teamGridA');
@@ -167,6 +169,7 @@ function updateAssociarState() {
 // Lee las predicciones existentes para el badge de caché (sin preparar).
 async function loadCacheSummary() {
     if (!selectedA || !selectedB) return;
+    cacheError = null;
     const params = new URLSearchParams();
     if (matchId > 0) {
         params.set('match_id', matchId);
@@ -177,24 +180,26 @@ async function loadCacheSummary() {
     try {
         const res = await proxyFetch(`/predicciones?${params.toString()}`);
         const data = await res.json();
+        if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
         cacheRows = {};
-        if (data.ok && Array.isArray(data.predicciones)) {
+        if (Array.isArray(data.predicciones)) {
             data.predicciones.forEach(p => {
                 if (p && p.map_name) cacheRows[`${p.map_name}|${p.lado_inicial_a}`] = p;
             });
         }
-    } catch {
+    } catch (e) {
         cacheRows = {};
+        cacheError = e.message || 'servicio no disponible';
     }
     updateCacheBadge();
 }
 
-// ¿Hay que re-precalcular? Sí si ya está completo o si el modelo del servicio
-// cambió (las filas cacheadas quedan con modelo_version viejo => vigente:false).
+// ¿Hay que re-precalcular forzando? Solo si el modelo del servicio cambió:
+// con la caché completa y vigente, forzar:true recomputaría 26 filas sin motivo
+// (el backend las sirve desde caché con forzar:false).
 function needsReprepare() {
     const rows = Object.values(cacheRows);
-    const staleModel = !!serviceModelVersion && rows.some(r => r.modelo_version && r.modelo_version !== serviceModelVersion);
-    return staleModel || rows.length >= TOTAL_COMBOS;
+    return !!serviceModelVersion && rows.some(r => r.modelo_version && r.modelo_version !== serviceModelVersion);
 }
 
 function updateCacheBadge() {
@@ -202,6 +207,12 @@ function updateCacheBadge() {
     if (!selectedA || !selectedB) {
         cacheBadge.className = 'cache-badge';
         cacheBadge.textContent = '';
+        return;
+    }
+    if (cacheError) {
+        cacheBadge.className = 'cache-badge warn';
+        cacheBadge.textContent = `⚠ no se pudo leer la caché: ${cacheError}`;
+        if (bpText) bpText.textContent = 'PREPARAR PARTIDO';
         return;
     }
     const rows = Object.values(cacheRows);
@@ -226,16 +237,25 @@ function updateCacheBadge() {
 
 // ─── MODELO / VERSIÓN ─────────────────────────────────────────────────────────
 async function refreshModelVersion() {
+    modelVersionError = null;
     try {
         const res = await proxyFetch('/modelo_version');
         const data = await res.json();
-        if (data.ok) serviceModelVersion = data.modelo_version;
-    } catch { }
+        if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        serviceModelVersion = data.modelo_version;
+    } catch (e) {
+        modelVersionError = e.message || 'servicio no disponible';
+    }
     updateModelBadge();
     if (selectedA && selectedB) updateCacheBadge();
 }
 
 function updateModelBadge() {
+    if (modelVersionError) {
+        modelBadge.className = 'model-badge stale';
+        modelBadge.textContent = `⚠ no se pudo leer modelo_version (${modelVersionError})`;
+        return;
+    }
     if (!serviceModelVersion) { modelBadge.textContent = ''; modelBadge.className = 'model-badge'; return; }
     const stale = !!(preparedModelVersion && preparedModelVersion !== serviceModelVersion);
     modelBadge.className = 'model-badge' + (stale ? ' stale' : '');
