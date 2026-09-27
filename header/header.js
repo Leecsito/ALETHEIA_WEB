@@ -47,7 +47,19 @@
         return null;
     }
 
+    /* Fondo global de nodos (comun/bg-nodes.js): se inyecta UNA vez por página
+       desde el header compartido; no se duplica en cada index.html. */
+    function injectBgNodes() {
+        if (window.__AE_BG_NODES__ || document.querySelector('script[data-ae-bg]')) return;
+        const s = document.createElement('script');
+        s.src = basePath() + 'comun/bg-nodes.js';
+        s.defer = true;
+        s.dataset.aeBg = '1';
+        document.head.appendChild(s);
+    }
+
     function render() {
+        injectBgNodes();
         const mount = document.getElementById('aeHeaderMount');
         if (!mount) return;
 

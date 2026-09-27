@@ -3,44 +3,38 @@
  * Usado por los componentes partidos/, equipos/, jugadores/ y eventos/.
  * Todas las clases llevan prefijo `v-` para no chocar con otros componentes.
  *
- * Look: dark premium — gradientes en capas, glows sutiles, imágenes grandes.
+ * Look: dark premium — glass neutro, tipografía display, imágenes grandes.
  */
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-    /* Fondos (DS: dark #0F0F23) */
-    --bg: #0f0f23;
-    --surface: #15152b;
-    --surface2: #1b1b33;
-    --surface3: #232340;
-    --card-grad: linear-gradient(180deg, #1e1c35 0%, #16142a 100%);
-    --hero-grad: linear-gradient(135deg, #201d3d 0%, #14122a 55%, #0f0f23 100%);
-    --border: #2e2b4d;
-    --border-soft: #262343;
-    /* Acentos DS: violeta primario, cian CTA, rosa solo EN VIVO */
-    --primary: #7c3aed;
-    --secondary: #a78bfa;
-    --accent: #38bdf8;
-    --accent2: #ef4444;
-    --live: #f43f5e;
+    /* Paleta negra + amarilla (esquema original del sitio) */
+    --bg: #0a0a0c;
+    --surface: #111114;
+    --surface2: #16161a;
+    --surface3: #1c1c22;
+    --card-grad: linear-gradient(180deg, #17171d 0%, #101014 100%);
+    --hero-grad: linear-gradient(135deg, #181820 0%, #101014 55%, #0c0c10 100%);
+    --border: #222228;
+    --border-soft: #1d1d24;
+    --accent: #e8ff47;
+    --accent2: #ff4757;
     --green: #4ade80;
     --orange: #fb923c;
     --blue: #38bdf8;
     --purple: #a78bfa;
-    --text: #e2e8f0;
-    --dim: #94a3b8;
+    --text: #d4d4d8;
+    --dim: #52525b;
     --mono: 'DM Mono', monospace;
     --body: 'Chakra Petch', sans-serif;
     --display: 'Russo One', sans-serif;
-    --glow-accent: 0 0 24px rgba(56, 189, 248, .18);
-    --glow-primary: 0 0 26px rgba(124, 58, 237, .28);
-    --shadow-card: 0 10px 30px rgba(5, 5, 20, .55);
-    /* Glass tokens (MASTER.md) */
-    --glass-bg: rgba(30, 28, 53, .42);
-    --glass-bg-strong: rgba(30, 28, 53, .66);
-    --glass-border: rgba(255, 255, 255, .10);
-    --glass-highlight: rgba(255, 255, 255, .06);
+    --shadow-card: 0 10px 30px rgba(0, 0, 0, .45);
+    /* Glass neutro (sin tinte; el blur se aplica solo a superficies grandes) */
+    --glass-bg: rgba(17, 17, 20, .44);
+    --glass-bg-strong: rgba(10, 10, 12, .68);
+    --glass-border: rgba(255, 255, 255, .09);
+    --glass-highlight: rgba(255, 255, 255, .05);
     --glass-blur: 14px;
 }
 
@@ -61,9 +55,9 @@ body {
     z-index: 0;
     pointer-events: none;
     background-image:
-        radial-gradient(900px 340px at 50% -120px, rgba(56, 189, 248, .05), transparent 70%),
-        linear-gradient(rgba(56, 189, 248, .018) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(56, 189, 248, .018) 1px, transparent 1px);
+        radial-gradient(900px 340px at 50% -120px, rgba(232, 255, 71, .05), transparent 70%),
+        linear-gradient(rgba(232, 255, 71, .018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(232, 255, 71, .018) 1px, transparent 1px);
     background-size: auto, 40px 40px, 40px 40px;
 }
 
@@ -98,7 +92,6 @@ body {
 .vct-tabs a.active {
     color: var(--accent);
     border-bottom-color: var(--accent);
-    text-shadow: var(--glow-accent);
 }
 
 main.v-main {
@@ -130,7 +123,6 @@ main.v-main.wide { max-width: 1500px; }
     bottom: 4px;
     width: 3px;
     background: var(--accent);
-    box-shadow: var(--glow-accent);
 }
 
 .v-title h1 {
@@ -177,8 +169,8 @@ main.v-main.wide { max-width: 1500px; }
 .v-select { cursor: pointer; }
 
 .v-input:focus, .v-select:focus {
-    border-color: rgba(56, 189, 248, .45);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, .06);
+    border-color: rgba(232, 255, 71, .45);
+    box-shadow: 0 0 0 3px rgba(232, 255, 71, .06);
 }
 
 .v-input::placeholder { color: var(--dim); }
@@ -199,15 +191,15 @@ main.v-main.wide { max-width: 1500px; }
 }
 
 .v-btn:hover {
-    border-color: rgba(56, 189, 248, .45);
+    border-color: rgba(232, 255, 71, .45);
     color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, .05);
+    box-shadow: 0 0 0 3px rgba(232, 255, 71, .05);
 }
 
 .v-btn.active {
-    border-color: rgba(56, 189, 248, .5);
+    border-color: rgba(232, 255, 71, .5);
     color: var(--accent);
-    background: linear-gradient(180deg, rgba(56, 189, 248, .1), rgba(56, 189, 248, .03));
+    background: linear-gradient(180deg, rgba(232, 255, 71, .1), rgba(232, 255, 71, .03));
 }
 
 .v-btn.small { padding: 5px 11px; font-size: 10px; }
@@ -241,7 +233,6 @@ main.v-main.wide { max-width: 1500px; }
     width: 3px;
     height: 15px;
     background: var(--accent);
-    box-shadow: var(--glow-accent);
     flex-shrink: 0;
 }
 
@@ -274,7 +265,6 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-day.today::before {
     background: var(--accent);
-    box-shadow: var(--glow-accent);
 }
 
 .v-day b {
@@ -323,7 +313,7 @@ main.v-main.wide { max-width: 1500px; }
         color-mix(in srgb, var(--c2, #1a1a21) 26%, #15151b) 100%);
 }
 
-.v-match:hover::before { background: var(--accent); box-shadow: var(--glow-accent); }
+.v-match:hover::before { background: var(--accent); }
 .v-match.alt { background: var(--bg); }
 .v-match.no-link { cursor: default; }
 
@@ -360,7 +350,7 @@ main.v-main.wide { max-width: 1500px; }
     color: var(--dim);
 }
 
-.v-mt.win .v-mt-score { color: var(--accent); text-shadow: var(--glow-accent); }
+.v-mt.win .v-mt-score { color: var(--accent); }
 
 .v-mt-name {
     overflow: hidden;
@@ -399,7 +389,7 @@ main.v-main.wide { max-width: 1500px; }
     letter-spacing: 1px;
 }
 
-/* El mismo logo, difuminado, hace de glow detrás (los PNG son transparentes). */
+/* El mismo logo, difuminado, hace de fondo suave (los PNG son transparentes). */
 .v-lozenge-bg {
     position: absolute;
     inset: 0;
@@ -422,18 +412,12 @@ main.v-main.wide { max-width: 1500px; }
     z-index: 1;
 }
 
-/* Halo claro: los logos negros se ven incluso antes de conocer su color. */
-.v-lozenge-fg,
-.v-elogo-fg {
-    filter: drop-shadow(0 0 5px rgba(255, 255, 255, .25)) drop-shadow(0 0 16px rgba(255, 255, 255, .1));
-}
-
 .v-lozenge.has-img { background: transparent; }
 .v-lozenge.has-img .v-lozenge-txt { display: none; }
 
-/* Logo oscuro: halo claro + glow invertido para que se vea */
-.v-lozenge.on-light { background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, .5), transparent 76%); }
-.v-lozenge.on-light .v-lozenge-bg { filter: blur(9px) invert(1) brightness(1.5); opacity: .45; }
+/* Logo oscuro: tile claro PLANO (sin halo ni glow) para que se vea */
+.v-lozenge.on-light { background: rgba(255, 255, 255, .92); }
+.v-lozenge.on-light .v-lozenge-bg { display: none; }
 .v-lozenge.on-light .v-lozenge-txt { color: #0a0a0c; }
 
 .v-lozenge-txt { position: relative; z-index: 1; }
@@ -485,8 +469,8 @@ main.v-main.wide { max-width: 1500px; }
 .v-elogo.has-img { background: transparent; }
 .v-elogo.has-img .v-elogo-txt { display: none; }
 
-.v-elogo.on-light { background: radial-gradient(circle at 50% 38%, rgba(255, 255, 255, .5), transparent 76%); }
-.v-elogo.on-light .v-elogo-bg { filter: blur(10px) invert(1) brightness(1.5); opacity: .45; }
+.v-elogo.on-light { background: rgba(255, 255, 255, .92); }
+.v-elogo.on-light .v-elogo-bg { display: none; }
 .v-elogo.on-light .v-elogo-txt { color: #0a0a0c; }
 
 .v-elogo-txt { position: relative; z-index: 1; }
@@ -575,7 +559,7 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-pill.done { color: var(--green); border-color: rgba(74, 222, 128, .3); background: rgba(74, 222, 128, .06); }
 .v-pill.live { color: var(--accent2); border-color: rgba(255, 71, 87, .4); background: rgba(255, 71, 87, .08); box-shadow: 0 0 14px rgba(255, 71, 87, .15); }
-.v-pill.next { color: var(--accent); border-color: rgba(56, 189, 248, .3); background: rgba(56, 189, 248, .06); }
+.v-pill.next { color: var(--accent); border-color: rgba(232, 255, 71, .3); background: rgba(232, 255, 71, .06); }
 .v-pill.soon { color: var(--orange); border-color: rgba(251, 146, 60, .35); background: rgba(251, 146, 60, .07); }
 
 .v-match-meta { display: flex; flex-direction: column; gap: 4px; text-align: right; min-width: 0; }
@@ -612,7 +596,7 @@ main.v-main.wide { max-width: 1500px; }
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background: radial-gradient(560px 220px at 8% 0%, rgba(56, 189, 248, .055), transparent 65%);
+    background: radial-gradient(560px 220px at 8% 0%, rgba(232, 255, 71, .055), transparent 65%);
 }
 
 /* VS: degradado con el color de cada equipo para diferenciarlos. */
@@ -692,7 +676,6 @@ main.v-main.wide { max-width: 1500px; }
     letter-spacing: 2px;
     color: var(--accent);
     white-space: nowrap;
-    text-shadow: var(--glow-accent);
 }
 
 .v-vs-score small { font-size: 22px; color: var(--dim); text-shadow: none; }
@@ -750,8 +733,7 @@ main.v-main.wide { max-width: 1500px; }
 .v-tabs button.active, .v-tabs a.active {
     color: var(--accent);
     border-bottom-color: var(--accent);
-    background: linear-gradient(180deg, transparent, rgba(56, 189, 248, .05));
-    text-shadow: var(--glow-accent);
+    background: linear-gradient(180deg, transparent, rgba(232, 255, 71, .05));
 }
 
 .v-tab-panel { display: none; animation: vFade .22s ease; }
@@ -857,7 +839,6 @@ main.v-main.wide { max-width: 1500px; }
     font-size: 22px;
     margin-left: auto;
     color: var(--accent);
-    text-shadow: var(--glow-accent);
 }
 .v-board-head .v-board-side { font-size: 10px; letter-spacing: 1px; color: var(--dim); }
 
@@ -933,9 +914,9 @@ main.v-main.wide { max-width: 1500px; }
 
 /* ── BARRAS ── */
 .v-bar { height: 4px; background: var(--border); position: relative; overflow: hidden; }
-.v-bar > i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 8px rgba(56, 189, 248, .35); }
+.v-bar > i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 8px rgba(232, 255, 71, .35); }
 .v-bar.green > i { background: var(--green); box-shadow: 0 0 8px rgba(74, 222, 128, .35); }
-.v-bar.blue > i { background: var(--blue); box-shadow: 0 0 8px rgba(56, 189, 248, .35); }
+.v-bar.blue > i { background: var(--blue); box-shadow: 0 0 8px rgba(232, 255, 71, .35); }
 .v-bar.red > i { background: var(--accent2); box-shadow: 0 0 8px rgba(255, 71, 87, .35); }
 .v-bar.purple > i { background: var(--purple); box-shadow: 0 0 8px rgba(167, 139, 250, .35); }
 
@@ -979,9 +960,9 @@ main.v-main.wide { max-width: 1500px; }
     background: linear-gradient(160deg,
         color-mix(in srgb, var(--c, #1b1b22) 26%, #14141a) 0%,
         #14141a 62%);
-    border-color: rgba(56, 189, 248, .3);
+    border-color: rgba(232, 255, 71, .3);
     transform: translateY(-2px);
-    box-shadow: var(--shadow-card), 0 0 0 1px rgba(56, 189, 248, .08);
+    box-shadow: var(--shadow-card), 0 0 0 1px rgba(232, 255, 71, .08);
 }
 
 .v-card-top { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
@@ -1018,7 +999,7 @@ main.v-main.wide { max-width: 1500px; }
 }
 
 .v-player-card:hover {
-    border-color: rgba(56, 189, 248, .35);
+    border-color: rgba(232, 255, 71, .35);
     transform: translateY(-2px);
     box-shadow: var(--shadow-card);
 }
@@ -1066,9 +1047,9 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-chip.active {
     color: var(--accent);
-    border-color: rgba(56, 189, 248, .4);
-    background: linear-gradient(180deg, rgba(56, 189, 248, .1), rgba(56, 189, 248, .03));
-    box-shadow: 0 0 14px rgba(56, 189, 248, .08);
+    border-color: rgba(232, 255, 71, .4);
+    background: linear-gradient(180deg, rgba(232, 255, 71, .1), rgba(232, 255, 71, .03));
+    box-shadow: 0 0 14px rgba(232, 255, 71, .08);
 }
 
 /* ── TRANSACCIONES ── */
@@ -1146,30 +1127,24 @@ main.v-main.wide { max-width: 1500px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   DS ALETHEIA (fases 1-2) — Glassmorphism + tipografía + radios + outline
+   DS ALETHEIA — Glass neutro (SIN glow) + tipografía + radios + outline
    Fuente de verdad: design-system/aletheia/MASTER.md
+   Regla: blur = OK · resplandor de color = NO · tablas = opacas
    ═══════════════════════════════════════════════════════════════════════════ */
 
 body { font-family: var(--body); }
 
-/* ── Fondo con blobs violeta/azul/magenta ── */
-.v-bg {
-    background:
-        radial-gradient(760px 440px at 12% -12%, rgba(124, 58, 237, .34), transparent 66%),
-        radial-gradient(680px 400px at 88% 4%, rgba(56, 189, 248, .20), transparent 62%),
-        radial-gradient(600px 360px at 50% 114%, rgba(217, 70, 239, .14), transparent 66%),
-        linear-gradient(rgba(124, 58, 237, .022) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(124, 58, 237, .022) 1px, transparent 1px);
-    background-size: auto, auto, auto, 40px 40px, 40px 40px;
-}
-
-/* ── Superficies glass (solo contenedores grandes; filas de datos quedan opacas) ── */
+/* ── Superficies glass neutras (sin backdrop-filter en elementos repetidos) ── */
 .v-card, .v-panel, .v-stat, .v-banner {
     background: var(--glass-bg);
-    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
-    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
     border: 1px solid var(--glass-border);
     box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-card);
+}
+
+/* El blur solo en superficies grandes/únicas (evita decenas de capas GPU en grids) */
+.v-panel, .v-banner {
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    backdrop-filter: blur(var(--glass-blur));
 }
 
 .v-card { border-radius: 10px; }
@@ -1177,19 +1152,20 @@ body { font-family: var(--body); }
 .v-stat { border-radius: 10px; }
 .v-banner { border-radius: 12px; }
 
-.v-card:hover {
-    border-color: rgba(124, 58, 237, .5);
-    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-card), var(--glow-primary);
-}
+.v-card:hover { border-color: rgba(232, 255, 71, .35); }
 
 /* ── Datos: opacos, monoespaciados y legibles ── */
 .v-table { font-family: var(--mono); font-variant-numeric: tabular-nums; }
-.v-table th { background: #17172c; }
-.v-table td { background: rgba(13, 13, 30, .88); }
-.v-board { background: linear-gradient(180deg, #1b1930, #131126); }
-.v-board .v-table th { background: #1f1d38; }
+.v-table th { background: #16161a; }
+.v-table td { background: rgba(10, 10, 12, .88); }
+.v-board { background: linear-gradient(180deg, #17171d, #101014); }
+.v-board .v-table th { background: #1c1c22; }
 .v-board .v-table td { background: transparent; }
 .v-table tbody tr:hover td { background: var(--surface2); }
+
+/* ── Logo/foto difuminada solo en superficies grandes (no en listas densas) ── */
+.v-match .v-lozenge-bg,
+.v-avatar.sm .v-avatar-bg { display: none; }
 
 /* ── Radios coherentes ── */
 .v-btn, .v-input, .v-select, .v-chip { border-radius: 8px; }
@@ -1200,11 +1176,11 @@ body { font-family: var(--body); }
 /* ── Títulos outline (solo títulos de sección) ── */
 .v-title h1 {
     color: transparent;
-    -webkit-text-stroke: 1.5px rgba(226, 232, 240, .92);
+    -webkit-text-stroke: 1.5px rgba(212, 212, 216, .92);
     letter-spacing: 5px;
 }
 
-.v-title::before { background: linear-gradient(180deg, var(--primary), var(--accent)); box-shadow: var(--glow-primary); }
+.v-title::before { background: var(--accent); }
 
 @supports not (-webkit-text-stroke: 1px #fff) {
     .v-title h1 { color: var(--text); -webkit-text-stroke: 0; }
@@ -1218,37 +1194,25 @@ body { font-family: var(--body); }
     border-bottom: 1px solid var(--glass-border);
 }
 
-.vct-tabs a.active { text-shadow: 0 0 18px rgba(56, 189, 248, .45); }
-
-/* ── Botones/accesos con acento cian + halo violeta ── */
-.v-btn:hover {
-    border-color: var(--accent);
-    color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, .10);
-}
-
-.v-input:focus, .v-select:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, .14);
-}
-
+/* ── Controles (sin glow: solo borde/color) ── */
+.v-btn:hover { border-color: var(--accent); color: var(--accent); }
+.v-input:focus, .v-select:focus { border-color: var(--accent); }
 .v-chip.active {
     color: var(--accent);
-    border-color: rgba(56, 189, 248, .45);
-    background: linear-gradient(180deg, rgba(56, 189, 248, .12), rgba(56, 189, 248, .04));
-    box-shadow: 0 0 16px rgba(56, 189, 248, .10);
+    border-color: rgba(232, 255, 71, .4);
+    background: linear-gradient(180deg, rgba(232, 255, 71, .10), rgba(232, 255, 71, .03));
 }
 
-/* ── Focus accesible ── */
+/* ── Focus accesible (outline sólido, no glow) ── */
 .v-btn:focus-visible, .v-input:focus-visible, .v-select:focus-visible,
 .v-chip:focus-visible, .vct-tabs a:focus-visible, .v-map-btn:focus-visible,
 .v-tabs button:focus-visible, a:focus-visible, [data-href]:focus-visible {
-    outline: 2px solid var(--secondary);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
 }
 
 /* ── Fallback sin backdrop-filter ── */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .v-card, .v-panel, .v-stat, .v-banner { background: #17162e; }
-    .vct-tabs { background: #14132a; }
+    .v-panel, .v-banner { background: #14141a; }
+    .vct-tabs { background: #0e0e12; }
 }

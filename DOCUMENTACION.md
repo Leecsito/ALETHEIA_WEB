@@ -66,7 +66,7 @@ ALETHEIA/
 ├── comun/                    # Core visual VCT compartido (no es una página)
 │   ├── vct.css               # Design system de los componentes VCT (clases `v-*`, glass DS)
 │   ├── vct.js                # Helpers globales `VCT` (API, formato, filas de partido, tabs)
-│   └── hero.js               # Hero canvas 2D (wireframe de partículas; solo EN VIVO)
+│   └── bg-nodes.js           # Fondo global de nodos conectados (canvas 2D, todas las páginas)
 ├── partidos/                 # Componente PARTIDOS estilo vlr.gg (lista + detalle)
 │   ├── partidos.py           # Blueprint (/api/partidos, /api/partidos/filtros, /api/partido/<id>)
 │   ├── index.html, style.css, script.js
@@ -111,8 +111,8 @@ Por eso los **blueprints de lectura** (`partidos`, `equipos`, `jugadores`, `even
   (no la cierra al terminar), con **reintento único** si Turso la cerró por inactividad
   (`reset_conn()`). No afecta al ETL ni a `tablas/`/`visualizar/`, que siguen con
   `get_conn()`/`release_conn()`.
-- `@ttl_cache(120)` (`backend/cache.py`): cachea en memoria el resultado de cada SQL
-  (clave = SQL + parámetros) por **120 s**. Los datos solo cambian al correr un ETL.
+- `@ttl_cache(300)` (`backend/cache.py`): cachea en memoria el resultado de cada SQL
+  (clave = SQL + parámetros) por **300 s**. Los datos solo cambian al correr un ETL.
   Efecto medido: detalle de equipo pasó de ~6.5 s a ~2.5 s en frío y ~0.2 s en caliente.
 - **gzip**: `flask-compress` comprime JSON/HTML/CSS/JS (un JSON de 24 KB baja a ~3 KB).
 
@@ -673,35 +673,36 @@ estas tablas). Endpoints adicionales del proxy:
    - **`tablas/` no se toca**: sigue siendo el explorador raw; los componentes
      VCT son la vista "bonita" sobre los mismos datos.
 
-7. **Design System ALETHEIA — Glassmorphism (fases 1–3 aplicadas):**
-   Fuente de verdad: **`design-system/aletheia/MASTER.md`** (generado con la skill
-   `ui-ux-pro-max` + persistido). Resumen:
-   - **Paleta:** violeta primario `#7C3AED`, violeta claro `#A78BFA`, **cian CTA
-     `#38BDF8`**, fondo `#0F0F23`, card `#1E1C35`; verde/rojo solo semánticos
-     (V/D); rosa `#F43F5E` reservado a “EN VIVO”. **El lima `#e8ff47` quedó
-     eliminado** en header, VCT y EN VIVO.
-   - **Tipografía:** **Russo One** (display, soporta outline), **Chakra Petch**
-     (UI/cuerpo), **DM Mono** solo en datos numéricos. Se cargan las 3 familias
-     en un único request de Google Fonts.
-   - **Glass tokens:** `--glass-bg`, `--glass-border`, `--glass-blur:14px`,
-     `--glass-highlight`; blobs violeta/azul/magenta en `.v-bg` y `.bg-grid`.
-   - **Glass aplicado a:** `.ae-header` (header.css), `.v-card`, `.v-panel`,
-     `.v-stat`, `.v-banner`, `.vct-tabs` (vct.css) y `.sim-browser`,
-     `.live-section`, `.live-tabs`, `.mb-header`, `.series-banner` (aletheia).
-   - **Datos siempre legibles:** `.v-table`, `.v-board`, scoreboards y
-     `tablas/` quedan **opacos** (nada de blur bajo texto pequeño).
+7. **Design System ALETHEIA — Glass neutro + negro/amarillo:**
+   Fuente de verdad: **`design-system/aletheia/MASTER.md`**. Resumen:
+   - **Paleta:** negro + amarillo (esquema original): fondo `#0a0a0c`, acento
+     `#e8ff47`, alerta `#ff4757`; `--blue`/`--purple` quedan solo como colores
+     semánticos de datos. **Prohibido introducir violeta/cian/magenta como acento.**
+   - **PROHIBIDO el glow:** nada de `box-shadow` de color, `drop-shadow` de color,
+     text-shadow de color ni auras. Solo sombras neutras de profundidad e insets claros.
+   - **Tipografía:** **Russo One** (display, outline), **Chakra Petch** (UI/cuerpo,
+     pesos 400/500/600), **DM Mono** (400/500) solo en datos. Un request con
+     `display=swap`.
+   - **Glass neutro:** `--glass-bg`/`--glass-border`/`--glass-blur:14px`;
+     `backdrop-filter` **solo en superficies grandes/únicas** (header, tabs,
+     paneles, banners), nunca en cards repetidas de grids.
+   - **Logos oscuros:** tile claro **plano** (`on-light`), sin halo ni glow.
+   - **Datos siempre legibles:** `.v-table`, `.v-board`, scoreboards y `tablas/`
+     quedan **opacos** (nada de blur bajo texto pequeño).
    - **Outline:** `.v-title h1` y el título del hero usan `-webkit-text-stroke`
      con fallback `@supports` a relleno sólido.
-   - **Hero animado:** `comun/hero.js` (canvas 2D vanilla, sin librerías) —
-     solo en `aletheia/` (EN VIVO): ~30 fps, 30–70 partículas según área,
-     `devicePixelRatio` tope 1.5, pausa con `IntersectionObserver` +
-     `visibilitychange`, respeta `prefers-reduced-motion` y no bloquea clics
-     (`pointer-events:none`).
+   - **Fondo de nodos global:** `comun/bg-nodes.js` (canvas 2D vanilla, sin
+     librerías) en **todas las páginas** (incluida `tablas/`): 14–26 nodos según
+     área, 24 fps, DPR 1, líneas de 1px alpha ≤ .10, movimiento ~0.09 px/frame,
+     `pointer-events:none`, `z-index:0`, pausa con `visibilitychange` y frame
+     estático con `prefers-reduced-motion`. Se inyecta **una sola vez** desde
+     `header.js` (`data-ae-bg`) y el script se auto-guarda con
+     `window.__AE_BG_NODES__`. No duplicar por página.
    - **Fallback:** `@supports not (backdrop-filter)` deja fondos opacos.
    - **Pendiente (fase 4):** cuando exista `estilos/`, adaptar sus componentes
      (navbars/footers/CTAs/animaciones/bento) a `ae-*`/`v-*`. Páginas aún no
-     migradas al DS: `inicio/`, `visualizar/`, `aletheia_preparar/` (siguen con
-     lima hasta esa fase). `tablas/` no se migra.
+     migradas a glass/tipografía: `inicio/`, `visualizar/`, `aletheia_preparar/`
+     (documentado). `tablas/` no se migra (solo recibe el fondo de nodos).
 
 ---
 
@@ -731,6 +732,6 @@ Al recibir una nueva tarea o solicitud de cambio:
 6. **Prioriza siempre la tasa de acierto** (principio rector, §1): ningún cambio debe degradar la precisión de las predicciones. Si un cambio la empeora, descártalo o revíerte.
 7. **Para vistas nuevas del estilo VCT**: reutiliza el core `comun/` (`vct.css` + `vct.js`) en lugar de duplicar estilos o helpers; agrega los endpoints en el blueprint del componente correspondiente y registra la carpeta en `FRONTEND_FOLDERS` si es una página nueva. No modifiques `tablas/` para esto.
 8. **Imágenes de equipos/jugadores/eventos**: usa siempre `/api/media/meta` (enlaces+color, 1 request por render) y los endpoints `/api/media/...` como fallback (resuelven y redirigen al CDN; **no se descargan ni guardan imágenes**). No scrapees Google Images ni guardes archivos de imagen; la caché es solo de enlaces/color (`media/urls_cache.json`). Si necesitas precargar enlaces, usa `cachear_media.py` con `--delay`.
-9. **Rendimiento**: para blueprints de solo lectura usa `fetch_all` (`backend.conexion`) + `@ttl_cache(120)` (`backend.cache`); no abras conexiones nuevas por consulta ni paralelices consultas a Turso (el cliente serializa). Mantén gzip (`flask-compress`) y paginación en listados grandes.
+9. **Rendimiento**: para blueprints de solo lectura usa `fetch_all` (`backend.conexion`) + `@ttl_cache(300)` (`backend.cache`); no abras conexiones nuevas por consulta ni paralelices consultas a Turso (el cliente serializa). Mantén gzip (`flask-compress`) y paginación en listados grandes. No pongas `backdrop-filter` en elementos repetidos (grids) ni `filter: blur()` en listas densas; el fondo de nodos es uno solo para todo el sitio.
 10. **Enlaces internos**: navega siempre con `/componente/` (o relativo `../componente/`, `./`), **nunca** `/componente/index.html` (regla de estética de URL, §5.1). Al añadir una vista dentro de una página, usa query params (`?team=`, `?match=`…), no nuevas carpetas con `index.html` en el enlace.
-11. **Cambios visuales**: la fuente de verdad es `design-system/aletheia/MASTER.md` (Glassmorphism, violeta/cian, Russo One + Chakra Petch + DM Mono). No cambies clases `ae-*`/`v-*` ni la lógica JS; aplica glass solo a contenedores grandes (tablas y scoreboards quedan opacos) y no toques `tablas/`. Para animaciones usa canvas 2D vanilla (`comun/hero.js` como referencia), nunca Three.js/particles.js, y respeta `prefers-reduced-motion`.
+11. **Cambios visuales**: la fuente de verdad es `design-system/aletheia/MASTER.md` (glass **neutro** sobre paleta negra + amarilla `#e8ff47`, tipografía Russo One + Chakra Petch + DM Mono). **Nunca añadas glow** (`box-shadow`/`drop-shadow`/`text-shadow` de color, auras). No cambies clases `ae-*`/`v-*` ni la lógica JS; aplica `backdrop-filter` solo a superficies grandes (tablas y scoreboards opacos) y no toques `tablas/` salvo el fondo global. El fondo de nodos es `comun/bg-nodes.js`, único para todo el sitio (inyectado desde `header.js`); nunca Three.js/particles.js, y respeta `prefers-reduced-motion`.

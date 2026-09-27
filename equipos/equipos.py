@@ -16,7 +16,7 @@ except ImportError:
 equipos_bp = Blueprint('equipos', __name__)
 
 
-@ttl_cache(120)
+@ttl_cache(300)
 def query(sql, params=None):
     return fetch_all(sql, params)
 

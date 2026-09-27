@@ -69,7 +69,7 @@ const VCT = (() => {
     }
 
     /* Logo de equipo: PNG transparente SIN caja; el mismo logo difuminado
-       hace de glow de fondo. Si el logo es oscuro, el glow se invierte. */
+       hace de fondo suave. Si el logo es oscuro, se usa un tile claro plano. */
     function lozenge(name, tag, cls = '', teamId = null) {
         const img = teamId
             ? `<img class="v-lozenge-bg" data-media="equipo:${teamId}" data-fallback="/api/media/equipo/${teamId}" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">` +

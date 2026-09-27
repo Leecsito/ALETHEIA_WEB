@@ -7,85 +7,78 @@
 ---
 
 **Project:** ALETHEIA (analítica + predicción Valorant VCT)
-**Category:** Gaming / Esports — dark, glassmorphism
+**Category:** Gaming / Esports — dark, glass, black + yellow
 **Design Dials:** Variance 7/10 (Balanced / Modern) | Motion 7/10 (Standard) | Density 6/10 (Standard)
 **Fuente de verdad:** este archivo. Cualquier cambio visual del sitio debe respetarlo.
 
 **Estado de implementación:**
-- ✅ Fases 1–3 (2026-09): tokens en `comun/vct.css`, glass en `header/header.css`, cards/paneles VCT,
-  outline en títulos y hero canvas vanilla en `aletheia/` (`comun/hero.js`). Lima `#e8ff47` eliminada
-  en header + VCT + EN VIVO.
+- ✅ Paleta negra + amarilla restaurada; **sin glow** en header, VCT y EN VIVO.
+- ✅ Glass neutro (blur + fondo translúcido + borde sutil) solo en superficies grandes.
+- ✅ Fondo global de nodos (`comun/bg-nodes.js`) en TODAS las páginas (incluida `tablas/`),
+  inyectado una sola vez desde `header.js`.
 - ⏳ Fase 4: adaptar componentes de `estilos/` (cuando exista) a `ae-*`/`v-*`.
-- ⏳ Páginas pendientes de migrar: `inicio/`, `visualizar/`, `aletheia_preparar/` (siguen con lima).
-  `tablas/` no se migra.
+- ⏳ Páginas pendientes de migrar a glass/tipografía: `inicio/`, `visualizar/`, `aletheia_preparar/`.
+  `tablas/` no se migra (solo recibe el fondo de nodos).
 
 ---
 
 ## Global Rules
 
-### Estilo base: Glassmorphism (dark esports)
+### Estilo base: Glass neutro (dark esports)
 
-- Paneles/tarjetas translúcidos sobre fondo con **blobs de color desenfocados** (violeta/azul).
-- `backdrop-filter: blur(12–20px)` + borde sutil `1px solid rgba(255,255,255,.10)` + highlight interior.
-- Profundidad con sombras suaves; **nunca** mezclar con esquinas duras tipo terminal.
-- El hero de la portada/EN VIVO lleva **canvas wireframe 2D** (partículas conectadas) detrás de tipografía grande; el resto de páginas usan solo blobs CSS.
-- **Tablas densas, scoreboards y `tablas/` se mantienen opacos y legibles** (sin blur sobre datos).
+- Paneles/tarjetas translúcidos con `backdrop-filter: blur()` + borde sutil + highlight interior.
+- **PROHIBIDO el glow**: nada de `box-shadow` de color, `drop-shadow` de color, text-shadow
+  de color ni "auras" alrededor de botones/inputs/bordes. Solo sombras neutras de profundidad
+  (`rgba(0,0,0,…)`) e insets claros.
+- **El blur va solo en superficies grandes/únicas** (header, tabs, paneles, banners). Las
+  cards repetidas en grids usan fondo translúcido + borde, sin `backdrop-filter` (rendimiento).
+- Tablas densas, scoreboards y `tablas/` se mantienen **opacos y legibles**.
+- Los logos oscuros usan **tile claro plano** (`on-light`), nunca halo/glow.
 
 ### Color Palette
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary (violeta) | `#7C3AED` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary (violeta claro) | `#A78BFA` | `--color-secondary` |
-| On Secondary | `#0F172A` | `--color-on-secondary` |
-| Accent / CTA (azul) | `#38BDF8` | `--color-accent` |
-| On Accent | `#0B1020` | `--color-on-accent` |
-| Background | `#0F0F23` | `--color-background` |
-| Foreground | `#E2E8F0` | `--color-foreground` |
-| Card | `#1E1C35` | `--color-card` |
-| Card Foreground | `#E2E8F0` | `--color-card-foreground` |
-| Muted | `#27273B` | `--color-muted` |
-| Muted Foreground | `#94A3B8` | `--color-muted-foreground` |
-| Border | `#4C1D95` (a baja opacidad en glass) | `--color-border` |
-| Destructive / derrota | `#EF4444` | `--color-destructive` |
-| Win / victoria | `#4ADE80` | `--color-success` |
-| Live / alerta suave | `#F43F5E` | `--color-live` |
-| Ring (focus) | `#7C3AED` | `--color-ring` |
+| Fondo | `#0a0a0c` | `--bg` |
+| Superficie | `#111114` | `--surface` |
+| Superficie 2 | `#16161a` | `--surface2` |
+| Superficie 3 | `#1c1c22` | `--surface3` |
+| Borde | `#222228` | `--border` |
+| **Acento (amarillo)** | `#e8ff47` | `--accent` |
+| Alerta / derrota | `#ff4757` | `--accent2` |
+| Victoria | `#4ade80` | `--green` |
+| Aviso | `#fb923c` | `--orange` |
+| Info / barras azules | `#38bdf8` | `--blue` |
+| Barras moradas | `#a78bfa` | `--purple` |
+| Texto | `#d4d4d8` | `--text` |
+| Texto tenue | `#52525b` | `--dim` |
 
-**Color Notes:** violeta neón como marca; azul cian para acciones/links; verde/rojo solo semánticos (V/D y estados); rosa reservado a “EN VIVO”.
+**Nota:** `--blue`/`--purple` son colores **semánticos de datos** (barras, chips de agente) del
+esquema original; no son acentos de marca. No introducir violeta/cian/magenta como acento.
 
-### Glass Tokens (nuevos, obligatorios para glass)
+### Glass Tokens (neutros)
 
 ```css
 :root {
-  --glass-bg: rgba(30, 28, 53, 0.42);          /* superficie translúcida */
-  --glass-bg-strong: rgba(30, 28, 53, 0.66);   /* header / modales */
-  --glass-border: rgba(255, 255, 255, 0.10);
-  --glass-highlight: rgba(255, 255, 255, 0.06);/* inset top highlight */
+  --glass-bg: rgba(17, 17, 20, 0.44);
+  --glass-bg-strong: rgba(10, 10, 12, 0.68);
+  --glass-border: rgba(255, 255, 255, 0.09);
+  --glass-highlight: rgba(255, 255, 255, 0.05);
   --glass-blur: 14px;
-  --glass-shadow: 0 12px 40px rgba(5, 5, 20, 0.55);
-  --blob-violet: rgba(124, 58, 237, 0.35);
-  --blob-blue: rgba(56, 189, 248, 0.22);
-  --blob-magenta: rgba(217, 70, 239, 0.16);
 }
 ```
 
 ### Typography
 
-- **Display / títulos:** **Russo One** (reemplaza a Bebas Neue en títulos grandes; soporta el estilo outline).
-- **UI / cuerpo:** **Chakra Petch** (300–700).
-- **Datos numéricos:** **DM Mono** (se mantiene, solo en tablas/scoreboards/cifras; `tabular-nums`).
-- **Mood:** gaming, bold, esports, competitive, energetic.
-- Google Fonts: `family=Russo+One&family=Chakra+Petch:wght@300;400;500;600;700&family=DM+Mono:wght@400;500`
+- **Display / títulos:** **Russo One** (soporta el estilo outline).
+- **UI / cuerpo:** **Chakra Petch** (400/500/600 — pesos recortados por rendimiento).
+- **Datos numéricos:** **DM Mono** (400/500) solo en tablas/scoreboards/cifras (`tabular-nums`).
+- Un solo request de Google Fonts con `display=swap` (no bloquea el first paint).
 - Escala sugerida: 12 / 14 / 16 / 20 / 24 / 34 / 48 / 72 (hero).
 - **Outline (solo títulos/hero):**
   ```css
-  .outline-text {
-    color: transparent;
-    -webkit-text-stroke: 1.5px rgba(226, 232, 240, 0.9);
-  }
-  @supports not (-webkit-text-stroke: 1px black) { .outline-text { color: var(--color-foreground); } }
+  .outline-text { color: transparent; -webkit-text-stroke: 1.5px rgba(212, 212, 216, .92); }
+  @supports not (-webkit-text-stroke: 1px black) { .outline-text { color: var(--text); } }
   ```
 
 ### Spacing Variables
@@ -100,91 +93,70 @@
 | `--space-2xl` | `48px` | Márgenes de sección |
 | `--space-3xl` | `64px` | Hero |
 
-### Shadow Depths (glass-friendly)
+### Shadow Depths (solo neutras)
 
 | Level | Value | Usage |
 |-------|-------|-------|
-| `--shadow-sm` | `0 2px 8px rgba(5,5,20,.35)` | Chips, inputs |
-| `--shadow-md` | `0 8px 24px rgba(5,5,20,.45)` | Cards, dropdowns |
-| `--shadow-lg` | `0 16px 48px rgba(5,5,20,.55)` | Modales, hero cards |
-| `--shadow-glow` | `0 0 24px rgba(124,58,237,.25)` | Hover de acento |
+| `--shadow-card` | `0 10px 30px rgba(0,0,0,.45)` | Cards, paneles |
+| inset highlight | `inset 0 1px 0 var(--glass-highlight)` | Borde superior del glass |
 
 ---
 
 ## Component Specs (mapping a clases existentes)
 
-> **Regla de oro:** no se crean clases nuevas para reemplazar `ae-*`/`v-*`; se
-> restilizan las existentes. Los snippets son referencia de tokens.
+> **Regla de oro:** no se crean clases nuevas para reemplazar `ae-*`/`v-*`; se restilizan
+> las existentes y no se toca la lógica JS.
 
 ### Header (`header/header.css`, clases `ae-*`)
 
 ```css
 .ae-header {
   background: var(--glass-bg-strong);
-  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  backdrop-filter: blur(var(--glass-blur));
   border-bottom: 1px solid var(--glass-border);
 }
-.ae-btn.active { border-color: var(--color-accent); color: var(--color-accent); }
+.ae-btn.active { border-color: var(--accent); color: var(--accent); }
+.ae-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 ```
 
 ### Cards VCT (`.v-card`, `.v-panel`, `.v-stat`, `.v-banner`)
 
 ```css
-.v-card {
+.v-card, .v-panel, .v-stat, .v-banner {
   background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border);
-  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-md);
-  border-radius: 10px;
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-card);
+  border-radius: 10-12px;
 }
-.v-card:hover { border-color: rgba(124,58,237,.45); box-shadow: var(--shadow-lg), var(--shadow-glow); }
+.v-panel, .v-banner { backdrop-filter: blur(var(--glass-blur)); } /* solo grandes */
+.v-card:hover { border-color: rgba(232,255,71,.35); }              /* sin glow */
 ```
 
 ### Tablas / scoreboards (`.v-table`, `.v-board`, `tablas/`) — **opaco, sin glass**
 
 ```css
-.v-table th { background: var(--color-muted); }
-.v-table td { background: rgba(15, 15, 35, 0.92); }
+.v-table th { background: #16161a; }
+.v-table td { background: rgba(10, 10, 12, .88); }
+.v-board { background: linear-gradient(180deg, #17171d, #101014); }
 ```
 
-### Botones / inputs (`.v-btn`, `.v-input`, `.v-select`)
+### Fondo de nodos (global, todas las páginas)
 
-```css
-.v-btn:hover, .v-input:focus, .v-select:focus {
-  border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.18);
-}
-```
-
-### Blobs de fondo (`.v-bg` y equivalentes por página)
-
-```css
-.v-bg {
-  background:
-    radial-gradient(720px 420px at 12% -10%, var(--blob-violet), transparent 65%),
-    radial-gradient(640px 380px at 88% 8%, var(--blob-blue), transparent 60%),
-    radial-gradient(520px 320px at 50% 110%, var(--blob-magenta), transparent 65%);
-  filter: blur(60px) saturate(120%);
-}
-```
-
-### Hero animado (solo portada / EN VIVO)
-
-- Canvas 2D **vanilla** (sin librerías): red de partículas conectadas, ~30 fps,
-  pausa con `IntersectionObserver` + `visibilitychange`, desactivado con
-  `prefers-reduced-motion`, `devicePixelRatio` máximo 1.5, partículas según área
-  (40–70), líneas solo entre vecinos (<120px). Presupuesto: **< 2 ms/frame**.
-- Tipografía del hero: Russo One grande + variante outline; el canvas va detrás
-  con `pointer-events: none`.
+- `comun/bg-nodes.js` (canvas 2D vanilla, 0 dependencias): 14–26 nodos según área,
+  24 fps, DPR 1, líneas de 1px alpha ≤ .10, velocidad ~0.09 px/frame.
+- `pointer-events:none`, `z-index:0`, primer hijo del body (detrás de todo).
+- Pausa con `visibilitychange`; frame estático con `prefers-reduced-motion`.
+- Carga única: `header.js` inyecta el script (`data-ae-bg`) y el propio script se
+  auto-guarda con `window.__AE_BG_NODES__`.
 
 ---
 
 ## Motion
 
 - **Standard**: stagger de entrada 300–450ms, `cubic-bezier(.22,1,.36,1)`.
-- **Implementación:** CSS-only (`animation-delay` por hijo o `nth-child`) —
-  **no añadir GSAP** (el sitio es vanilla, sin build; mantener 0 dependencias).
-- Respetar `prefers-reduced-motion: reduce` → render final inmediato.
+- **Implementación:** CSS-only (`animation-delay` por hijo o `nth-child`) — **no añadir GSAP**
+  (el sitio es vanilla, sin build; mantener 0 dependencias).
+- Respetar `prefers-reduced-motion: reduce` → render final inmediato (nodos y stagger off).
 - ❌ No usar `back.out` ni overshoot en tablas de datos.
 - ❌ No animar `width/height/top/left` (solo `transform`/`opacity`).
 - Hover: 150–250ms; press: 80–150ms.
@@ -193,37 +165,39 @@
 
 ## Alcance (scope) de esta identidad
 
-| Zona | Glass | Hero canvas | Notas |
-|------|-------|-------------|-------|
-| `header/` | ✅ | — | Compartido por todas las páginas (incluida `tablas/`, que no se modifica) |
-| `partidos/`, `equipos/`, `jugadores/`, `eventos/` | ✅ cards/paneles/banners | ❌ | Tablas y scoreboards **opacos** |
-| `aletheia/` (EN VIVO, portada) | ✅ | ✅ | Único lugar con canvas animado |
-| `aletheia_preparar/`, `inicio/`, `visualizar/` | ✅ progresivo | ❌ | Se adaptan al mismo sistema |
-| `tablas/` | ❌ | ❌ | Explorador raw — **no se toca** |
-| `estilos/` (cuando exista) | — | — | Fuente de componentes; se **adaptan** a `ae-*`/`v-*`, nunca al revés |
+| Zona | Glass | Nodos | Notas |
+|------|-------|-------|-------|
+| `header/` | ✅ | ✅ | Compartido por todas las páginas (incluida `tablas/`) |
+| `partidos/`, `equipos/`, `jugadores/`, `eventos/` | ✅ cards/paneles/banners | ✅ | Tablas y scoreboards **opacos** |
+| `aletheia/` (EN VIVO) | ✅ superficies grandes | ✅ | Hero sin canvas propio |
+| `aletheia_preparar/`, `inicio/`, `visualizar/` | ⏳ pendiente | ✅ | Migración de glass/tipografía en fase posterior |
+| `tablas/` | ❌ | ✅ | Explorador raw — no se toca salvo el nodo global |
+| `estilos/` (cuando exista) | — | — | Se **adaptan** sus componentes a `ae-*`/`v-*` |
 
 ---
 
 ## Anti-Patterns (Do NOT Use)
 
-- ❌ Minimalismo plano o estilos “terminal” duros (el proyecto es esports/glass).
-- ❌ WebGL/Three.js o librerías de partículas (peso y GPU innecesarios).
+- ❌ **Glow/resplandor**: `box-shadow` de color, `drop-shadow` de color, text-shadow de color, auras.
+- ❌ Violeta/cian/magenta como acento de marca (la paleta es negra + amarilla).
+- ❌ `backdrop-filter` en elementos repetidos (grids de cards) — costo GPU en scroll.
 - ❌ Glass detrás de tablas densas o texto pequeño (mata la legibilidad).
+- ❌ WebGL/Three.js o librerías de partículas (peso y GPU innecesarios).
 - ❌ Emojis como iconos — usar SVG (Heroicons/Lucide).
 - ❌ Colores aleatorios de equipo: el color sale de `--c` (color medio del logo).
-- ❌ `cursor:pointer` faltante en elementos clickeables.
-- ❌ Cambios de estado instantáneos (siempre 150–300ms) o sin `:focus-visible`.
 - ❌ Degradar la tasa de acierto: **la precisión manda** (DOCUMENTACION.md §1).
 
 ---
 
 ## Pre-Delivery Checklist
 
-- [ ] Contraste de texto ≥ 4.5:1 sobre glass (medir el fondo compuesto, no el token).
-- [ ] `prefers-reduced-motion` respetado (canvas y stagger se apagan).
-- [ ] Canvas pausado cuando no está visible / pestaña oculta.
+- [ ] Sin glow de ningún tipo (grep de `glow`, `drop-shadow`, `text-shadow` de color).
+- [ ] `backdrop-filter` solo en superficies grandes/únicas.
+- [ ] Contraste de texto ≥ 4.5:1 sobre glass (medir el fondo compuesto).
+- [ ] `prefers-reduced-motion` respetado (nodos y stagger se apagan).
+- [ ] Nodos pausados con la pestaña oculta; CPU/frame < 2 ms.
 - [ ] Sin scroll horizontal en 375 / 768 / 1024 / 1440.
-- [ ] Focus visible (ring violeta) en nav, cards, tabs y botones.
-- [ ] Tablas y scoreboards siguen 100% legibles (sin blur bajo texto).
+- [ ] Focus visible (outline amarillo sólido) en nav, cards, tabs y botones.
+- [ ] Tablas y scoreboards siguen 100% legibles.
 - [ ] Clases `ae-*`/`v-*` y lógica JS intactas; enlaces sin `/index.html`.
-- [ ] Sin nuevas dependencias JS/fuentes pesadas (Russo One + Chakra Petch + DM Mono).
+- [ ] Fuentes: un request, `display=swap`, pesos recortados.
