@@ -16,6 +16,7 @@ async function cargarLista() {
         countEl.textContent = `${d.data.length} EQUIPOS`;
         pintarChips(d.regiones);
         pintarGrid(d.data);
+        VCT.aplicarColores(gridEl);
     } catch (e) {
         VCT.showError(gridEl, e);
     } finally {
@@ -41,7 +42,7 @@ function pintarGrid(equipos) {
     gridEl.innerHTML = equipos.map(t => {
         const wr = t.matches ? Math.round(t.wins * 100 / t.matches) : 0;
         const losses = t.matches - t.wins;
-        return `<a class="v-card v-team-grid-card" href="index.html?team=${t.team_id}" style="--c:${VCT.teamColor(t.team_name)}">
+        return `<a class="v-card v-team-grid-card" href="index.html?team=${t.team_id}" data-c-equipo="${t.team_id}">
             <div class="v-card-head">
                 ${VCT.lozenge(t.team_name, t.tag, 'md', t.team_id)}
                 <div style="min-width:0">
@@ -175,7 +176,7 @@ function pintarDetalle(d) {
     el.innerHTML = `
         <a class="v-back" href="index.html">← VOLVER A EQUIPOS</a>
 
-        <div class="v-banner" style="--c:${VCT.teamColor(t.team_name)};--wm-a:url('/api/media/equipo/${t.team_id}')">
+        <div class="v-banner" data-c-equipo="${t.team_id}" style="--wm-a:url('/api/media/equipo/${t.team_id}')">
             ${VCT.lozenge(t.team_name, t.tag, 'big', t.team_id)}
             <div class="v-banner-main">
                 <h1>${VCT.esc(t.team_name)}</h1>
@@ -251,6 +252,7 @@ function pintarDetalle(d) {
         e.preventDefault();
         VCT.activateTab(e.target.dataset.goto);
     });
+    VCT.aplicarColores(el);
 }
 
 /* ── INIT ───────────────────────────────────────────────────────────────── */

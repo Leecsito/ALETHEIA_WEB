@@ -1,10 +1,11 @@
 """
-ALETHEIA — Precarga de ENLACES de imágenes (logos de equipos y fotos de jugadores)
+ALETHEIA — Precarga de ENLACES de imágenes (logos de equipos, fotos de jugadores y eventos)
 
-NO descarga imágenes: solo resuelve el enlace directo desde vlr.gg y lo guarda
-en `media/urls_cache.json` (~80 bytes por entidad). El sitio web resuelve enlaces
-bajo demanda igualmente; este script sirve para "calentar" la caché de golpe de
-forma educada (1 request/segundo por defecto).
+NO guarda imágenes: resuelve el enlace directo desde vlr.gg y lo guarda en
+`media/urls_cache.json`. Para equipos y eventos también calcula el color medio
+del logo (leyendo la imagen UNA vez en memoria, sin escribirla a disco).
+El sitio web resuelve enlaces bajo demanda igualmente; este script sirve para
+"calentar" la caché de golpe de forma educada (1 request/segundo por defecto).
 
 Uso:
     python cachear_media.py --equipos              # equipos con partidos jugados

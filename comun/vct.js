@@ -72,12 +72,13 @@ const VCT = (() => {
         const img = teamId
             ? `<img src="/api/media/equipo/${teamId}" alt="" loading="lazy" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
-        return `<span class="v-lozenge ${cls}" style="--c:${teamColor(name)}">${img}<span class="v-lozenge-txt">${esc((tag || initials(name)).slice(0, 4))}</span></span>`;
+        const attr = teamId ? ` data-c-equipo="${teamId}"` : '';
+        return `<span class="v-lozenge ${cls}"${attr}>${img}<span class="v-lozenge-txt">${esc((tag || initials(name)).slice(0, 4))}</span></span>`;
     }
 
     function avatar(playerId, nickname, cls = '') {
         const img = playerId
-            ? `<img src="/api/media/jugador/${playerId}" alt="" loading="lazy" onerror="VCT.imgError(this)">`
+            ? `<img src="/api/media/jugador/${playerId}" alt="" loading="lazy" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         return `<span class="v-avatar ${cls}">${img}<span class="v-avatar-txt">${esc(initials(nickname))}</span></span>`;
     }
@@ -90,10 +91,49 @@ const VCT = (() => {
     }
 
     function eventLogo(eventId, name, cls = '') {
-        const img = eventId
-            ? `<img src="/api/media/evento/${eventId}" alt="" loading="lazy" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+        const src = eventId
+            ? `/api/media/evento/${eventId}`
+            : `/api/media/evento?nombre=${encodeURIComponent(name || '')}`;
+        const attr = eventId
+            ? ` data-c-evento="${eventId}"`
+            : ` data-c-nombre="${esc(name || '')}"`;
+        const img = (eventId || name)
+            ? `<img src="${src}" alt="" loading="lazy" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
-        return `<span class="v-elogo ${cls}" style="--c:${teamColor(name)}">${img}<span class="v-elogo-txt">${esc(initialsEvent(name))}</span></span>`;
+        return `<span class="v-elogo ${cls}"${attr}>${img}<span class="v-elogo-txt">${esc(initialsEvent(name))}</span></span>`;
+    }
+
+    const slug = texto => String(texto || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    /* Aplica colores medios (ya resueltos) a los elementos con data-c-*. */
+    async function aplicarColores(root = document, intento = 0) {
+        const equipos = new Set(), eventos = new Set(), nombres = new Set();
+        root.querySelectorAll('[data-c-equipo]').forEach(el => equipos.add(el.dataset.cEquipo));
+        root.querySelectorAll('[data-c-evento]').forEach(el => eventos.add(el.dataset.cEvento));
+        root.querySelectorAll('[data-c-nombre]').forEach(el => nombres.add(el.dataset.cNombre));
+        if (!equipos.size && !eventos.size && !nombres.size) return;
+
+        const qs = new URLSearchParams();
+        if (equipos.size) qs.set('equipos', [...equipos].join(','));
+        if (eventos.size) qs.set('eventos', [...eventos].join(','));
+        if (nombres.size) qs.set('nombres', [...nombres].join('|'));
+
+        let pendientes = 0;
+        try {
+            const d = await api(`/media/colores?${qs}`);
+            const aplicar = (el, info) => {
+                if (!info) return false;
+                el.style.setProperty('--c', info.c);
+                el.classList.toggle('on-light', !!info.d);
+                return true;
+            };
+            root.querySelectorAll('[data-c-equipo]').forEach(el => { if (!aplicar(el, d.equipos?.[el.dataset.cEquipo])) pendientes++; });
+            root.querySelectorAll('[data-c-evento]').forEach(el => { if (!aplicar(el, d.eventos?.[el.dataset.cEvento])) pendientes++; });
+            root.querySelectorAll('[data-c-nombre]').forEach(el => { if (!aplicar(el, d.nombres?.[slug(el.dataset.cNombre)])) pendientes++; });
+        } catch (e) {
+            console.error(e);
+        }
+        if (pendientes && intento < 3) setTimeout(() => aplicarColores(root, intento + 1), 4000);
     }
 
     /* Imágenes locales de multimedia/ (agentes y mapas). */
@@ -315,7 +355,7 @@ const VCT = (() => {
     return {
         API, api, esc, param, debounce,
         flag, flagHtml, teamColor, initials, lozenge, avatar,
-        initialsEvent, eventLogo,
+        initialsEvent, eventLogo, slug, aplicarColores,
         agentIcon, mapIcon, imgError,
         teamHref, playerHref, matchHref, eventHref,
         teamCell, playerCell,

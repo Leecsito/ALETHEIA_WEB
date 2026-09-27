@@ -14,6 +14,7 @@ async function cargarLista() {
             : d.data;
         countEl.textContent = `${rows.length} EVENTOS`;
         pintarGrid(rows);
+        VCT.aplicarColores(gridEl);
     } catch (e) {
         VCT.showError(gridEl, e);
     } finally {
@@ -41,7 +42,10 @@ function pintarGrid(rows) {
     }
     gridEl.innerHTML = rows.map(e => {
         const st = estadoEvento(e);
-        return `<a class="v-card v-event-card" href="${linkEvento(e)}" style="--c:${VCT.teamColor(e.event_name || e.tournament)}">
+        const cAttr = e.event_id
+            ? `data-c-evento="${e.event_id}"`
+            : `data-c-nombre="${VCT.esc(e.event_name || e.tournament)}"`;
+        return `<a class="v-card v-event-card" href="${linkEvento(e)}" ${cAttr}>
             <div class="v-event-head">
                 ${VCT.eventLogo(e.event_id, e.event_name || e.tournament)}
                 <div class="v-event-info">
@@ -178,7 +182,7 @@ function pintarDetalle(d) {
     el.innerHTML = `
         <a class="v-back" href="index.html">← VOLVER A EVENTOS</a>
 
-        <div class="v-banner" style="${e.event_id ? `--wm-a:url('/api/media/evento/${e.event_id}')` : ''}">
+        <div class="v-banner" style="${e.event_id ? `--wm-a:url('/api/media/evento/${e.event_id}')` : ''}" ${e.event_id ? `data-c-evento="${e.event_id}"` : `data-c-nombre="${VCT.esc(e.nombre)}"`}>
             ${VCT.eventLogo(e.event_id, e.nombre, 'big')}
             <div class="v-banner-main">
                 <h1>${VCT.esc(e.nombre)}</h1>
@@ -239,6 +243,7 @@ function pintarDetalle(d) {
         }));
         if (buttons.length) pintarAgentesMapa(d.agentes, buttons[0].dataset.map);
     }
+    VCT.aplicarColores(el);
 }
 
 /* ── INIT ───────────────────────────────────────────────────────────────── */

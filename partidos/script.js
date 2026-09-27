@@ -31,6 +31,7 @@ async function cargarLista() {
         const d = await VCT.api(`/partidos?${qs}`);
         countEl.textContent = `${d.total} PARTIDOS`;
         VCT.renderMatchList(listaEl, d.data);
+        VCT.aplicarColores(listaEl);
         pintarPager(d);
     } catch (e) {
         VCT.showError(listaEl, e);
@@ -146,6 +147,7 @@ function pintarDetalle(d) {
         btns[0].classList.add('active');
         pintarMapa(d, 0);
     }
+    VCT.aplicarColores(el);
 }
 
 function roundsStrip(m, p) {

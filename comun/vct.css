@@ -319,8 +319,8 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-mt {
     display: grid;
-    grid-template-columns: 34px minmax(0, 1fr) 40px;
-    gap: 10px;
+    grid-template-columns: 42px minmax(0, 1fr) 42px;
+    gap: 11px;
     align-items: center;
     color: var(--dim);
     transition: color .15s;
@@ -350,32 +350,32 @@ main.v-main.wide { max-width: 1500px; }
 .v-lozenge {
     position: relative;
     overflow: hidden;
-    width: 34px;
-    height: 34px;
+    width: 42px;
+    height: 42px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: .5px;
-    color: #0a0a0c;
-    background: var(--c, #888);
+    color: var(--text);
+    background: var(--c, #26262e);
     clip-path: polygon(50% 0, 100% 25%, 100% 75%, 50% 100%, 0 75%, 0 25%);
     flex-shrink: 0;
     transition: filter .2s;
 }
 
 .v-lozenge.md {
-    width: 48px;
-    height: 48px;
-    font-size: 15px;
+    width: 60px;
+    height: 60px;
+    font-size: 18px;
     letter-spacing: 1px;
 }
 
 .v-lozenge.big {
-    width: 84px;
-    height: 84px;
-    font-size: 24px;
+    width: 104px;
+    height: 104px;
+    font-size: 30px;
     letter-spacing: 1px;
 }
 
@@ -385,38 +385,41 @@ main.v-main.wide { max-width: 1500px; }
     width: 100%;
     height: 100%;
     object-fit: contain;
-    padding: 3px;
+    padding: 4px;
 }
 
 .v-lozenge.has-img {
-    background: radial-gradient(circle at 50% 25%, #22222c, #0e0e12 75%);
+    background: #14141a;
+    background: color-mix(in srgb, var(--c, #26262e) 20%, #0d0d11);
 }
 
+.v-lozenge.has-img.on-light { background: #e9e9ee; }
 .v-lozenge.has-img .v-lozenge-txt { display: none; }
+.v-lozenge.on-light .v-lozenge-txt { color: #0a0a0c; }
 .v-lozenge-txt { position: relative; z-index: 1; }
 
 /* ── LOGOS DE EVENTO (tile cuadrado) ── */
 .v-elogo {
     position: relative;
     overflow: hidden;
-    width: 52px;
-    height: 52px;
+    width: 64px;
+    height: 64px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     font-family: var(--display);
-    font-size: 20px;
+    font-size: 24px;
     letter-spacing: 1px;
-    color: #0a0a0c;
-    background: linear-gradient(160deg, var(--c, #888), #101014 140%);
+    color: var(--text);
+    background: linear-gradient(160deg, var(--c, #26262e), #101014 140%);
     border: 1px solid rgba(255, 255, 255, .06);
     flex-shrink: 0;
 }
 
 .v-elogo.big {
-    width: 96px;
-    height: 96px;
-    font-size: 36px;
+    width: 116px;
+    height: 116px;
+    font-size: 42px;
 }
 
 .v-elogo img {
@@ -425,43 +428,47 @@ main.v-main.wide { max-width: 1500px; }
     width: 100%;
     height: 100%;
     object-fit: contain;
-    padding: 5px;
+    padding: 6px;
 }
 
 .v-elogo.has-img {
-    background: radial-gradient(circle at 50% 25%, #22222c, #0e0e12 75%);
+    background: #14141a;
+    background: color-mix(in srgb, var(--c, #26262e) 18%, #0d0d11);
 }
 
+.v-elogo.has-img.on-light { background: #e9e9ee; }
 .v-elogo.has-img .v-elogo-txt { display: none; }
+.v-elogo.on-light .v-elogo-txt { color: #0a0a0c; }
 .v-elogo-txt { position: relative; z-index: 1; }
 
 /* ── AVATARES DE JUGADOR ── */
 .v-avatar {
     position: relative;
     overflow: hidden;
-    width: 48px;
-    height: 48px;
+    width: 56px;
+    height: 56px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: radial-gradient(circle at 50% 20%, #22222c, #0e0e12 80%);
     border: 1px solid var(--border);
     font-family: var(--display);
-    font-size: 18px;
+    font-size: 20px;
     letter-spacing: 1px;
     color: var(--accent);
     flex-shrink: 0;
 }
 
-.v-avatar.sm { width: 32px; height: 32px; font-size: 12px; }
-.v-avatar.big { width: 128px; height: 128px; font-size: 44px; }
+.v-avatar.sm { width: 36px; height: 36px; font-size: 13px; }
+.v-avatar.big { width: 148px; height: 148px; font-size: 48px; }
 .v-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.v-avatar.has-img .v-avatar-txt { display: none; }
 .v-avatar-txt { position: relative; z-index: 1; }
 
 /* ── ÍCONOS LOCALES (agentes / mapas) ── */
 .v-agent-icon {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     object-fit: contain;
     background: radial-gradient(circle at 50% 25%, #22222c, #101014 80%);
     border: 1px solid var(--border);
@@ -471,14 +478,14 @@ main.v-main.wide { max-width: 1500px; }
 .v-agent-cell { display: inline-flex; align-items: center; gap: 8px; }
 
 .v-map-icon {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
     object-fit: cover;
     border: 1px solid var(--border);
     vertical-align: middle;
 }
 
-.v-map-icon.big { width: 64px; height: 64px; border-color: #34343c; }
+.v-map-icon.big { width: 76px; height: 76px; border-color: #34343c; }
 
 /* ── ESTADO / PILLS ── */
 .v-match-status { font-size: 10px; letter-spacing: 1px; color: var(--dim); }
@@ -878,8 +885,11 @@ main.v-main.wide { max-width: 1500px; }
     top: 0;
     bottom: 0;
     width: 3px;
-    background: linear-gradient(180deg, var(--c, var(--accent)), transparent 85%);
+    background: linear-gradient(180deg, var(--c, #2a2a33), transparent 85%);
+    transition: background .2s;
 }
+
+.v-card:hover::before { background: linear-gradient(180deg, var(--c, var(--accent)), transparent 85%); }
 
 .v-card:hover {
     background: var(--surface2);
@@ -1042,8 +1052,8 @@ main.v-main.wide { max-width: 1500px; }
     .v-vs { width: 100%; justify-content: center; }
     .v-vs-team { min-width: 0; flex: 1; }
     .v-vs-score { font-size: 38px; }
-    .v-lozenge.big { width: 64px; height: 64px; font-size: 18px; }
-    .v-avatar.big { width: 92px; height: 92px; font-size: 32px; }
+    .v-lozenge.big { width: 80px; height: 80px; font-size: 22px; }
+    .v-avatar.big { width: 110px; height: 110px; font-size: 38px; }
     .v-econ { grid-template-columns: 1fr; }
     .v-tabs { margin-left: -14px; margin-right: -14px; padding-left: 14px; }
     .v-banner::after { background-size: 190px auto, 190px auto; }

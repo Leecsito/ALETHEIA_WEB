@@ -260,6 +260,7 @@ function pintarDetalle(d) {
     `;
 
     VCT.tabs(el);
+    VCT.aplicarColores(el);
 }
 
 /* ── INIT ───────────────────────────────────────────────────────────────── */

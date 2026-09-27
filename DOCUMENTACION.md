@@ -12,7 +12,7 @@
 **ALETHEIA** es una plataforma web integral de analítica, procesamiento ETL, visualización y predicción de partidos para deportes electrónicos (específicamente Valorant VCT).
 
 ### Stack Tecnológico:
-- **Backend:** Python 3 (Flask, Gunicorn, Pandas, NumPy, OpenPyXL, libSQL client / SQLite3).
+- **Backend:** Python 3 (Flask, Gunicorn, Pandas, NumPy, OpenPyXL, Pillow, libSQL client / SQLite3).
 - **Base de Datos:** Turso (libSQL en la nube) con fallback a SQLite3 local (`aletheia.db`).
 - **Frontend:** Vanilla HTML5, Vanilla CSS3 (Variables CSS, Estética Cyberpunk/Dark Mode), JavaScript ES6+ (Fetch API, origen dinámico `window.location.origin`).
 - **Despliegue:** Render / Gunicorn (`render.yaml` y `requirements.txt`).
@@ -79,7 +79,7 @@ ALETHEIA/
 │   ├── index.html, style.css, script.js
 ├── media/                    # Enlaces a logos/fotos de vlr.gg (no es una página)
 │   ├── media.py              # Blueprint (/api/media/equipo/<id>, /api/media/jugador/<id>, /api/media/evento/<id>, /api/media/estado)
-│   └── urls_cache.json       # Caché de ENLACES resueltos (solo texto, ignorada por git)
+│   └── urls_cache.json       # Caché de enlaces + color medio (solo texto, ignorada por git)
 ├── multimedia/               # Archivos multimedia / imágenes
 │   ├── agents/               # 28 retratos de agentes (.avif, locales, usados en scoreboards)
 │   └── maps/                 # 13 imágenes de mapas (.avif, locales, usadas en tabs de mapa)
@@ -407,13 +407,16 @@ estas tablas). Endpoints adicionales del proxy:
 - `GET /api/evento?event_id=<id>` o `?torneo=<nombre>`: detalle. Devuelve `evento` (nombre, torneos/aliases, fechas, partidos, equipos), `partidos`, `equipos` (récord y mapas V-D), `mapas` (jugados, picks, bans, deciders; `atk_win_pct`/`def_win_pct` solo si hay `event_map_stats`) y `agentes` (pickrate por mapa desde `event_agent_pickrate`; si el torneo no tiene meta, se **calcula** la presencia % desde `player_stats`).
 
 ### 4.9. Módulo Media (`media_bp`) — logos y fotos por enlace (no es una página)
-- **No descarga ni guarda imágenes.** Resuelve el enlace directo desde vlr.gg y hace `302 redirect` para que el navegador cargue la imagen desde el CDN (`owcdn.net`). Solo se cachea el **enlace** en `media/urls_cache.json` (~80 bytes por entidad, regenerable).
+- **No guarda imágenes.** Resuelve el enlace directo desde vlr.gg y hace `302 redirect` para que el navegador cargue la imagen desde el CDN (`owcdn.net`). Solo se cachean **metadatos** en `media/urls_cache.json` (~100 bytes por entidad, regenerable): enlace (`u`), color medio (`c`), si es oscuro (`d`) y marca de color calculado (`cc`).
+- **Color medio sin guardar la imagen:** para equipos y eventos se lee la imagen UNA vez **en memoria** (Pillow, máx 48×48, ignorando transparencia), se calcula el color medio y la luminancia, y se descarta. `d:true` (luminancia < 0.28) indica logo oscuro → el frontend usa fondo claro (`on-light`). No aplica a jugadores.
 - `GET /api/media/equipo/<team_id>`: si no hay enlace resuelto, baja **bajo demanda** la página `vlr.gg/team/<id>` (mismo id que `teams.team_id`), extrae la imagen de `team-header-logo` (fallback `og:image`) y redirige. `404` con `{"ok":false,"estado":"miss|busy|error"}` si no hay imagen.
 - `GET /api/media/jugador/<player_id>`: igual para la foto (`player-header`, fallback `og:image`).
-- `GET /api/media/evento/<event_id>`: igual para el logo del evento (`event-header`, fallback `og:image`); solo aplica a los 14 eventos con `event_id` de vlr.gg.
-- `GET /api/media/estado`: conteo de enlaces resueltos / sin imagen por tipo (`equipos`, `jugadores`, `eventos`) y tamaño del JSON.
+- `GET /api/media/evento/<event_id>`: igual para el logo del evento (`event-header`, fallback `og:image`).
+- `GET /api/media/evento?nombre=<torneo>`: para torneos **sin `event_id`** (p. ej. *Valorant Champions 2026*). Busca el evento en `vlr.gg/search/?q=...`, extrae el primer resultado `/search/r/event/<id>/idx` + su thumbnail, y lo cachea por nombre (`n:<slug>`) y por id.
+- `GET /api/media/colores?equipos=1,2&eventos=2766&nombres=A|B`: devuelve **solo colores ya resueltos** (no dispara descargas), para que el frontend pinte acentos/tiles. Los enlaces ya cacheados sin color lo calculan en un hilo de fondo (`cc` evita reintentos infinitos).
+- `GET /api/media/estado`: conteo de resueltas / sin imagen / con color por tipo y tamaño del JSON.
 - **Reglas:** máximo 2 resoluciones simultáneas y 0.3 s entre requests a vlr.gg; los "sin imagen"/404 reales se marcan y no se reintentan por 24 h; los errores de red **no** se marcan (se reintenta en la próxima visita); el redirect se cachea 7 días en el navegador.
-- **Precarga opcional de enlaces:** `python cachear_media.py --equipos|--jugadores|--eventos|--todo [--limite N] [--delay S]` (1 s entre resoluciones por defecto). No es necesario: el sitio resuelve enlaces solo al mostrar cada imagen.
+- **Precarga opcional de enlaces y colores:** `python cachear_media.py --equipos|--jugadores|--eventos|--todo [--limite N] [--delay S]` (1 s entre resoluciones por defecto; también calcula el color medio de equipos/eventos). No es necesario: el sitio resuelve enlaces solo al mostrar cada imagen.
 - El frontend usa el fallback si la imagen falla: **lozenge con siglas** del equipo (colores por hash del nombre) y **avatar con iniciales** del jugador. `VCT.imgError` reintenta una vez a los 3 s y luego quita la imagen.
 
 ---
@@ -624,9 +627,14 @@ estas tablas). Endpoints adicionales del proxy:
      vlr.gg** (no se guardan imágenes) y el fallback es siglas/iniciales/monograma
      (`VCT.imgError`). Los agentes (`VCT.agentIcon`) y mapas (`VCT.mapIcon`)
      usan los `.avif` locales de `multimedia/agents/` y `multimedia/maps/`.
-     Tamaños: lozenge 34px (`md` 48, `big` 84), avatar 48px (`sm` 32, `big` 128),
-     elogo 52px (`big` 96), agente 28px, mapa 26px (`big` 64). Los banners usan
-     `--wm-a`/`--wm-b` (URLs de media) como watermark tenue detrás del contenido.
+     Tamaños: lozenge 42px (`md` 60, `big` 104), avatar 56px (`sm` 36, `big` 148),
+     elogo 64px (`big` 116), agente 32px, mapa 30px (`big` 76).
+   - **Color de marca dinámico:** los elementos llevan `data-c-equipo` /
+     `data-c-evento` / `data-c-nombre`; `VCT.aplicarColores(root)` pide
+     `/api/media/colores` (1 request por render, con hasta 3 reintentos) y setea
+     `--c` (color medio) y la clase `on-light` cuando el logo es oscuro. Nunca se
+     usan colores aleatorios. Los banners usan `--wm-a`/`--wm-b` (URLs de media)
+     como watermark tenue detrás del contenido.
    - **`tablas/` no se toca**: sigue siendo el explorador raw; los componentes
      VCT son la vista "bonita" sobre los mismos datos.
 
