@@ -78,6 +78,23 @@ _cache_mtime = [os.path.getmtime(URLS_PATH) if os.path.exists(URLS_PATH) else 0.
 
 def _guardar_cache():
     try:
+        # Fusionar con lo que haya en disco: nunca pisar escrituras de otro
+        # proceso (script de precarga u otro worker); gana la entrada más nueva.
+        try:
+            with open(URLS_PATH, encoding='utf-8') as f:
+                disco = json.load(f)
+            if isinstance(disco, dict):
+                for kind, entradas in disco.items():
+                    if not isinstance(entradas, dict):
+                        continue
+                    actual = _cache.setdefault(kind, {})
+                    for k, v in entradas.items():
+                        prev = actual.get(k)
+                        if not isinstance(prev, dict) or int(v.get('t') or 0) > int(prev.get('t') or 0):
+                            actual[k] = v
+        except Exception:
+            pass
+
         tmp = URLS_PATH + '.tmp'
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(_cache, f, ensure_ascii=False, indent=0)
@@ -160,6 +177,8 @@ def media_meta():
             if _color_pendiente(kind, e):
                 _lanzar_color(kind, eid, e['u'])
             return {'u': e['u'], 'c': e.get('c'), 'd': bool(e.get('d'))}
+        if _miss_vigente(e):
+            return {'miss': True}          # sin imagen conocida: no pedirla de nuevo
         return None
 
     def collect(kind, ids):
