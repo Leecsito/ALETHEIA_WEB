@@ -88,7 +88,7 @@ function agentesTable(agentes) {
         <tbody>${agentes.map(a => {
             const use = Math.round((a.use_count || 0) * 100 / maxUse);
             return `<tr>
-                <td style="text-transform:capitalize">${VCT.esc(a.agent)}${a.role ? `<span class="v-agent-role">${VCT.esc(a.role)}</span>` : ''}</td>
+                <td><span class="v-agent-cell" style="text-transform:capitalize">${VCT.agentIcon(a.agent)}${VCT.esc(a.agent)}${a.role ? `<span class="v-agent-role">${VCT.esc(a.role)}</span>` : ''}</span></td>
                 <td>
                     <div class="v-use-bar">
                         ${VCT.bar(use, 'purple')}
@@ -177,7 +177,7 @@ function equiposList(equipos) {
         <thead><tr><th>MOVIMIENTO</th><th>EQUIPO</th><th>FECHA</th><th>REGION</th></tr></thead>
         <tbody>${equipos.map(e => `<tr>
             <td><span class="v-tx ${VCT.esc(e.action)}">${VCT.esc(e.action)}</span></td>
-            <td><a href="${VCT.teamHref(e.team_id)}">${VCT.lozenge(e.team_name, e.tag)} ${VCT.esc(e.team_name)}</a></td>
+            <td><a href="${VCT.teamHref(e.team_id)}">${VCT.lozenge(e.team_name, e.tag, '', e.team_id)} ${VCT.esc(e.team_name)}</a></td>
             <td class="muted">${VCT.fmtDate(e.transaction_date)}</td>
             <td class="muted">${VCT.esc(e.region || '—')}</td>
         </tr>`).join('')}
@@ -197,7 +197,7 @@ function pintarDetalle(d) {
         <a class="v-back" href="index.html">← VOLVER A JUGADORES</a>
 
         <div class="v-banner">
-            <span class="v-avatar big">${VCT.esc(VCT.initials(p.nickname))}</span>
+            ${VCT.avatar(p.player_id, p.nickname, 'big')}
             <div class="v-banner-main">
                 <h1>${VCT.esc(p.nickname || '—')}</h1>
                 <div class="v-meta">

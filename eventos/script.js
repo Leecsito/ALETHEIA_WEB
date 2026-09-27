@@ -93,7 +93,7 @@ function equiposTable(equipos) {
             const wr = t.matches ? Math.round(t.wins * 100 / t.matches) : 0;
             const mapWr = t.maps ? Math.round(t.map_wins * 100 / t.maps) : 0;
             return `<tr>
-                <td>${VCT.lozenge(t.team_name, t.tag)} <a href="${VCT.teamHref(t.team_id)}">${VCT.esc(t.team_name)}</a></td>
+                <td>${VCT.lozenge(t.team_name, t.tag, '', t.team_id)} <a href="${VCT.teamHref(t.team_id)}">${VCT.esc(t.team_name)}</a></td>
                 <td class="num muted">${t.matches}</td>
                 <td class="num"><span class="v-val-high">${t.wins}</span> - <span class="v-val-low">${t.matches - t.wins}</span></td>
                 <td class="num ${VCT.wrClass(wr)}">${wr}%</td>
@@ -161,7 +161,7 @@ function pintarAgentesMapa(agentes, mapName) {
     }
     cont.innerHTML = `<div class="v-agent-grid">${rows.map(a => `
         <div class="v-agent-row">
-            <span class="name">${VCT.esc(a.agent_name)} <span class="role">${VCT.esc(a.role || '')}</span></span>
+            <span class="name v-agent-cell">${VCT.agentIcon(a.agent_name)}${VCT.esc(a.agent_name)} <span class="role">${VCT.esc(a.role || '')}</span></span>
             ${VCT.bar(a.pick_pct || 0, 'purple')}
             <span class="pct">${a.pick_pct ?? '—'}%</span>
         </div>`).join('')}</div>`;

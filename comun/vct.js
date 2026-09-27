@@ -68,8 +68,43 @@ const VCT = (() => {
         return (s.slice(0, 3) || '?').toUpperCase();
     }
 
-    function lozenge(name, tag, cls = '') {
-        return `<span class="v-lozenge ${cls}" style="--c:${teamColor(name)}">${esc((tag || initials(name)).slice(0, 4))}</span>`;
+    function lozenge(name, tag, cls = '', teamId = null) {
+        const img = teamId
+            ? `<img src="/api/media/equipo/${teamId}" alt="" loading="lazy" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            : '';
+        return `<span class="v-lozenge ${cls}" style="--c:${teamColor(name)}">${img}<span class="v-lozenge-txt">${esc((tag || initials(name)).slice(0, 4))}</span></span>`;
+    }
+
+    function avatar(playerId, nickname, cls = '') {
+        const img = playerId
+            ? `<img src="/api/media/jugador/${playerId}" alt="" loading="lazy" onerror="VCT.imgError(this)">`
+            : '';
+        return `<span class="v-avatar ${cls}">${img}<span class="v-avatar-txt">${esc(initials(nickname))}</span></span>`;
+    }
+
+    /* Imágenes locales de multimedia/ (agentes y mapas). */
+    function agentIcon(agent) {
+        const slug = String(agent || '').toLowerCase().replace(/[^a-z]/g, '');
+        if (!slug) return '';
+        return `<img class="v-agent-icon" src="/multimedia/agents/${slug}.avif" alt="${esc(agent)}" title="${esc(agent)}" loading="lazy" onerror="this.remove()">`;
+    }
+
+    function mapIcon(mapName, cls = '') {
+        const slug = String(mapName || '').toUpperCase().replace(/[^A-Z]/g, '');
+        if (!slug) return '';
+        return `<img class="v-map-icon ${cls}" src="/multimedia/maps/${slug}.avif" alt="" loading="lazy" onerror="this.remove()">`;
+    }
+
+    /* Reintenta una imagen de media una vez; si vuelve a fallar, la quita
+       (deja ver el fallback: siglas del equipo o iniciales del jugador). */
+    function imgError(img) {
+        if (!img.dataset.retry) {
+            img.dataset.retry = '1';
+            const base = img.src.split('?')[0];
+            setTimeout(() => { img.src = `${base}?r=${Date.now()}`; }, 3000);
+        } else {
+            img.remove();
+        }
     }
 
     const teamHref = id => `../equipos/index.html?team=${id}`;
@@ -185,12 +220,12 @@ const VCT = (() => {
             </div>
             <div class="v-match-teams">
                 <div class="v-mt ${winA ? 'win' : ''}">
-                    ${lozenge(m.team_a, m.team_a_tag)}
+                    ${lozenge(m.team_a, m.team_a_tag, '', m.team_a_id)}
                     <span class="v-mt-name">${esc(m.team_a || 'TBD')}</span>
                     <span class="v-mt-score">${m.score_a ?? '-'}</span>
                 </div>
                 <div class="v-mt ${winB ? 'win' : ''}">
-                    ${lozenge(m.team_b, m.team_b_tag || (m.team_b ? null : 'TBD'))}
+                    ${lozenge(m.team_b, m.team_b_tag || (m.team_b ? null : 'TBD'), '', m.team_b_id)}
                     <span class="v-mt-name">${esc(m.team_b || 'TBD')}</span>
                     <span class="v-mt-score">${m.score_b ?? '-'}</span>
                 </div>
@@ -265,7 +300,8 @@ const VCT = (() => {
 
     return {
         API, api, esc, param, debounce,
-        flag, flagHtml, teamColor, initials, lozenge,
+        flag, flagHtml, teamColor, initials, lozenge, avatar,
+        agentIcon, mapIcon, imgError,
         teamHref, playerHref, matchHref, eventHref,
         teamCell, playerCell,
         parseDate, fmtDate, todayIso, dayLabel,

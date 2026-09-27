@@ -264,6 +264,8 @@ main.v-main.wide { max-width: 1500px; }
 }
 
 .v-lozenge {
+    position: relative;
+    overflow: hidden;
     width: 26px;
     height: 26px;
     display: inline-flex;
@@ -284,6 +286,40 @@ main.v-main.wide { max-width: 1500px; }
     font-size: 16px;
     letter-spacing: 1px;
 }
+
+.v-lozenge img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    padding: 2px;
+}
+
+.v-lozenge.has-img { background: var(--surface3); }
+.v-lozenge.has-img .v-lozenge-txt { display: none; }
+.v-lozenge-txt { position: relative; z-index: 1; }
+
+.v-agent-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    background: var(--surface3);
+    border: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.v-agent-cell { display: inline-flex; align-items: center; gap: 6px; }
+
+.v-map-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: cover;
+    border: 1px solid var(--border);
+    vertical-align: middle;
+}
+
+.v-map-icon.big { width: 46px; height: 46px; }
 
 .v-match-status { font-size: 10px; letter-spacing: 1px; color: var(--dim); }
 
@@ -612,6 +648,8 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-player-card:hover { border-color: var(--accent); }
 .v-avatar {
+    position: relative;
+    overflow: hidden;
     width: 38px;
     height: 38px;
     display: flex;
@@ -626,6 +664,8 @@ main.v-main.wide { max-width: 1500px; }
     flex-shrink: 0;
 }
 .v-avatar.big { width: 72px; height: 72px; font-size: 30px; }
+.v-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.v-avatar-txt { position: relative; z-index: 1; }
 .v-player-card .nick { font-size: 13px; }
 .v-player-card .real { color: var(--dim); font-size: 10px; }
 

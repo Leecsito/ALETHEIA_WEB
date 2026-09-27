@@ -95,7 +95,7 @@ function pintarDetalle(d) {
         <a class="v-back" href="index.html">← VOLVER A PARTIDOS</a>
 
         <div class="v-banner">
-            ${VCT.lozenge(p.team_a, p.team_a_tag, 'big')}
+            ${VCT.lozenge(p.team_a, p.team_a_tag, 'big', p.team_a_id)}
             <div class="v-banner-main">
                 <h1>${VCT.esc(titulo)}</h1>
                 <div class="v-meta">
@@ -108,12 +108,12 @@ function pintarDetalle(d) {
             </div>
             <div class="v-vs">
                 <a class="v-vs-team ${winA ? '' : 'lost'}" href="${VCT.teamHref(p.team_a_id)}">
-                    ${VCT.lozenge(p.team_a, p.team_a_tag)}
+                    ${VCT.lozenge(p.team_a, p.team_a_tag, '', p.team_a_id)}
                     <span class="v-team-name">${VCT.esc(p.team_a || 'TBD')}</span>
                 </a>
                 <span class="v-vs-score">${p.score_a ?? '-'}<small> : </small>${p.score_b ?? '-'}</span>
                 <a class="v-vs-team away ${winB ? '' : 'lost'}" href="${VCT.teamHref(p.team_b_id)}">
-                    ${VCT.lozenge(p.team_b, p.team_b_tag)}
+                    ${VCT.lozenge(p.team_b, p.team_b_tag, '', p.team_b_id)}
                     <span class="v-team-name">${VCT.esc(p.team_b || 'TBD')}</span>
                 </a>
             </div>
@@ -130,7 +130,7 @@ function pintarDetalle(d) {
                 ${d.maps.map((m, i) => {
                     const sa = (m.score_a_attack || 0) + (m.score_a_defense || 0);
                     const sb = (m.score_b_attack || 0) + (m.score_b_defense || 0);
-                    return `<button class="v-map-btn" data-i="${i}">${VCT.esc(m.map_name)} <span class="v-map-score">${sa}:${sb}</span></button>`;
+                    return `<button class="v-map-btn" data-i="${i}">${VCT.mapIcon(m.map_name)} ${VCT.esc(m.map_name)} <span class="v-map-score">${sa}:${sb}</span></button>`;
                 }).join('')}
             </div>
             <div id="map-panel"></div>` : VCT.empty('Sin mapas registrados para este partido.')}
@@ -202,7 +202,7 @@ function board(teamId, name, tag, score, players) {
     const rows = players.map(s => {
         const diff = (s.kills || 0) - (s.deaths || 0);
         return `<tr>
-            <td>${s.agent ? `<span class="v-agent-chip">${VCT.esc(s.agent)}</span>` : '<span class="muted">—</span>'}</td>
+            <td>${s.agent ? `<span class="v-agent-cell">${VCT.agentIcon(s.agent)}<span class="v-agent-chip">${VCT.esc(s.agent)}</span></span>` : '<span class="muted">—</span>'}</td>
             <td>${VCT.playerCell(s.player_id, s.nickname)}</td>
             <td class="num ${VCT.ratingClass(s.rating)}">${VCT.fmt(s.rating)}</td>
             <td class="num">${s.acs ?? '—'}</td>
@@ -220,7 +220,7 @@ function board(teamId, name, tag, score, players) {
 
     return `<div class="v-board">
         <div class="v-board-head">
-            <a href="${VCT.teamHref(teamId)}" style="text-decoration:none">${VCT.lozenge(name, tag)}</a>
+            <a href="${VCT.teamHref(teamId)}" style="text-decoration:none">${VCT.lozenge(name, tag, '', teamId)}</a>
             <a class="v-board-team" href="${VCT.teamHref(teamId)}" style="color:inherit;text-decoration:none">${VCT.esc(name)}</a>
             <span class="v-board-score">${score}</span>
         </div>
@@ -260,6 +260,7 @@ function pintarMapa(d, i) {
 
     document.getElementById('map-panel').innerHTML = `
         <div class="v-map-head">
+            ${VCT.mapIcon(m.map_name, 'big')}
             <h2>${VCT.esc(m.map_name)}</h2>
             <div class="v-info">
                 <span class="v-map-picker">PICK <b>${VCT.esc(picker)}</b></span>

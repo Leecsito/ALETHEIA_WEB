@@ -43,7 +43,7 @@ function pintarGrid(equipos) {
         const losses = t.matches - t.wins;
         return `<a class="v-card v-team-grid-card" href="index.html?team=${t.team_id}" style="--c:${VCT.teamColor(t.team_name)}">
             <div class="v-card-head">
-                ${VCT.lozenge(t.team_name, t.tag)}
+                ${VCT.lozenge(t.team_name, t.tag, '', t.team_id)}
                 <div style="min-width:0">
                     <h3>${VCT.esc(t.team_name)}</h3>
                     <div class="v-card-sub">${t.region ? VCT.esc(t.region) : '—'} ${VCT.flagHtml(t.country)}</div>
@@ -81,7 +81,7 @@ function rosterCards(roster) {
     if (!roster.length) return VCT.empty('Sin roster registrado.');
     return `<div class="v-roster">${roster.map(p => `
         <a class="v-player-card" href="${VCT.playerHref(p.player_id)}">
-            <span class="v-avatar">${VCT.esc(VCT.initials(p.nickname))}</span>
+            ${VCT.avatar(p.player_id, p.nickname)}
             <span style="min-width:0">
                 <span class="nick">${VCT.flagHtml(p.country)} ${VCT.esc(p.nickname)}</span><br />
                 <span class="real">${VCT.esc(p.real_name || '')}</span>
@@ -176,7 +176,7 @@ function pintarDetalle(d) {
         <a class="v-back" href="index.html">← VOLVER A EQUIPOS</a>
 
         <div class="v-banner" style="--c:${VCT.teamColor(t.team_name)}">
-            ${VCT.lozenge(t.team_name, t.tag, 'big')}
+            ${VCT.lozenge(t.team_name, t.tag, 'big', t.team_id)}
             <div class="v-banner-main">
                 <h1>${VCT.esc(t.team_name)}</h1>
                 <div class="v-meta">

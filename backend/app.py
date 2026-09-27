@@ -29,6 +29,7 @@ from partidos  import partidos_bp
 from equipos   import equipos_bp
 from jugadores import jugadores_bp
 from eventos   import eventos_bp
+from media     import media_bp
 
 FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_preparar', 'header',
                     'partidos', 'equipos', 'jugadores', 'eventos']
@@ -45,6 +46,7 @@ app.register_blueprint(partidos_bp)
 app.register_blueprint(equipos_bp)
 app.register_blueprint(jugadores_bp)
 app.register_blueprint(eventos_bp)
+app.register_blueprint(media_bp)
 
 # -- RUTAS PARA SERVIR LAS PÁGINAS HTML --
 @app.route('/')
