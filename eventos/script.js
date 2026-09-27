@@ -42,16 +42,19 @@ function pintarGrid(rows) {
     gridEl.innerHTML = rows.map(e => {
         const st = estadoEvento(e);
         return `<a class="v-card v-event-card" href="${linkEvento(e)}" style="--c:${VCT.teamColor(e.event_name || e.tournament)}">
-            <div class="v-card-head">
-                <div style="min-width:0;flex:1">
+            <div class="v-event-head">
+                ${VCT.eventLogo(e.event_id, e.event_name || e.tournament)}
+                <div class="v-event-info">
                     <h3>${VCT.esc(e.event_name || e.tournament)}</h3>
                     <div class="v-card-sub">${e.event_name ? VCT.esc(e.tournament) : 'TORNEO'}</div>
+                    <span class="v-pill ${st.cls}">${st.txt}</span>
                 </div>
-                <span class="v-pill ${st.cls}">${st.txt}</span>
             </div>
             <div class="v-event-dates">${VCT.fmtDate(e.start_date)} <small style="color:var(--dim)">→</small> ${VCT.fmtDate(e.end_date)}</div>
-            <div class="v-card-row" style="margin-top:10px"><span class="label">PARTIDOS</span><span>${e.matches}</span></div>
-            <div class="v-card-row"><span class="label">EQUIPOS</span><span>${e.teams}</span></div>
+            <div class="v-event-stats">
+                <span><b>${e.matches}</b> PARTIDOS</span>
+                <span><b>${e.teams}</b> EQUIPOS</span>
+            </div>
         </a>`;
     }).join('');
 }
@@ -175,7 +178,8 @@ function pintarDetalle(d) {
     el.innerHTML = `
         <a class="v-back" href="index.html">← VOLVER A EVENTOS</a>
 
-        <div class="v-banner">
+        <div class="v-banner" style="${e.event_id ? `--wm-a:url('/api/media/evento/${e.event_id}')` : ''}">
+            ${VCT.eventLogo(e.event_id, e.nombre, 'big')}
             <div class="v-banner-main">
                 <h1>${VCT.esc(e.nombre)}</h1>
                 <div class="v-meta">

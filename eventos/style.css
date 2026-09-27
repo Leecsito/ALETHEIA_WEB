@@ -1,33 +1,76 @@
 /* ALETHEIA — Componente EVENTOS (ajustes propios) */
 
-#vistaDetalle .v-banner { border-left: 3px solid var(--orange); }
+#vistaDetalle .v-banner { border-left-color: var(--orange); }
 
-.v-event-card .v-card-head { margin-bottom: 10px; }
+.v-event-head {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 15px;
+}
+
+.v-event-info {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+}
+
+.v-event-info h3 {
+    white-space: normal;
+    overflow: visible;
+    line-height: 1.02;
+    font-size: 21px;
+}
 
 .v-event-dates {
     font-family: var(--display);
-    font-size: 18px;
+    font-size: 19px;
     letter-spacing: 2px;
     color: var(--text);
 }
 
+.v-event-stats {
+    display: flex;
+    gap: 20px;
+    margin-top: 13px;
+    color: var(--dim);
+    font-size: 10px;
+    letter-spacing: 1px;
+    align-items: baseline;
+}
+
+.v-event-stats b {
+    color: var(--text);
+    font-family: var(--display);
+    font-size: 17px;
+    letter-spacing: 1px;
+    margin-right: 5px;
+    font-weight: 400;
+}
+
 .v-agent-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 2px;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 3px;
 }
 
 .v-agent-row {
     display: grid;
-    grid-template-columns: 110px 1fr 46px;
+    grid-template-columns: 130px 1fr 48px;
     gap: 10px;
     align-items: center;
-    background: var(--surface);
+    background: var(--card-grad);
     border: 1px solid var(--border);
-    padding: 9px 12px;
+    padding: 9px 13px;
     font-size: 11px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .03);
+    transition: border-color .15s;
 }
 
+.v-agent-row:hover { border-color: #34343c; }
 .v-agent-row .name { text-transform: capitalize; }
 .v-agent-row .role { color: var(--dim); font-size: 9px; letter-spacing: 1px; }
 .v-agent-row .pct { text-align: right; color: var(--accent); }

@@ -1,6 +1,7 @@
 """
-ALETHEIA — Media Blueprint (enlaces a logos de equipos y fotos de jugadores)
-Rutas: /api/media/equipo/<team_id>, /api/media/jugador/<player_id>, /api/media/estado
+ALETHEIA — Media Blueprint (enlaces a logos de equipos, fotos de jugadores y logos de eventos)
+Rutas: /api/media/equipo/<team_id>, /api/media/jugador/<player_id>,
+       /api/media/evento/<event_id>, /api/media/estado
 
 NO descarga ni guarda imágenes. Resuelve el enlace directo desde vlr.gg
 (misma fuente que los datos) y redirige al navegador para que cargue la imagen
@@ -74,10 +75,15 @@ def media_jugador(player_id):
     return _servir('jugadores', player_id, f'https://www.vlr.gg/player/{player_id}')
 
 
+@media_bp.route('/api/media/evento/<int:event_id>', methods=['GET'])
+def media_evento(event_id):
+    return _servir('eventos', event_id, f'https://www.vlr.gg/event/{event_id}')
+
+
 @media_bp.route('/api/media/estado', methods=['GET'])
 def media_estado():
     resumen = {}
-    for kind in ('equipos', 'jugadores'):
+    for kind in ('equipos', 'jugadores', 'eventos'):
         entradas = (_cache.get(kind) or {})
         resumen[kind] = {
             'resueltas': sum(1 for v in entradas.values() if isinstance(v, dict) and v.get('u')),
@@ -121,10 +127,17 @@ def _throttle():
         _last_request[0] = time.time()
 
 
+CONTENEDORES = {
+    'equipos': 'team-header-logo',
+    'jugadores': 'player-header',
+    'eventos': 'event-header',
+}
+
+
 def _extraer_imagen(html, kind):
     """Busca la imagen del header (logo/foto) y cae a og:image si no aparece."""
-    contenedor = 'team-header-logo' if kind == 'equipos' else 'player-header'
-    m = re.search(contenedor + r'[\s\S]{0,600}?<img[^>]+src=["\']([^"\']+)', html, re.I)
+    contenedor = CONTENEDORES.get(kind, 'team-header-logo')
+    m = re.search(contenedor + r'[\s\S]{0,800}?<img[^>]+src=["\']([^"\']+)', html, re.I)
     if not m:
         m = re.search(r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)', html, re.I)
     if not m:

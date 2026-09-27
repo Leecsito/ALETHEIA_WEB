@@ -82,6 +82,20 @@ const VCT = (() => {
         return `<span class="v-avatar ${cls}">${img}<span class="v-avatar-txt">${esc(initials(nickname))}</span></span>`;
     }
 
+    function initialsEvent(name) {
+        const words = String(name || '').split(/[\s:–—\-,]+/).filter(w => w && !/^\d+$/.test(w));
+        if (!words.length) return 'EV';
+        if (/^[A-Z0-9]{2,4}$/.test(words[0])) return words[0];
+        return words.slice(0, 3).map(w => w[0]).join('').toUpperCase();
+    }
+
+    function eventLogo(eventId, name, cls = '') {
+        const img = eventId
+            ? `<img src="/api/media/evento/${eventId}" alt="" loading="lazy" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            : '';
+        return `<span class="v-elogo ${cls}" style="--c:${teamColor(name)}">${img}<span class="v-elogo-txt">${esc(initialsEvent(name))}</span></span>`;
+    }
+
     /* Imágenes locales de multimedia/ (agentes y mapas). */
     function agentIcon(agent) {
         const slug = String(agent || '').toLowerCase().replace(/[^a-z]/g, '');
@@ -301,6 +315,7 @@ const VCT = (() => {
     return {
         API, api, esc, param, debounce,
         flag, flagHtml, teamColor, initials, lozenge, avatar,
+        initialsEvent, eventLogo,
         agentIcon, mapIcon, imgError,
         teamHref, playerHref, matchHref, eventHref,
         teamCell, playerCell,

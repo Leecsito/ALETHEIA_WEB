@@ -37,7 +37,7 @@ function pintarLista(rows) {
         <tbody>${rows.map(j => {
             const kd = j.deaths ? (j.kills / j.deaths).toFixed(2) : '—';
             return `<tr data-href="index.html?player=${j.player_id}" style="cursor:pointer">
-                <td>${VCT.flagHtml(j.country)} <b>${VCT.esc(j.nickname)}</b> <span class="muted">${VCT.esc(j.real_name || '')}</span></td>
+                <td><span class="v-pl">${VCT.avatar(j.player_id, j.nickname, 'sm')}<span>${VCT.flagHtml(j.country)} <b>${VCT.esc(j.nickname)}</b> <span class="muted">${VCT.esc(j.real_name || '')}</span></span></span></td>
                 <td>${j.team_id ? `<a href="${VCT.teamHref(j.team_id)}">${VCT.esc(j.tag || j.team_name)}</a>` : '<span class="muted">—</span>'}</td>
                 <td class="num muted">${j.matches}</td>
                 <td class="num ${VCT.ratingClass(j.rating)}">${VCT.fmt(j.rating)}</td>
@@ -196,7 +196,7 @@ function pintarDetalle(d) {
     el.innerHTML = `
         <a class="v-back" href="index.html">← VOLVER A JUGADORES</a>
 
-        <div class="v-banner">
+        <div class="v-banner" style="--wm-a:url('/api/media/jugador/${p.player_id}')">
             ${VCT.avatar(p.player_id, p.nickname, 'big')}
             <div class="v-banner-main">
                 <h1>${VCT.esc(p.nickname || '—')}</h1>

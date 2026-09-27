@@ -7,6 +7,12 @@
     margin-bottom: 12px;
 }
 
+.v-team-grid-card h3 {
+    white-space: normal;
+    overflow: visible;
+    line-height: 1.02;
+}
+
 .v-team-grid-card .record {
     font-family: var(--display);
     font-size: 24px;

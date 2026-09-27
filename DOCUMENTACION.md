@@ -78,7 +78,7 @@ ALETHEIA/
 │   ├── eventos.py            # Blueprint (/api/eventos, /api/evento)
 │   ├── index.html, style.css, script.js
 ├── media/                    # Enlaces a logos/fotos de vlr.gg (no es una página)
-│   ├── media.py              # Blueprint (/api/media/equipo/<id>, /api/media/jugador/<id>, /api/media/estado)
+│   ├── media.py              # Blueprint (/api/media/equipo/<id>, /api/media/jugador/<id>, /api/media/evento/<id>, /api/media/estado)
 │   └── urls_cache.json       # Caché de ENLACES resueltos (solo texto, ignorada por git)
 ├── multimedia/               # Archivos multimedia / imágenes
 │   ├── agents/               # 28 retratos de agentes (.avif, locales, usados en scoreboards)
@@ -410,9 +410,10 @@ estas tablas). Endpoints adicionales del proxy:
 - **No descarga ni guarda imágenes.** Resuelve el enlace directo desde vlr.gg y hace `302 redirect` para que el navegador cargue la imagen desde el CDN (`owcdn.net`). Solo se cachea el **enlace** en `media/urls_cache.json` (~80 bytes por entidad, regenerable).
 - `GET /api/media/equipo/<team_id>`: si no hay enlace resuelto, baja **bajo demanda** la página `vlr.gg/team/<id>` (mismo id que `teams.team_id`), extrae la imagen de `team-header-logo` (fallback `og:image`) y redirige. `404` con `{"ok":false,"estado":"miss|busy|error"}` si no hay imagen.
 - `GET /api/media/jugador/<player_id>`: igual para la foto (`player-header`, fallback `og:image`).
-- `GET /api/media/estado`: conteo de enlaces resueltos / sin imagen y tamaño del JSON.
+- `GET /api/media/evento/<event_id>`: igual para el logo del evento (`event-header`, fallback `og:image`); solo aplica a los 14 eventos con `event_id` de vlr.gg.
+- `GET /api/media/estado`: conteo de enlaces resueltos / sin imagen por tipo (`equipos`, `jugadores`, `eventos`) y tamaño del JSON.
 - **Reglas:** máximo 2 resoluciones simultáneas y 0.3 s entre requests a vlr.gg; los "sin imagen"/404 reales se marcan y no se reintentan por 24 h; los errores de red **no** se marcan (se reintenta en la próxima visita); el redirect se cachea 7 días en el navegador.
-- **Precarga opcional de enlaces:** `python cachear_media.py --equipos|--jugadores|--todo [--limite N] [--delay S]` (1 s entre resoluciones por defecto). No es necesario: el sitio resuelve enlaces solo al mostrar cada imagen.
+- **Precarga opcional de enlaces:** `python cachear_media.py --equipos|--jugadores|--eventos|--todo [--limite N] [--delay S]` (1 s entre resoluciones por defecto). No es necesario: el sitio resuelve enlaces solo al mostrar cada imagen.
 - El frontend usa el fallback si la imagen falla: **lozenge con siglas** del equipo (colores por hash del nombre) y **avatar con iniciales** del jugador. `VCT.imgError` reintenta una vez a los 3 s y luego quita la imagen.
 
 ---
@@ -616,12 +617,16 @@ estas tablas). Endpoints adicionales del proxy:
      más amplia de `player_agent_stats`).
    - `eventos/`: lista de torneos (con `event_id` cuando existe) y detalle con
      tabs PARTIDOS / EQUIPOS / MAPAS / AGENTES.
-   - **Imágenes:** los lozenges de equipo y los avatares de jugador usan
-     `VCT.lozenge(name, tag, cls, teamId)` y `VCT.avatar(playerId, nickname, cls)`,
+   - **Imágenes:** los lozenges de equipo, los avatares de jugador y los logos
+     de evento usan `VCT.lozenge(name, tag, cls, teamId)`,
+     `VCT.avatar(playerId, nickname, cls)` y `VCT.eventLogo(eventId, name, cls)`,
      que pintan `<img src="/api/media/...">`; ese endpoint **redirige al CDN de
-     vlr.gg** (no se guardan imágenes) y el fallback es siglas/iniciales
+     vlr.gg** (no se guardan imágenes) y el fallback es siglas/iniciales/monograma
      (`VCT.imgError`). Los agentes (`VCT.agentIcon`) y mapas (`VCT.mapIcon`)
      usan los `.avif` locales de `multimedia/agents/` y `multimedia/maps/`.
+     Tamaños: lozenge 34px (`md` 48, `big` 84), avatar 48px (`sm` 32, `big` 128),
+     elogo 52px (`big` 96), agente 28px, mapa 26px (`big` 64). Los banners usan
+     `--wm-a`/`--wm-b` (URLs de media) como watermark tenue detrás del contenido.
    - **`tablas/` no se toca**: sigue siendo el explorador raw; los componentes
      VCT son la vista "bonita" sobre los mismos datos.
 

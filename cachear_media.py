@@ -9,7 +9,8 @@ forma educada (1 request/segundo por defecto).
 Uso:
     python cachear_media.py --equipos              # equipos con partidos jugados
     python cachear_media.py --jugadores            # jugadores con nickname
-    python cachear_media.py --todo                 # ambos
+    python cachear_media.py --eventos              # eventos con event_id de vlr.gg
+    python cachear_media.py --todo                 # los tres
     python cachear_media.py --todo --limite 50     # solo los primeros 50 de cada grupo
     python cachear_media.py --todo --delay 0.5     # más rápido (menos cortés)
 """
@@ -71,14 +72,29 @@ def jugadores(limite=None):
     return rows[:limite] if limite else rows
 
 
+def eventos(limite=None):
+    sql = """
+        SELECT event_id, event_name
+        FROM events
+        ORDER BY event_id
+    """
+    rows = query(sql)
+    return rows[:limite] if limite else rows
+
+
+ID_KEY = {'equipos': 'team_id', 'jugadores': 'player_id', 'eventos': 'event_id'}
+NAME_KEY = {'equipos': 'team_name', 'jugadores': 'nickname', 'eventos': 'event_name'}
+URL_PATH = {'equipos': 'team', 'jugadores': 'player', 'eventos': 'event'}
+
+
 def procesar(kind, items, delay):
     total = len(items)
     resumen = {'cache': 0, 'ok': 0, 'miss': 0, 'error': 0, 'busy': 0}
     print(f"\n=== {kind.upper()} ({total}) ===")
     for i, item in enumerate(items, 1):
-        eid = item['team_id'] if kind == 'equipos' else item['player_id']
-        nombre = item.get('team_name') or item.get('nickname') or str(eid)
-        estado, url = ensure(kind, eid, f"https://www.vlr.gg/{'team' if kind == 'equipos' else 'player'}/{eid}")
+        eid = item[ID_KEY[kind]]
+        nombre = item.get(NAME_KEY[kind]) or str(eid)
+        estado, url = ensure(kind, eid, f"https://www.vlr.gg/{URL_PATH[kind]}/{eid}")
         resumen[estado] = resumen.get(estado, 0) + 1
         detalle = estado if estado != 'ok' else (url or '')
         print(f"  [{i:>4}/{total}] {eid:<7} {nombre[:32]:<32} -> {detalle}")
@@ -92,12 +108,13 @@ def main():
     ap = argparse.ArgumentParser(description='Resuelve enlaces de logos/fotos desde vlr.gg a media/urls_cache.json.')
     ap.add_argument('--equipos', action='store_true', help='resolver logos de equipos con partidos')
     ap.add_argument('--jugadores', action='store_true', help='resolver fotos de jugadores con nickname')
-    ap.add_argument('--todo', action='store_true', help='equivale a --equipos --jugadores')
+    ap.add_argument('--eventos', action='store_true', help='resolver logos de eventos con event_id')
+    ap.add_argument('--todo', action='store_true', help='equivale a --equipos --jugadores --eventos')
     ap.add_argument('--limite', type=int, default=0, help='máximo de items por grupo (0 = todos)')
     ap.add_argument('--delay', type=float, default=1.0, help='segundos de espera entre resoluciones (default 1.0)')
     args = ap.parse_args()
 
-    if not (args.equipos or args.jugadores or args.todo):
+    if not (args.equipos or args.jugadores or args.eventos or args.todo):
         ap.print_help()
         return
 
@@ -107,6 +124,8 @@ def main():
         procesar('equipos', equipos(limite), args.delay)
     if args.jugadores or args.todo:
         procesar('jugadores', jugadores(limite), args.delay)
+    if args.eventos or args.todo:
+        procesar('eventos', eventos(limite), args.delay)
     print(f"\nListo en {time.time() - t0:.1f}s. Enlaces en media/urls_cache.json")
 
 

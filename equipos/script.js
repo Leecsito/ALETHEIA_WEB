@@ -43,7 +43,7 @@ function pintarGrid(equipos) {
         const losses = t.matches - t.wins;
         return `<a class="v-card v-team-grid-card" href="index.html?team=${t.team_id}" style="--c:${VCT.teamColor(t.team_name)}">
             <div class="v-card-head">
-                ${VCT.lozenge(t.team_name, t.tag, '', t.team_id)}
+                ${VCT.lozenge(t.team_name, t.tag, 'md', t.team_id)}
                 <div style="min-width:0">
                     <h3>${VCT.esc(t.team_name)}</h3>
                     <div class="v-card-sub">${t.region ? VCT.esc(t.region) : '—'} ${VCT.flagHtml(t.country)}</div>
@@ -175,7 +175,7 @@ function pintarDetalle(d) {
     el.innerHTML = `
         <a class="v-back" href="index.html">← VOLVER A EQUIPOS</a>
 
-        <div class="v-banner" style="--c:${VCT.teamColor(t.team_name)}">
+        <div class="v-banner" style="--c:${VCT.teamColor(t.team_name)};--wm-a:url('/api/media/equipo/${t.team_id}')">
             ${VCT.lozenge(t.team_name, t.tag, 'big', t.team_id)}
             <div class="v-banner-main">
                 <h1>${VCT.esc(t.team_name)}</h1>
