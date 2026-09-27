@@ -7,24 +7,18 @@ de transacciones, partidos, promedios de jugadores y rendimiento por mapa.
 
 from flask import Blueprint, request, jsonify
 try:
-    from backend.conexion import get_conn, release_conn
+    from backend.conexion import fetch_all
+    from backend.cache import ttl_cache
 except ImportError:
-    from conexion import get_conn, release_conn
+    from conexion import fetch_all
+    from cache import ttl_cache
 
 equipos_bp = Blueprint('equipos', __name__)
 
 
+@ttl_cache(120)
 def query(sql, params=None):
-    conn = get_conn()
-    try:
-        cur = conn.cursor()
-        cur.execute(sql, params or [])
-        cols = [d[0] for d in cur.description]
-        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
-        cur.close()
-        return rows
-    finally:
-        release_conn(conn)
+    return fetch_all(sql, params)
 
 
 @equipos_bp.route('/api/equipos', methods=['GET'])
@@ -100,7 +94,7 @@ def detalle_equipo(team_id):
             LEFT JOIN players p ON p.player_id = rt.player_id
             WHERE rt.team_id = ?
             ORDER BY rt.transaction_date DESC, rt.transaction_id DESC
-            LIMIT 80
+            LIMIT 40
         """, [team_id])
 
         partidos = query("""
@@ -117,7 +111,7 @@ def detalle_equipo(team_id):
             LEFT JOIN events e  ON e.event_id  = v.event_id
             WHERE v.team_a_id = ? OR v.team_b_id = ?
             ORDER BY v.match_date DESC, v.match_id DESC
-            LIMIT 120
+            LIMIT 60
         """, [team_id, team_id])
 
         jugadores = query("""

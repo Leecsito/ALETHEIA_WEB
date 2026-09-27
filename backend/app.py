@@ -21,6 +21,11 @@ if ROOT not in sys.path:
 from flask import Flask, send_from_directory, redirect
 from flask_cors import CORS
 
+try:
+    from flask_compress import Compress
+except ImportError:
+    Compress = None
+
 from inicio    import inicio_bp
 from tablas    import tablas_bp
 from visualizar import visualizar_bp
@@ -37,6 +42,11 @@ FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_prep
 # static_folder=ROOT sirve automáticamente CSS/JS/imágenes desde la raíz del proyecto
 app = Flask(__name__, static_folder=ROOT, static_url_path='')
 CORS(app)
+
+# gzip/brotli para JSON, HTML, CSS y JS (menos bytes = carga más rápida)
+if Compress is not None:
+    app.config['COMPRESS_MIN_SIZE'] = 500
+    Compress(app)
 
 app.register_blueprint(inicio_bp)
 app.register_blueprint(tablas_bp)

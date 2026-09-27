@@ -31,7 +31,7 @@ async function cargarLista() {
         const d = await VCT.api(`/partidos?${qs}`);
         countEl.textContent = `${d.total} PARTIDOS`;
         VCT.renderMatchList(listaEl, d.data);
-        VCT.aplicarColores(listaEl);
+        VCT.aplicarMedia(listaEl);
         pintarPager(d);
     } catch (e) {
         VCT.showError(listaEl, e);
@@ -95,7 +95,7 @@ function pintarDetalle(d) {
     el.innerHTML = `
         <a class="v-back" href="index.html">← VOLVER A PARTIDOS</a>
 
-        <div class="v-banner" style="--wm-a:url('/api/media/equipo/${p.team_a_id}');--wm-b:url('/api/media/equipo/${p.team_b_id}')">
+        <div class="v-banner vs" data-c-equipo="${p.team_a_id}" data-c-equipo2="${p.team_b_id}" data-wm="equipo:${p.team_a_id}" data-wm2="equipo:${p.team_b_id}">
             ${VCT.lozenge(p.team_a, p.team_a_tag, 'big', p.team_a_id)}
             <div class="v-banner-main">
                 <h1>${VCT.esc(titulo)}</h1>
@@ -147,7 +147,7 @@ function pintarDetalle(d) {
         btns[0].classList.add('active');
         pintarMapa(d, 0);
     }
-    VCT.aplicarColores(el);
+    VCT.aplicarMedia(el);
 }
 
 function roundsStrip(m, p) {

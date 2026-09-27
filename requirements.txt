@@ -7,3 +7,4 @@ gunicorn==21.2.0
 libsql
 requests>=2.31.0
 Pillow>=10.0.0
+flask-compress>=1.15

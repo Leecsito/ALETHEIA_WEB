@@ -1,23 +1,44 @@
 /* ALETHEIA — JUGADORES: lista + detalle con agentes, partidos y equipos */
 
-const estado = { q: '', orden: 'rating' };
+const estado = { q: '', orden: 'rating', page: 1, pages: 1, total: 0, acumulado: [] };
 
 const listaEl = document.getElementById('lista');
 const countEl = document.getElementById('count');
 
-/* ── LISTA ──────────────────────────────────────────────────────────────── */
-async function cargarLista() {
+/* ── LISTA (paginada: carga por lotes de 60) ────────────────────────────── */
+async function cargarLista(reset = true) {
     VCT.loading(true);
-    const qs = new URLSearchParams({ orden: estado.orden });
+    if (reset) {
+        estado.page = 1;
+        estado.acumulado = [];
+    }
+    const qs = new URLSearchParams({ orden: estado.orden, page: estado.page, limit: 60 });
     if (estado.q) qs.set('q', estado.q);
     try {
         const d = await VCT.api(`/jugadores?${qs}`);
-        countEl.textContent = `${d.data.length} JUGADORES`;
-        pintarLista(d.data);
+        estado.total = d.total;
+        estado.pages = d.pages;
+        estado.acumulado = reset ? d.data : estado.acumulado.concat(d.data);
+        countEl.textContent = `${estado.total} JUGADORES`;
+        pintarLista(estado.acumulado);
+        pintarMas();
     } catch (e) {
         VCT.showError(listaEl, e);
     } finally {
         VCT.loading(false);
+    }
+}
+
+function pintarMas() {
+    const cont = document.getElementById('mas');
+    if (estado.page < estado.pages) {
+        cont.innerHTML = `<button class="v-btn" id="btn-mas">CARGAR MÁS (${estado.acumulado.length} DE ${estado.total})</button>`;
+        document.getElementById('btn-mas').addEventListener('click', () => {
+            estado.page += 1;
+            cargarLista(false);
+        });
+    } else {
+        cont.innerHTML = '';
     }
 }
 
@@ -196,7 +217,7 @@ function pintarDetalle(d) {
     el.innerHTML = `
         <a class="v-back" href="index.html">← VOLVER A JUGADORES</a>
 
-        <div class="v-banner" style="--wm-a:url('/api/media/jugador/${p.player_id}')">
+        <div class="v-banner" data-wm="jugador:${p.player_id}">
             ${VCT.avatar(p.player_id, p.nickname, 'big')}
             <div class="v-banner-main">
                 <h1>${VCT.esc(p.nickname || '—')}</h1>
@@ -260,7 +281,7 @@ function pintarDetalle(d) {
     `;
 
     VCT.tabs(el);
-    VCT.aplicarColores(el);
+    VCT.aplicarMedia(el);
 }
 
 /* ── INIT ───────────────────────────────────────────────────────────────── */
@@ -271,13 +292,13 @@ function pintarDetalle(d) {
         await cargarDetalle(pid);
         return;
     }
-    await cargarLista();
+    await cargarLista(true);
     document.getElementById('q').addEventListener('input', VCT.debounce(() => {
         estado.q = document.getElementById('q').value.trim();
-        cargarLista();
+        cargarLista(true);
     }));
     document.getElementById('orden').addEventListener('change', function () {
         estado.orden = this.value;
-        cargarLista();
+        cargarLista(true);
     });
 })();

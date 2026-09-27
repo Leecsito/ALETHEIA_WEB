@@ -12,7 +12,7 @@
 **ALETHEIA** es una plataforma web integral de analítica, procesamiento ETL, visualización y predicción de partidos para deportes electrónicos (específicamente Valorant VCT).
 
 ### Stack Tecnológico:
-- **Backend:** Python 3 (Flask, Gunicorn, Pandas, NumPy, OpenPyXL, Pillow, libSQL client / SQLite3).
+- **Backend:** Python 3 (Flask, Gunicorn, Pandas, NumPy, OpenPyXL, Pillow, flask-compress, libSQL client / SQLite3).
 - **Base de Datos:** Turso (libSQL en la nube) con fallback a SQLite3 local (`aletheia.db`).
 - **Frontend:** Vanilla HTML5, Vanilla CSS3 (Variables CSS, Estética Cyberpunk/Dark Mode), JavaScript ES6+ (Fetch API, origen dinámico `window.location.origin`).
 - **Despliegue:** Render / Gunicorn (`render.yaml` y `requirements.txt`).
@@ -25,8 +25,9 @@
 ALETHEIA/
 ├── backend/                  # Núcleo del servidor Flask y gestión de conexión
 │   ├── __init__.py
-│   ├── app.py                # Punto de entrada de Flask, registro de Blueprints y rutas de páginas HTML
-│   ├── conexion.py           # Gestión centralizada de la base de datos (Turso / SQLite)
+│   ├── app.py                # Punto de entrada de Flask, registro de Blueprints, gzip y rutas HTML
+│   ├── conexion.py           # Gestión centralizada de la base de datos (Turso / SQLite) + fetch_all (pool)
+│   ├── cache.py              # Caché TTL en memoria para consultas SQL (acelera visitas repetidas)
 │   ├── aletheia.db           # Base de datos SQLite local (fallback)
 │   └── aletheia_2025.db      # Base de datos SQLite de respaldo
 ├── inicio/                   # Componente CARGAR DATOS (ETL: carga de Excel) — /inicio/
@@ -100,6 +101,19 @@ ALETHEIA/
 ## 3. Base de Datos y Capa de Conexión (`backend/conexion.py`)
 
 La conexión a la base de datos se gestiona de forma centralizada a través de las funciones `get_conn()` y `release_conn(conn)` definidas en `backend/conexion.py`.
+
+### Lecturas rápidas: `fetch_all()` (pool por hilo) y caché TTL
+Abrir una conexión a Turso cuesta ~0.7 s y una consulta sobre conexión ya abierta ~0.2 s.
+Por eso los **blueprints de lectura** (`partidos`, `equipos`, `jugadores`, `eventos`) usan:
+
+- `fetch_all(sql, params)` (`backend/conexion.py`): reutiliza **una conexión por hilo**
+  (no la cierra al terminar), con **reintento único** si Turso la cerró por inactividad
+  (`reset_conn()`). No afecta al ETL ni a `tablas/`/`visualizar/`, que siguen con
+  `get_conn()`/`release_conn()`.
+- `@ttl_cache(120)` (`backend/cache.py`): cachea en memoria el resultado de cada SQL
+  (clave = SQL + parámetros) por **120 s**. Los datos solo cambian al correr un ETL.
+  Efecto medido: detalle de equipo pasó de ~6.5 s a ~2.5 s en frío y ~0.2 s en caliente.
+- **gzip**: `flask-compress` comprime JSON/HTML/CSS/JS (un JSON de 24 KB baja a ~3 KB).
 
 ### Variables de Entorno Soporta:
 - `TURSO_DATABASE_URL`: URL remota de la base de datos libSQL (por defecto: `libsql://aletheia-laperradeadrelees.aws-us-east-1.turso.io`).
@@ -399,7 +413,7 @@ estas tablas). Endpoints adicionales del proxy:
 - `GET /api/equipo/<team_id>`: `equipo` (info), `record` (V-D), `roster` (players con `team_id`), `transacciones` (roster_transactions, últimas 80), `partidos` (últimos 120 con evento), `jugadores` (promedios por jugador del equipo), `mapas` (jugados/ganados por mapa + avg rondas) y `eventos` (torneos jugados con récord).
 
 ### 4.7. Módulo Jugadores (`jugadores_bp`) — componente `/jugadores/`
-- `GET /api/jugadores`: jugadores con stats (JOIN `player_stats`), nickname obligatorio. Query: `q` (nick/real/equipo), `orden` (`rating|acs|kd|matches|nombre`, allowlist).
+- `GET /api/jugadores`: jugadores con stats (JOIN `player_stats`), nickname obligatorio y **paginado** (`page`, `limit` máx 200 def 60; responde `total`/`pages`). Query: `q` (nick/real/equipo), `orden` (`rating|acs|kd|matches|nombre`, allowlist). El frontend carga por lotes de 60 con botón **CARGAR MÁS**.
 - `GET /api/jugador/<player_id>`: `jugador` (info + equipo actual), `totales`, `multikills` (k2..k5, v1..v5, plants, defuses), `agentes` (**una fila por agente con la ventana temporal más amplia** de `player_agent_stats` + `role` de `agents`), `partidos` (últimos 30 agrupados por partido con rival/resultado), `mapas` (rendimiento por mapa) y `equipos` (historial de `roster_transactions`).
 
 ### 4.8. Módulo Eventos (`eventos_bp`) — componente `/eventos/`
@@ -413,7 +427,7 @@ estas tablas). Endpoints adicionales del proxy:
 - `GET /api/media/jugador/<player_id>`: igual para la foto (`player-header`, fallback `og:image`).
 - `GET /api/media/evento/<event_id>`: igual para el logo del evento (`event-header`, fallback `og:image`).
 - `GET /api/media/evento?nombre=<torneo>`: para torneos **sin `event_id`** (p. ej. *Valorant Champions 2026*). Busca el evento en `vlr.gg/search/?q=...`, extrae el primer resultado `/search/r/event/<id>/idx` + su thumbnail, y lo cachea por nombre (`n:<slug>`) y por id.
-- `GET /api/media/colores?equipos=1,2&eventos=2766&nombres=A|B`: devuelve **solo colores ya resueltos** (no dispara descargas), para que el frontend pinte acentos/tiles. Los enlaces ya cacheados sin color lo calculan en un hilo de fondo (`cc` evita reintentos infinitos).
+- `GET /api/media/meta?equipos=1,2&jugadores=4&eventos=2766&nombres=A|B`: devuelve **enlaces ya resueltos** (`u`) + color (`c`) + flag oscuro (`d`), sin disparar descargas. El frontend apunta los `<img>` **directo al CDN** con esto (cero requests de imagen a este backend) y pinta colores/watermarks. Los enlaces cacheados sin color lo calculan en un hilo de fondo (`cc` evita reintentos infinitos).
 - `GET /api/media/estado`: conteo de resueltas / sin imagen / con color por tipo y tamaño del JSON.
 - **Reglas:** máximo 2 resoluciones simultáneas y 0.3 s entre requests a vlr.gg; los "sin imagen"/404 reales se marcan y no se reintentan por 24 h; los errores de red **no** se marcan (se reintenta en la próxima visita); el redirect se cachea 7 días en el navegador.
 - **Precarga opcional de enlaces y colores:** `python cachear_media.py --equipos|--jugadores|--eventos|--todo [--limite N] [--delay S]` (1 s entre resoluciones por defecto; también calcula el color medio de equipos/eventos). No es necesario: el sitio resuelve enlaces solo al mostrar cada imagen.
@@ -629,12 +643,17 @@ estas tablas). Endpoints adicionales del proxy:
      usan los `.avif` locales de `multimedia/agents/` y `multimedia/maps/`.
      Tamaños: lozenge 42px (`md` 60, `big` 104), avatar 56px (`sm` 36, `big` 148),
      elogo 64px (`big` 116), agente 32px, mapa 30px (`big` 76).
-   - **Color de marca dinámico:** los elementos llevan `data-c-equipo` /
-     `data-c-evento` / `data-c-nombre`; `VCT.aplicarColores(root)` pide
-     `/api/media/colores` (1 request por render, con hasta 3 reintentos) y setea
-     `--c` (color medio) y la clase `on-light` cuando el logo es oscuro. Nunca se
-     usan colores aleatorios. Los banners usan `--wm-a`/`--wm-b` (URLs de media)
-     como watermark tenue detrás del contenido.
+   - **Carga de imágenes (1 solo request por render):** los `<img>` se pintan sin
+     `src` con `data-media="equipo:120|jugador:4|evento:2766|nombre:<torneo>"`
+     (y `data-fallback="/api/media/..."`). `VCT.aplicarMedia(root)` pide
+     `/api/media/meta` una vez por render y:
+     1. apunta los `<img>` **directo al CDN** (`u`) — cero requests de imagen al backend;
+     2. para lo no resuelto usa el `data-fallback` (redirect que resuelve bajo demanda);
+     3. setea `--c` (color medio), `--c2` (rival, para el gradiente VS), `on-light`
+        cuando el logo es oscuro, y `--wm-a`/`--wm-b` (watermarks);
+     4. reintenta hasta 3 veces (3.5 s) lo que aún no está resuelto.
+     Nunca se usan colores aleatorios. Los `matchRow` llevan
+     `data-c-equipo`/`data-c-equipo2` para el degradado A→B de cada VS.
    - **`tablas/` no se toca**: sigue siendo el explorador raw; los componentes
      VCT son la vista "bonita" sobre los mismos datos.
 
@@ -665,4 +684,5 @@ Al recibir una nueva tarea o solicitud de cambio:
 5. **Recuerda los módulos eliminados**: `predecir/` y `exportar/` no existen; no los referencies.
 6. **Prioriza siempre la tasa de acierto** (principio rector, §1): ningún cambio debe degradar la precisión de las predicciones. Si un cambio la empeora, descártalo o revíerte.
 7. **Para vistas nuevas del estilo VCT**: reutiliza el core `comun/` (`vct.css` + `vct.js`) en lugar de duplicar estilos o helpers; agrega los endpoints en el blueprint del componente correspondiente y registra la carpeta en `FRONTEND_FOLDERS` si es una página nueva. No modifiques `tablas/` para esto.
-8. **Imágenes de equipos/jugadores**: usa siempre `/api/media/equipo/<id>` y `/api/media/jugador/<id>` (resuelven el enlace y redirigen al CDN; **no se descargan imágenes**). No scrapees Google Images ni guardes archivos de imagen; la caché es solo de enlaces (`media/urls_cache.json`). Si necesitas precargar enlaces, usa `cachear_media.py` con `--delay`.
+8. **Imágenes de equipos/jugadores/eventos**: usa siempre `/api/media/meta` (enlaces+color, 1 request por render) y los endpoints `/api/media/...` como fallback (resuelven y redirigen al CDN; **no se descargan ni guardan imágenes**). No scrapees Google Images ni guardes archivos de imagen; la caché es solo de enlaces/color (`media/urls_cache.json`). Si necesitas precargar enlaces, usa `cachear_media.py` con `--delay`.
+9. **Rendimiento**: para blueprints de solo lectura usa `fetch_all` (`backend.conexion`) + `@ttl_cache(120)` (`backend.cache`); no abras conexiones nuevas por consulta ni paralelices consultas a Turso (el cliente serializa). Mantén gzip (`flask-compress`) y paginación en listados grandes.

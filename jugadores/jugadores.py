@@ -8,9 +8,11 @@ estadísticas por mapa e historial de equipos.
 from datetime import date
 from flask import Blueprint, request, jsonify
 try:
-    from backend.conexion import get_conn, release_conn
+    from backend.conexion import fetch_all
+    from backend.cache import ttl_cache
 except ImportError:
-    from conexion import get_conn, release_conn
+    from conexion import fetch_all
+    from cache import ttl_cache
 
 jugadores_bp = Blueprint('jugadores', __name__)
 
@@ -23,22 +25,16 @@ ORDENES = {
 }
 
 
+@ttl_cache(120)
 def query(sql, params=None):
-    conn = get_conn()
-    try:
-        cur = conn.cursor()
-        cur.execute(sql, params or [])
-        cols = [d[0] for d in cur.description]
-        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
-        cur.close()
-        return rows
-    finally:
-        release_conn(conn)
+    return fetch_all(sql, params)
 
 
 @jugadores_bp.route('/api/jugadores', methods=['GET'])
 def list_jugadores():
     try:
+        page  = max(1, int(request.args.get('page', 1)))
+        limit = min(200, max(1, int(request.args.get('limit', 60))))
         q     = request.args.get('q', '').strip()
         orden = request.args.get('orden', 'rating').strip().lower()
         order_sql = ORDENES.get(orden, ORDENES['rating'])
@@ -49,6 +45,16 @@ def list_jugadores():
             conds.append("(p.nickname LIKE ? OR p.real_name LIKE ? OR t.team_name LIKE ? OR t.tag LIKE ?)")
             params += [like] * 4
         where = "WHERE " + " AND ".join(conds)
+
+        base_from = """
+            FROM players p
+            JOIN player_stats ps ON ps.player_id = p.player_id
+            LEFT JOIN teams t ON t.team_id = p.team_id
+            {where}
+            GROUP BY p.player_id
+        """.format(where=where)
+
+        total = query(f"SELECT COUNT(*) AS n FROM (SELECT p.player_id {base_from})", params)[0]['n']
 
         data = query(f"""
             SELECT
@@ -65,15 +71,15 @@ def list_jugadores():
                 ROUND(AVG(ps.hs_percent), 1)    AS hs_percent,
                 SUM(ps.fk)                      AS fk,
                 SUM(ps.fd)                      AS fd
-            FROM players p
-            JOIN player_stats ps ON ps.player_id = p.player_id
-            LEFT JOIN teams t ON t.team_id = p.team_id
-            {where}
-            GROUP BY p.player_id
+            {base_from}
             ORDER BY {order_sql}
-        """, params)
+            LIMIT ? OFFSET ?
+        """, params + [limit, (page - 1) * limit])
 
-        return jsonify({"ok": True, "data": data})
+        return jsonify({
+            "ok": True, "total": total, "page": page, "limit": limit,
+            "pages": max(1, -(-total // limit)), "data": data,
+        })
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -132,7 +138,6 @@ def detalle_jugador(player_id):
             WHERE player_id = ?
         """, [player_id])[0]
 
-        # Agentes: nos quedamos con la ventana más amplia por agente (equivalente a "All").
         agentes_raw = query("""
             SELECT agent, date_start, date_end, use_count, rnd, rating, acs, kd,
                    kast, adr, kpr, apr, fk_fd, k, d, a, fk, fd
@@ -140,15 +145,7 @@ def detalle_jugador(player_id):
             WHERE player_id = ?
         """, [player_id])
 
-        mejores = {}
-        for row in agentes_raw:
-            prev = mejores.get(row['agent'])
-            if prev is None or _span_days(row) > _span_days(prev):
-                mejores[row['agent']] = row
         roles = {r['agent_name']: r['role'] for r in query("SELECT agent_name, role FROM agents")}
-        agentes = sorted(mejores.values(), key=lambda r: (r.get('use_count') or 0), reverse=True)
-        for a in agentes:
-            a['role'] = roles.get((a.get('agent') or '').lower())
 
         partidos = query("""
             SELECT
@@ -207,6 +204,16 @@ def detalle_jugador(player_id):
             WHERE rt.player_id = ?
             ORDER BY rt.transaction_date DESC, rt.transaction_id DESC
         """, [player_id])
+
+        # Agentes: nos quedamos con la ventana más amplia por agente (equivalente a "All").
+        mejores = {}
+        for row in agentes_raw:
+            prev = mejores.get(row['agent'])
+            if prev is None or _span_days(row) > _span_days(prev):
+                mejores[row['agent']] = row
+        agentes = sorted(mejores.values(), key=lambda r: (r.get('use_count') or 0), reverse=True)
+        for a in agentes:
+            a['role'] = roles.get((a.get('agent') or '').lower())
 
         return jsonify({
             "ok": True,

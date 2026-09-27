@@ -16,7 +16,7 @@ async function cargarLista() {
         countEl.textContent = `${d.data.length} EQUIPOS`;
         pintarChips(d.regiones);
         pintarGrid(d.data);
-        VCT.aplicarColores(gridEl);
+        VCT.aplicarMedia(gridEl);
     } catch (e) {
         VCT.showError(gridEl, e);
     } finally {
@@ -176,7 +176,7 @@ function pintarDetalle(d) {
     el.innerHTML = `
         <a class="v-back" href="index.html">← VOLVER A EQUIPOS</a>
 
-        <div class="v-banner" data-c-equipo="${t.team_id}" style="--wm-a:url('/api/media/equipo/${t.team_id}')">
+        <div class="v-banner" data-c-equipo="${t.team_id}" data-wm="equipo:${t.team_id}">
             ${VCT.lozenge(t.team_name, t.tag, 'big', t.team_id)}
             <div class="v-banner-main">
                 <h1>${VCT.esc(t.team_name)}</h1>
@@ -252,7 +252,7 @@ function pintarDetalle(d) {
         e.preventDefault();
         VCT.activateTab(e.target.dataset.goto);
     });
-    VCT.aplicarColores(el);
+    VCT.aplicarMedia(el);
 }
 
 /* ── INIT ───────────────────────────────────────────────────────────────── */

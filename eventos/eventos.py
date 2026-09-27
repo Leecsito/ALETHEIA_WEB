@@ -7,24 +7,18 @@ por equipo, stats de mapas (meta del evento si existe) y pickrate de agentes.
 
 from flask import Blueprint, request, jsonify
 try:
-    from backend.conexion import get_conn, release_conn
+    from backend.conexion import fetch_all
+    from backend.cache import ttl_cache
 except ImportError:
-    from conexion import get_conn, release_conn
+    from conexion import fetch_all
+    from cache import ttl_cache
 
 eventos_bp = Blueprint('eventos', __name__)
 
 
+@ttl_cache(120)
 def query(sql, params=None):
-    conn = get_conn()
-    try:
-        cur = conn.cursor()
-        cur.execute(sql, params or [])
-        cols = [d[0] for d in cur.description]
-        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
-        cur.close()
-        return rows
-    finally:
-        release_conn(conn)
+    return fetch_all(sql, params)
 
 
 @eventos_bp.route('/api/eventos', methods=['GET'])
@@ -173,6 +167,35 @@ def detalle_evento():
         """, torneos + torneos)
         mapas_equipo_map = {r['team_id']: r for r in mapas_equipo}
 
+        mapas = query(f"""
+            SELECT
+                mp.map_name,
+                COUNT(*) AS played,
+                SUM(CASE WHEN mp.picker = 'a' THEN 1 ELSE 0 END)       AS picked_a,
+                SUM(CASE WHEN mp.picker = 'b' THEN 1 ELSE 0 END)       AS picked_b,
+                SUM(CASE WHEN mp.picker = 'decider' THEN 1 ELSE 0 END) AS deciders
+            FROM maps mp
+            JOIN matches m ON m.match_id = mp.match_id
+            WHERE m.tournament IN ({marks})
+            GROUP BY mp.map_name
+            ORDER BY played DESC
+        """, torneos)
+
+        bans_map = {r['map_name']: r['bans'] for r in query(f"""
+            SELECT mv.map_name, COUNT(*) AS bans
+            FROM match_veto mv
+            JOIN matches m ON m.match_id = mv.match_id
+            WHERE mv.action = 'ban' AND m.tournament IN ({marks})
+            GROUP BY mv.map_name
+        """, torneos)}
+
+        meta_map = {}
+        if evento:
+            meta_map = {r['map_name']: r for r in query("""
+                SELECT map_name, matches_played, atk_win_pct, def_win_pct
+                FROM event_map_stats WHERE event_id = ?
+            """, [evento['event_id']])}
+
         ids = [r['team_id'] for r in equipos_raw if r['team_id'] is not None]
         nombres_equipos = {}
         if ids:
@@ -200,35 +223,6 @@ def detalle_evento():
             })
         equipos.sort(key=lambda r: (-(r['wins'] or 0), -(r['maps'] or 0), r['team_name'] or ''))
 
-        mapas = query(f"""
-            SELECT
-                mp.map_name,
-                COUNT(*) AS played,
-                SUM(CASE WHEN mp.picker = 'a' THEN 1 ELSE 0 END)       AS picked_a,
-                SUM(CASE WHEN mp.picker = 'b' THEN 1 ELSE 0 END)       AS picked_b,
-                SUM(CASE WHEN mp.picker = 'decider' THEN 1 ELSE 0 END) AS deciders
-            FROM maps mp
-            JOIN matches m ON m.match_id = mp.match_id
-            WHERE m.tournament IN ({marks})
-            GROUP BY mp.map_name
-            ORDER BY played DESC
-        """, torneos)
-
-        bans = query(f"""
-            SELECT mv.map_name, COUNT(*) AS bans
-            FROM match_veto mv
-            JOIN matches m ON m.match_id = mv.match_id
-            WHERE mv.action = 'ban' AND m.tournament IN ({marks})
-            GROUP BY mv.map_name
-        """, torneos)
-        bans_map = {r['map_name']: r['bans'] for r in bans}
-
-        meta_map = {}
-        if evento:
-            meta_map = {r['map_name']: r for r in query("""
-                SELECT map_name, matches_played, atk_win_pct, def_win_pct
-                FROM event_map_stats WHERE event_id = ?
-            """, [evento['event_id']])}
         for m in mapas:
             m['bans'] = bans_map.get(m['map_name'], 0)
             meta = meta_map.get(m['map_name'], {})

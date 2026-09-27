@@ -7,24 +7,18 @@ de un partido (veto, mapas, rondas, economía y scoreboard por mapa).
 
 from flask import Blueprint, request, jsonify
 try:
-    from backend.conexion import get_conn, release_conn
+    from backend.conexion import fetch_all
+    from backend.cache import ttl_cache
 except ImportError:
-    from conexion import get_conn, release_conn
+    from conexion import fetch_all
+    from cache import ttl_cache
 
 partidos_bp = Blueprint('partidos', __name__)
 
 
+@ttl_cache(120)
 def query(sql, params=None):
-    conn = get_conn()
-    try:
-        cur = conn.cursor()
-        cur.execute(sql, params or [])
-        cols = [d[0] for d in cur.description]
-        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
-        cur.close()
-        return rows
-    finally:
-        release_conn(conn)
+    return fetch_all(sql, params)
 
 
 MATCH_SELECT = """

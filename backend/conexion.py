@@ -5,6 +5,7 @@ Este archivo SOLO gestiona la conexión. Nunca agregar rutas aquí.
 
 import os
 import sqlite3
+import threading
 
 # Intenta importar libsql para soporte de Turso en la nube
 try:
@@ -70,4 +71,49 @@ def release_conn(conn):
         try:
             conn.close()
         except Exception:
-            pass
+            pass
+
+
+# ─── RUTA RÁPIDA PARA LECTURAS ───────────────────────────────────────────────
+# Abrir una conexión a Turso cuesta ~0.7 s; una consulta sobre una conexión ya
+# abierta ~0.2 s. Para las lecturas del sitio (que no mutan nada) se reutiliza
+# UNA conexión por hilo con reintento único si Turso la cerró por inactividad.
+_local = threading.local()
+
+
+def _conn_lectura():
+    conn = getattr(_local, 'conn', None)
+    if conn is None:
+        conn = get_conn()
+        _local.conn = conn
+    return conn
+
+
+def reset_conn():
+    """Descarta la conexión de lectura del hilo (se reabre en la próxima consulta)."""
+    conn = getattr(_local, 'conn', None)
+    _local.conn = None
+    if conn:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def fetch_all(sql, params=None):
+    """Ejecuta un SELECT y devuelve filas como dicts, reutilizando la conexión
+    del hilo y reintentando una vez si la conexión quedó muerta."""
+    ultimo_error = None
+    for _ in range(2):
+        conn = _conn_lectura()
+        try:
+            cur = conn.cursor()
+            cur.execute(sql, list(params or []))
+            cols = [d[0] for d in cur.description]
+            rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+            cur.close()
+            return rows
+        except Exception as e:      # conexión caída o error transitorio
+            ultimo_error = e
+            reset_conn()
+    raise ultimo_error

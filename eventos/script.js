@@ -14,7 +14,7 @@ async function cargarLista() {
             : d.data;
         countEl.textContent = `${rows.length} EVENTOS`;
         pintarGrid(rows);
-        VCT.aplicarColores(gridEl);
+        VCT.aplicarMedia(gridEl);
     } catch (e) {
         VCT.showError(gridEl, e);
     } finally {
@@ -182,7 +182,7 @@ function pintarDetalle(d) {
     el.innerHTML = `
         <a class="v-back" href="index.html">← VOLVER A EVENTOS</a>
 
-        <div class="v-banner" style="${e.event_id ? `--wm-a:url('/api/media/evento/${e.event_id}')` : ''}" ${e.event_id ? `data-c-evento="${e.event_id}"` : `data-c-nombre="${VCT.esc(e.nombre)}"`}>
+        <div class="v-banner" ${e.event_id ? `data-c-evento="${e.event_id}" data-wm="evento:${e.event_id}"` : `data-c-nombre="${VCT.esc(e.nombre)}" data-wm="nombre:${VCT.esc(e.nombre)}"`}>
             ${VCT.eventLogo(e.event_id, e.nombre, 'big')}
             <div class="v-banner-main">
                 <h1>${VCT.esc(e.nombre)}</h1>
@@ -243,7 +243,7 @@ function pintarDetalle(d) {
         }));
         if (buttons.length) pintarAgentesMapa(d.agentes, buttons[0].dataset.map);
     }
-    VCT.aplicarColores(el);
+    VCT.aplicarMedia(el);
 }
 
 /* ── INIT ───────────────────────────────────────────────────────────────── */

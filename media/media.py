@@ -52,7 +52,7 @@ PAGE_TIMEOUT = 20
 IMG_TIMEOUT = 25
 MAX_BYTES = 8 * 1024 * 1024   # 8 MB de tope
 REDIRECT_MAX_AGE = 7 * 24 * 3600
-COLOR_DARK_LUM = 0.28         # debajo de esto el logo es oscuro -> fondo claro
+COLOR_DARK_LUM = 0.5          # debajo de esto el logo es oscuro -> fondo claro (contraste)
 
 SEM = threading.BoundedSemaphore(2)
 RATE_LOCK = threading.Lock()
@@ -141,16 +141,24 @@ def media_evento_nombre():
     return jsonify({"ok": False, "error": "Sin imagen disponible.", "estado": estado}), 404
 
 
-@media_bp.route('/api/media/colores', methods=['GET'])
-def media_colores():
-    """Colores medios ya resueltos (no dispara descargas)."""
+@media_bp.route('/api/media/meta', methods=['GET'])
+def media_meta():
+    """URLs resueltas + color medio, sin disparar descargas.
+
+    Con esto el frontend apunta los <img> directo al CDN (cero requests a este
+    backend por imagen) y pinta colores/watermarks. Lo no resuelto se pide por
+    el endpoint de redirect (`/api/media/...`) que sí resuelve bajo demanda.
+    """
     def parse_ids(raw):
         return [x.strip() for x in (raw or '').split(',') if x.strip()]
 
     def info(kind, eid):
         e = _entrada(kind, eid)
-        if e and e.get('c'):
-            return {'c': e['c'], 'd': bool(e.get('d'))}
+        if e and e.get('u'):
+            # Enlace resuelto pero sin color: calcularlo en segundo plano.
+            if kind in ('equipos', 'eventos') and not e.get('c') and not e.get('cc'):
+                _lanzar_color(kind, eid, e['u'])
+            return {'u': e['u'], 'c': e.get('c'), 'd': bool(e.get('d'))}
         return None
 
     def collect(kind, ids):
@@ -162,13 +170,18 @@ def media_colores():
         return out
 
     equipos = collect('equipos', parse_ids(request.args.get('equipos')))
+    jugadores = collect('jugadores', parse_ids(request.args.get('jugadores')))
     eventos = collect('eventos', parse_ids(request.args.get('eventos')))
     nombres = {}
     for nombre in [n for n in (request.args.get('nombres') or '').split('|') if n.strip()]:
         v = info('eventos', 'n:' + _slug(nombre))
         if v:
             nombres[_slug(nombre)] = v
-    return jsonify({"ok": True, "equipos": equipos, "eventos": eventos, "nombres": nombres})
+    return jsonify({
+        "ok": True,
+        "equipos": equipos, "jugadores": jugadores,
+        "eventos": eventos, "nombres": nombres,
+    })
 
 
 @media_bp.route('/api/media/estado', methods=['GET'])

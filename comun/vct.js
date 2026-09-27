@@ -70,7 +70,7 @@ const VCT = (() => {
 
     function lozenge(name, tag, cls = '', teamId = null) {
         const img = teamId
-            ? `<img src="/api/media/equipo/${teamId}" alt="" loading="lazy" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            ? `<img data-media="equipo:${teamId}" data-fallback="/api/media/equipo/${teamId}" alt="" loading="lazy" decoding="async" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         const attr = teamId ? ` data-c-equipo="${teamId}"` : '';
         return `<span class="v-lozenge ${cls}"${attr}>${img}<span class="v-lozenge-txt">${esc((tag || initials(name)).slice(0, 4))}</span></span>`;
@@ -78,7 +78,7 @@ const VCT = (() => {
 
     function avatar(playerId, nickname, cls = '') {
         const img = playerId
-            ? `<img src="/api/media/jugador/${playerId}" alt="" loading="lazy" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            ? `<img data-media="jugador:${playerId}" data-fallback="/api/media/jugador/${playerId}" alt="" loading="lazy" decoding="async" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         return `<span class="v-avatar ${cls}">${img}<span class="v-avatar-txt">${esc(initials(nickname))}</span></span>`;
     }
@@ -91,49 +91,105 @@ const VCT = (() => {
     }
 
     function eventLogo(eventId, name, cls = '') {
-        const src = eventId
+        const key = eventId ? `evento:${eventId}` : `nombre:${name || ''}`;
+        const fallback = eventId
             ? `/api/media/evento/${eventId}`
             : `/api/media/evento?nombre=${encodeURIComponent(name || '')}`;
         const attr = eventId
             ? ` data-c-evento="${eventId}"`
             : ` data-c-nombre="${esc(name || '')}"`;
         const img = (eventId || name)
-            ? `<img src="${src}" alt="" loading="lazy" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            ? `<img data-media="${esc(key)}" data-fallback="${fallback}" alt="" loading="lazy" decoding="async" onload="this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         return `<span class="v-elogo ${cls}"${attr}>${img}<span class="v-elogo-txt">${esc(initialsEvent(name))}</span></span>`;
     }
 
     const slug = texto => String(texto || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
-    /* Aplica colores medios (ya resueltos) a los elementos con data-c-*. */
-    async function aplicarColores(root = document, intento = 0) {
-        const equipos = new Set(), eventos = new Set(), nombres = new Set();
-        root.querySelectorAll('[data-c-equipo]').forEach(el => equipos.add(el.dataset.cEquipo));
-        root.querySelectorAll('[data-c-evento]').forEach(el => eventos.add(el.dataset.cEvento));
-        root.querySelectorAll('[data-c-nombre]').forEach(el => nombres.add(el.dataset.cNombre));
-        if (!equipos.size && !eventos.size && !nombres.size) return;
+    /* Un solo request por render: apunta las imágenes al CDN (si ya están
+       resueltas), aplica colores medios y watermarks. Lo no resuelto se pide
+       por el endpoint de redirect (que resuelve bajo demanda) y se reintenta. */
+    async function aplicarMedia(root = document, intento = 0) {
+        const parse = k => { const i = String(k).indexOf(':'); return [k.slice(0, i), k.slice(i + 1)]; };
+        const equipos = new Set(), jugadores = new Set(), eventos = new Set(), nombres = new Set();
+        const imgs = [...root.querySelectorAll('img[data-media]')];
+        const wms = [...root.querySelectorAll('[data-wm],[data-wm2]')];
+
+        const sumar = (t, v) => {
+            if (!v) return;
+            if (t === 'equipo') equipos.add(v);
+            else if (t === 'jugador') jugadores.add(v);
+            else if (t === 'evento') eventos.add(v);
+            else if (t === 'nombre') nombres.add(v);
+        };
+
+        imgs.forEach(img => sumar(...parse(img.dataset.media)));
+        wms.forEach(el => { if (el.dataset.wm) sumar(...parse(el.dataset.wm)); if (el.dataset.wm2) sumar(...parse(el.dataset.wm2)); });
+        root.querySelectorAll('[data-c-equipo]').forEach(el => sumar('equipo', el.dataset.cEquipo));
+        root.querySelectorAll('[data-c-equipo2]').forEach(el => sumar('equipo', el.dataset.cEquipo2));
+        root.querySelectorAll('[data-c-evento]').forEach(el => sumar('evento', el.dataset.cEvento));
+        root.querySelectorAll('[data-c-nombre]').forEach(el => sumar('nombre', el.dataset.cNombre));
+
+        if (!equipos.size && !jugadores.size && !eventos.size && !nombres.size) return;
 
         const qs = new URLSearchParams();
         if (equipos.size) qs.set('equipos', [...equipos].join(','));
+        if (jugadores.size) qs.set('jugadores', [...jugadores].join(','));
         if (eventos.size) qs.set('eventos', [...eventos].join(','));
         if (nombres.size) qs.set('nombres', [...nombres].join('|'));
 
+        const lookup = (d, t, v) => t === 'equipo' ? d.equipos?.[v]
+            : t === 'jugador' ? d.jugadores?.[v]
+            : t === 'evento' ? d.eventos?.[v]
+            : d.nombres?.[slug(v)];
+
         let pendientes = 0;
         try {
-            const d = await api(`/media/colores?${qs}`);
+            const d = await api(`/media/meta?${qs}`);
+
+            imgs.forEach(img => {
+                const [t, v] = parse(img.dataset.media);
+                const info = lookup(d, t, v);
+                if (info?.u) {
+                    if (img.src !== info.u) img.src = info.u;   // directo al CDN
+                } else {
+                    if (!img.src) img.src = img.dataset.fallback; // resuelve bajo demanda
+                    pendientes++;
+                }
+            });
+
             const aplicar = (el, info) => {
                 if (!info) return false;
-                el.style.setProperty('--c', info.c);
+                if (info.c) el.style.setProperty('--c', info.c);
                 el.classList.toggle('on-light', !!info.d);
                 return true;
             };
             root.querySelectorAll('[data-c-equipo]').forEach(el => { if (!aplicar(el, d.equipos?.[el.dataset.cEquipo])) pendientes++; });
+            root.querySelectorAll('[data-c-equipo2]').forEach(el => {
+                const info = d.equipos?.[el.dataset.cEquipo2];
+                if (info?.c) el.style.setProperty('--c2', info.c);
+                else pendientes++;
+            });
             root.querySelectorAll('[data-c-evento]').forEach(el => { if (!aplicar(el, d.eventos?.[el.dataset.cEvento])) pendientes++; });
             root.querySelectorAll('[data-c-nombre]').forEach(el => { if (!aplicar(el, d.nombres?.[slug(el.dataset.cNombre)])) pendientes++; });
+
+            wms.forEach(el => {
+                if (el.dataset.wm) {
+                    const [t, v] = parse(el.dataset.wm);
+                    const info = lookup(d, t, v);
+                    if (info?.u) el.style.setProperty('--wm-a', `url('${info.u}')`);
+                }
+                if (el.dataset.wm2) {
+                    const [t, v] = parse(el.dataset.wm2);
+                    const info = lookup(d, t, v);
+                    if (info?.u) el.style.setProperty('--wm-b', `url('${info.u}')`);
+                }
+            });
         } catch (e) {
             console.error(e);
+            pendientes++;
         }
-        if (pendientes && intento < 3) setTimeout(() => aplicarColores(root, intento + 1), 4000);
+        if (pendientes && intento < 3) setTimeout(() => aplicarMedia(root, intento + 1), 3500);
     }
 
     /* Imágenes locales de multimedia/ (agentes y mapas). */
@@ -264,7 +320,10 @@ const VCT = (() => {
         const done = !!m.winner_id;
         const maps = m.maps_played || 0;
         const href = matchHref(m.match_id);
-        const linkOpen = opts.noLink ? '<div class="v-match no-link">' : `<div class="v-match" data-href="${href}">`;
+        const cAttrs = `${m.team_a_id ? ` data-c-equipo="${m.team_a_id}"` : ''}${m.team_b_id ? ` data-c-equipo2="${m.team_b_id}"` : ''}`;
+        const linkOpen = opts.noLink
+            ? `<div class="v-match no-link"${cAttrs}>`
+            : `<div class="v-match" data-href="${href}"${cAttrs}>`;
 
         return `
         ${linkOpen}
@@ -355,7 +414,7 @@ const VCT = (() => {
     return {
         API, api, esc, param, debounce,
         flag, flagHtml, teamColor, initials, lozenge, avatar,
-        initialsEvent, eventLogo, slug, aplicarColores,
+        initialsEvent, eventLogo, slug, aplicarMedia, aplicarColores: aplicarMedia,
         agentIcon, mapIcon, imgError,
         teamHref, playerHref, matchHref, eventHref,
         teamCell, playerCell,
