@@ -7,7 +7,6 @@
 }
 
 :root {
-    /* Paleta negra + amarilla (esquema original) + tipografía DS */
     --bg: #0a0a0c;
     --surface: #111114;
     --surface2: #16161a;
@@ -21,15 +20,7 @@
     --dim: #52525b;
     --text: #d4d4d8;
     --mono: 'DM Mono', monospace;
-    --body: 'Chakra Petch', sans-serif;
-    --display: 'Russo One', sans-serif;
-    /* Glass neutro */
-    --glass-bg: rgba(17, 17, 20, .44);
-    --glass-bg-strong: rgba(10, 10, 12, .68);
-    --glass-border: rgba(255, 255, 255, .09);
-    --glass-highlight: rgba(255, 255, 255, .05);
-    --glass-blur: 14px;
-    --shadow-card: 0 10px 30px rgba(0, 0, 0, .45);
+    --display: 'Bebas Neue', sans-serif;
 }
 
 html,
@@ -41,7 +32,7 @@ body {
 body {
     background: var(--bg);
     color: var(--text);
-    font-family: var(--body);
+    font-family: var(--mono);
     font-size: 12px;
 }
 
@@ -190,6 +181,7 @@ main {
 .selected-team.has-team {
     border-color: var(--accent);
     color: var(--accent);
+    box-shadow: 0 0 20px rgba(232, 255, 71, .08);
 }
 
 .sel-placeholder {
@@ -243,7 +235,7 @@ main {
 
 .team-card.selected-b {
     border-color: var(--blue);
-    background: rgba(232, 255, 71, .08);
+    background: rgba(56, 189, 248, .08);
 }
 
 .team-card.disabled {
@@ -338,6 +330,7 @@ main {
 .btn-predict.ready {
     border-color: var(--accent);
     color: var(--accent);
+    box-shadow: 0 0 20px rgba(232, 255, 71, .1);
 }
 
 .btn-predict.ready:hover {
@@ -699,7 +692,7 @@ main {
 .qi-def-active {
     border-color: var(--blue);
     color: var(--blue);
-    background: rgba(232, 255, 71, .08);
+    background: rgba(56, 189, 248, .08);
 }
 
 .qi-remove {
@@ -765,6 +758,7 @@ main {
 .btn-sim-partido.ready {
     border-color: var(--accent);
     color: var(--accent);
+    box-shadow: 0 0 20px rgba(232, 255, 71, .1);
 }
 
 .btn-sim-partido.ready:hover {
@@ -2315,6 +2309,7 @@ main {
 
 .pma-recalc-btn:hover:not(:disabled) {
     background: rgba(232, 255, 71, .14);
+    box-shadow: 0 0 16px rgba(232, 255, 71, .12);
 }
 
 .pma-recalc-btn:disabled {
@@ -2773,7 +2768,7 @@ main {
 }
 
 .btn-preparar:not(:disabled):hover {
-    background: rgba(232, 255, 71, .06);
+    background: rgba(56, 189, 248, .06);
 }
 
 .btn-preparar:disabled {
@@ -3310,6 +3305,7 @@ main {
 .sim-item.selected {
     border-color: var(--accent);
     background: rgba(232, 255, 71, .08);
+    box-shadow: 0 0 16px rgba(232, 255, 71, .1);
 }
 
 .sim-item.stale {
@@ -3784,7 +3780,7 @@ main {
 
 .cam-step.cam-d {
     color: var(--blue);
-    border-color: rgba(232, 255, 71, .3);
+    border-color: rgba(56, 189, 248, .3);
 }
 
 .cam-arrow {
@@ -3850,6 +3846,7 @@ main {
 
 .btn-armar:hover {
     background: rgba(232, 255, 71, .18);
+    box-shadow: 0 0 20px rgba(232, 255, 71, .12);
 }
 
 .serie-layout {
@@ -3928,103 +3925,4 @@ main {
     letter-spacing: 2px;
     color: var(--dim);
     margin: 14px 0 8px;
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   DS ALETHEIA — Glass neutro (SIN glow) + hero con tipografía
-   Fuente de verdad: design-system/aletheia/MASTER.md
-   El fondo de nodos es global (comun/bg-nodes.js), no de esta página.
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/* ── Hero (sin canvas propio: usa el fondo global) ── */
-.ae-hero {
-    position: relative;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    min-height: clamp(220px, 34vh, 340px);
-    margin-bottom: 18px;
-    border: 1px solid var(--glass-border);
-    border-radius: 14px;
-    background: linear-gradient(135deg, rgba(232, 255, 71, .07), rgba(10, 10, 12, .55) 55%);
-    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-card);
-}
-
-.ae-hero-inner {
-    position: relative;
-    z-index: 1;
-    text-align: center;
-    padding: 36px 20px;
-}
-
-.ae-hero-title {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px 18px;
-    font-family: var(--display);
-    font-size: clamp(40px, 8vw, 86px);
-    line-height: .95;
-    letter-spacing: 6px;
-    font-weight: 400;
-}
-
-.ae-hero-outline {
-    color: transparent;
-    -webkit-text-stroke: 2px rgba(212, 212, 216, .92);
-}
-
-.ae-hero-accent { color: var(--accent); }
-
-.ae-hero-sub {
-    margin-top: 16px;
-    color: var(--dim);
-    font-size: 11px;
-    letter-spacing: 3px;
-}
-
-@supports not (-webkit-text-stroke: 1px #fff) {
-    .ae-hero-outline { color: var(--text); }
-}
-
-/* ── Glass en superficies grandes (los datos siguen opacos) ── */
-.sim-browser,
-.live-section,
-.series-banner {
-    background: var(--glass-bg);
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
-    border-color: var(--glass-border);
-    border-radius: 12px;
-    box-shadow: inset 0 1px 0 var(--glass-highlight), var(--shadow-card);
-}
-
-.live-tabs {
-    background: var(--glass-bg-strong);
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
-    border-bottom-color: var(--glass-border);
-}
-
-.mb-header {
-    background: var(--glass-bg-strong);
-    -webkit-backdrop-filter: blur(var(--glass-blur));
-    backdrop-filter: blur(var(--glass-blur));
-    border-bottom-color: var(--glass-border);
-}
-
-/* ── Focus accesible (outline sólido, no glow) ── */
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-select:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-}
-
-/* ── Fallback sin backdrop-filter ── */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-    .sim-browser, .live-section, .series-banner,
-    .live-tabs, .mb-header { background: #14141a; }
 }

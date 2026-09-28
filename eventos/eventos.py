@@ -16,7 +16,7 @@ except ImportError:
 eventos_bp = Blueprint('eventos', __name__)
 
 
-@ttl_cache(300)
+@ttl_cache(120)
 def query(sql, params=None):
     return fetch_all(sql, params)
 

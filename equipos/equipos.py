@@ -16,7 +16,7 @@ except ImportError:
 equipos_bp = Blueprint('equipos', __name__)
 
 
-@ttl_cache(300)
+@ttl_cache(120)
 def query(sql, params=None):
     return fetch_all(sql, params)
 
@@ -80,37 +80,12 @@ def detalle_equipo(team_id):
             WHERE team_a_id = ? OR team_b_id = ?
         """, [team_id, team_id, team_id])[0]
 
-        # Roster actual = jugadores cuyo ÚLTIMO movimiento (global) es JOIN y fue
-        # a este equipo. Si el equipo no tiene transacciones cargadas, se cae al
-        # criterio viejo (players.team_id) para no mostrar rosters vacíos.
         roster = query("""
-            SELECT p.player_id, p.nickname, p.real_name, p.country
-            FROM players p
-            JOIN roster_transactions rt ON rt.player_id = p.player_id
-            WHERE rt.team_id = ?
-              AND p.nickname IS NOT NULL AND p.nickname != ''
-              AND rt.transaction_id = (
-                  SELECT rt2.transaction_id FROM roster_transactions rt2
-                  WHERE rt2.player_id = p.player_id
-                  ORDER BY rt2.transaction_date DESC, rt2.transaction_id DESC
-                  LIMIT 1
-              )
-              AND rt.action = 'JOIN'
-            ORDER BY p.nickname
+            SELECT player_id, nickname, real_name, country
+            FROM players
+            WHERE team_id = ? AND nickname IS NOT NULL AND nickname != ''
+            ORDER BY nickname
         """, [team_id])
-
-        if not roster:
-            tiene_tx = query(
-                "SELECT COUNT(*) AS n FROM roster_transactions WHERE team_id = ?",
-                [team_id]
-            )[0]['n']
-            if not tiene_tx:
-                roster = query("""
-                    SELECT player_id, nickname, real_name, country
-                    FROM players
-                    WHERE team_id = ? AND nickname IS NOT NULL AND nickname != ''
-                    ORDER BY nickname
-                """, [team_id])
 
         transacciones = query("""
             SELECT rt.action, rt.transaction_date, rt.reference_url,
