@@ -204,10 +204,13 @@ const VCT = (() => {
         if (pendientes && intento < 3) setTimeout(() => aplicarMedia(root, intento + 1), 3500);
     }
 
+    const AGENT_SLUG_ALIAS = { pheonix: 'phoenix' };
+
     /* Imágenes locales de multimedia/ (agentes y mapas). */
     function agentIcon(agent) {
-        const slug = String(agent || '').toLowerCase().replace(/[^a-z]/g, '');
+        let slug = String(agent || '').toLowerCase().replace(/[^a-z]/g, '');
         if (!slug) return '';
+        slug = AGENT_SLUG_ALIAS[slug] || slug;
         return `<img class="v-agent-icon" src="/multimedia/agents/${slug}.avif" alt="${esc(agent)}" title="${esc(agent)}" loading="lazy" onerror="this.remove()">`;
     }
 
