@@ -58,7 +58,7 @@
         let html = `
             <a href="${base}aletheia/" class="ae-logo" aria-label="ALETHEIA — Inicio">
                 <span class="ae-logo-mark">
-                    <img class="ae-logo-glow" src="${base}comun/ALETHEIA_ico.svg" alt="" aria-hidden="true"
+                    <img class="ae-logo-ghost" src="${base}comun/ALETHEIA_ico.svg" alt="" aria-hidden="true"
                         onerror="this.remove()" />
                     <img class="ae-logo-img" src="${base}comun/ALETHEIA_ico.svg" alt="" width="56" height="56"
                         onerror="this.remove()" />

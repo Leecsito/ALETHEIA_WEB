@@ -3112,7 +3112,7 @@ main {
 }
 
 .live-status.ok {
-    color: var(--green);
+    color: var(--txt-2);
 }
 
 .live-status.warn {
@@ -3621,8 +3621,8 @@ main {
 }
 
 .si-res.ok {
-    color: var(--green);
-    border-color: color-mix(in srgb, var(--ok) 50%, transparent);
+    color: var(--txt-2);
+    border-color: color-mix(in srgb, var(--txt-2) 45%, transparent);
 }
 
 .si-teams {

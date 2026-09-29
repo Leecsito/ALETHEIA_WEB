@@ -73,17 +73,15 @@
     flex-shrink: 0;
 }
 
-/* Misma marca, agrandada y difuminada detrás: el resplandor del logo. */
-.ae-logo-glow {
+/* Misma marca, agrandada y casi transparente detrás (marca de agua). */
+.ae-logo-ghost {
     position: absolute;
     width: 90px;
     height: 90px;
     object-fit: contain;
     pointer-events: none;
     z-index: 0;
-    filter: blur(13px);
-    opacity: .35;
-    transform: scale(1.05);
+    opacity: .13;
 }
 
 .ae-logo-img {
@@ -219,7 +217,7 @@
         height: 44px;
     }
 
-    .ae-logo-glow {
+    .ae-logo-ghost {
         width: 84px;
         height: 84px;
     }

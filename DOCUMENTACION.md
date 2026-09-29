@@ -640,7 +640,8 @@ estas tablas). Endpoints adicionales del proxy:
      la excepción acordada a la paleta (solo datos).
    - **Header lima:** `.ae-header` en `--accent` plano, 80px de alto
      (`--ae-header-h`, compartida con `.vct-tabs` y el layout de `tablas/`),
-     logo con copia difuminada detrás y texto oscuro.
+     logo con copia agrandada casi transparente detrás (marca de agua,
+     `opacity: .13`, sin blur) y texto oscuro.
    - **Animación de nodos:** `header/header-nodes.js` (ver §5.5).
    - Tipografías principales desde Google Fonts (se mantienen):
      - Titulares y Badges: `'Bebas Neue', sans-serif`
@@ -669,7 +670,7 @@ estas tablas). Endpoints adicionales del proxy:
      ```
    - **Aspecto:** fondo `--accent` plano (amarillo lima), 80px de alto
      (`--ae-header-h`), logo `comun/ALETHEIA_ico.svg` a 56px con una copia
-     agrandada y difuminada detrás (mismo efecto que los logos VCT) y el
+     agrandada casi transparente detrás (marca de agua, sin difuminar) y el
      wordmark en segundo plano. Todos los controles del header usan texto
      oscuro sobre el lima.
    - **`header-nodes.js` (efecto de nodos reutilizable):**
