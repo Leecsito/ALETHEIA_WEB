@@ -6,22 +6,7 @@
     padding: 0;
 }
 
-:root {
-    --bg: #0a0a0c;
-    --surface: #111114;
-    --surface2: #16161a;
-    --border: #222228;
-    --accent: #e8ff47;
-    --red: #ff4757;
-    --green: #4ade80;
-    --orange: #fb923c;
-    --blue: #38bdf8;
-    --purple: #a78bfa;
-    --dim: #52525b;
-    --text: #d4d4d8;
-    --mono: 'DM Mono', monospace;
-    --display: 'Bebas Neue', sans-serif;
-}
+/* La paleta vive en comun/theme.css (se carga antes que este archivo). */
 
 html,
 body {
@@ -43,8 +28,8 @@ body {
     z-index: 0;
     pointer-events: none;
     background-image:
-        linear-gradient(rgba(232, 255, 71, .025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(232, 255, 71, .025) 1px, transparent 1px);
+        linear-gradient(color-mix(in srgb, var(--accent) 2.5%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--accent) 2.5%, transparent) 1px, transparent 1px);
     background-size: 40px 40px;
 }
 
@@ -54,7 +39,7 @@ body {
     z-index: 0;
     pointer-events: none;
     background: repeating-linear-gradient(0deg, transparent, transparent 2px,
-            rgba(0, 0, 0, .06) 2px, rgba(0, 0, 0, .06) 4px);
+            color-mix(in srgb, var(--bg) 6%, transparent) 2px, color-mix(in srgb, var(--bg) 6%, transparent) 4px);
 }
 
 /* ── HEADER ── */
@@ -68,7 +53,7 @@ header {
     padding: 0 36px;
     height: 56px;
     border-bottom: 1px solid var(--border);
-    background: rgba(10, 10, 12, .96);
+    background: color-mix(in srgb, var(--bg) 96%, transparent);
     backdrop-filter: blur(12px);
 }
 
@@ -96,8 +81,8 @@ header {
     font-size: 10px;
     letter-spacing: 2px;
     color: var(--accent);
-    border: 1px solid rgba(232, 255, 71, .3);
-    background: rgba(232, 255, 71, .07);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    background: color-mix(in srgb, var(--accent) 7%, transparent);
     padding: 2px 8px;
 }
 
@@ -181,7 +166,7 @@ main {
 .selected-team.has-team {
     border-color: var(--accent);
     color: var(--accent);
-    box-shadow: 0 0 20px rgba(232, 255, 71, .08);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .sel-placeholder {
@@ -205,6 +190,7 @@ main {
 
 .team-search:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .team-grid {
@@ -225,17 +211,17 @@ main {
 
 .team-card:hover {
     border-color: var(--accent);
-    background: rgba(232, 255, 71, .04);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 .team-card.selected-a {
     border-color: var(--accent);
-    background: rgba(232, 255, 71, .08);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .team-card.selected-b {
     border-color: var(--blue);
-    background: rgba(56, 189, 248, .08);
+    background: color-mix(in srgb, var(--info) 8%, transparent);
 }
 
 .team-card.disabled {
@@ -249,6 +235,7 @@ main {
     letter-spacing: 2px;
     line-height: 1.15;
     word-break: break-word;
+    color: var(--txt-1);
 }
 
 .tc-maps {
@@ -330,11 +317,11 @@ main {
 .btn-predict.ready {
     border-color: var(--accent);
     color: var(--accent);
-    box-shadow: 0 0 20px rgba(232, 255, 71, .1);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .btn-predict.ready:hover {
-    background: rgba(232, 255, 71, .08);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .btn-predict:disabled {
@@ -380,7 +367,7 @@ main {
 .mode-btn:hover {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(232, 255, 71, .04);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 .mode-icon {
@@ -410,6 +397,7 @@ main {
     font-family: var(--display);
     font-size: 18px;
     letter-spacing: 3px;
+    color: var(--txt-1);
 }
 
 .mb-format {
@@ -445,7 +433,7 @@ main {
 .fmt-btn.active {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(232, 255, 71, .08);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 /* Badge de caché (partido ya precomputado) */
@@ -457,7 +445,7 @@ main {
 
 .cache-badge.ok {
     color: var(--green);
-    border: 1px solid rgba(74, 222, 128, .4);
+    border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent);
     padding: 2px 8px;
 }
 
@@ -469,7 +457,7 @@ main {
 
 .cache-badge.warn {
     color: var(--red);
-    border: 1px solid rgba(255, 71, 87, .4);
+    border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent);
     padding: 2px 8px;
 }
 
@@ -587,9 +575,9 @@ main {
     font-family: var(--display);
     font-size: 11px;
     letter-spacing: 1px;
-    color: #fff;
+    color: var(--txt-1);
     z-index: 1;
-    text-shadow: 0 1px 4px #000;
+    text-shadow: 0 1px 4px var(--bg);
 }
 
 .map-queue {
@@ -636,6 +624,7 @@ main {
     font-family: var(--display);
     font-size: 14px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 .qi-decider-badge {
@@ -672,13 +661,13 @@ main {
 .qi-atk-active {
     border-color: var(--accent);
     color: var(--accent);
-    background: rgba(232, 255, 71, .08);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .qi-def-active {
     border-color: var(--blue);
     color: var(--blue);
-    background: rgba(56, 189, 248, .08);
+    background: color-mix(in srgb, var(--info) 8%, transparent);
 }
 
 .qi-remove {
@@ -744,11 +733,11 @@ main {
 .btn-sim-partido.ready {
     border-color: var(--accent);
     color: var(--accent);
-    box-shadow: 0 0 20px rgba(232, 255, 71, .1);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .btn-sim-partido.ready:hover {
-    background: rgba(232, 255, 71, .06);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
 .btn-sim-partido:disabled {
@@ -1004,7 +993,7 @@ main {
 }
 
 .map-row:hover {
-    background: rgba(255, 255, 255, .01);
+    background: var(--panel-v);
 }
 
 .map-label {
@@ -1029,7 +1018,7 @@ main {
     font-family: var(--display);
     font-size: 12px;
     letter-spacing: 2px;
-    color: var(--text);
+    color: var(--txt-1);
 }
 
 .prediction-cell {
@@ -1279,7 +1268,7 @@ main {
     font-family: var(--display);
     font-size: 12px;
     letter-spacing: 2px;
-    color: var(--text);
+    color: var(--txt-1);
     margin-bottom: 8px;
 }
 
@@ -1307,6 +1296,7 @@ main {
     font-family: var(--display);
     font-size: 28px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 .ht-score.score-a {
@@ -1375,6 +1365,7 @@ main {
     font-family: var(--display);
     font-size: 16px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 .ot-team-name.ot-a {
@@ -1422,6 +1413,7 @@ main {
     font-size: 11px;
     letter-spacing: 1px;
     width: 70px;
+    color: var(--txt-1);
 }
 
 .ot-map-pct {
@@ -1502,6 +1494,7 @@ main {
     font-size: 12px;
     letter-spacing: 2px;
     width: 70px;
+    color: var(--txt-1);
 }
 
 .op-weight-badge {
@@ -1515,19 +1508,19 @@ main {
 .op-dominant {
     color: var(--red);
     border-color: var(--red);
-    background: rgba(255, 71, 87, .06);
+    background: color-mix(in srgb, var(--bad) 6%, transparent);
 }
 
 .op-high {
     color: var(--orange);
     border-color: var(--orange);
-    background: rgba(251, 146, 60, .06);
+    background: color-mix(in srgb, var(--warn) 6%, transparent);
 }
 
 .op-medium {
     color: var(--accent);
-    border-color: rgba(232, 255, 71, .4);
-    background: rgba(232, 255, 71, .04);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 .op-low {
@@ -1553,7 +1546,7 @@ main {
 }
 
 .op-player-name {
-    color: var(--text);
+    color: var(--txt-1);
     font-size: 10px;
 }
 
@@ -1609,6 +1602,7 @@ main {
     font-family: var(--display);
     font-size: 14px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 .star-team-abbrev.star-a {
@@ -1634,6 +1628,7 @@ main {
     font-family: var(--display);
     font-size: 18px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 .star-rating {
@@ -1770,7 +1765,7 @@ main {
 }
 
 .cons-row:hover {
-    background: rgba(255, 255, 255, .01);
+    background: var(--panel-v);
 }
 
 .cons-player {
@@ -1807,7 +1802,7 @@ main {
 
 .grade-B {
     color: var(--accent);
-    border-color: rgba(232, 255, 71, .5);
+    border-color: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .grade-C {
@@ -1864,6 +1859,7 @@ main {
     letter-spacing: 3px;
     word-break: break-word;
     line-height: 1.1;
+    color: var(--txt-1);
 }
 
 .sb-pct {
@@ -2009,7 +2005,7 @@ main {
 
 @keyframes flash-update {
     0% {
-        background: rgba(232, 255, 71, .15);
+        background: color-mix(in srgb, var(--accent) 15%, transparent);
     }
 
     100% {
@@ -2051,8 +2047,8 @@ main {
 .pm-agent-panel {
     grid-column: 1 / -1;
     margin-top: 12px;
-    border: 1px solid rgba(232, 255, 71, .2);
-    background: rgba(232, 255, 71, .02);
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+    background: color-mix(in srgb, var(--accent) 2%, transparent);
     animation: fadeIn .25s ease;
 }
 
@@ -2103,6 +2099,7 @@ main {
     margin-bottom: 6px;
     padding-bottom: 6px;
     border-bottom: 1px solid var(--border);
+    color: var(--txt-1);
 }
 
 .pma-player-row {
@@ -2118,7 +2115,7 @@ main {
 
 .pma-player-row.pma-has-op {
     border-color: var(--purple);
-    background: rgba(167, 139, 250, .05);
+    background: color-mix(in srgb, var(--agent) 5%, transparent);
 }
 
 .pma-player-info {
@@ -2165,6 +2162,7 @@ main {
 
 .pma-agent-select:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .pma-agent-select.pma-op-agent {
@@ -2191,7 +2189,7 @@ main {
     gap: 8px;
     padding: 7px 20px;
     border: 1px solid var(--accent);
-    background: rgba(232, 255, 71, .06);
+    background: color-mix(in srgb, var(--accent) 6%, transparent);
     color: var(--accent);
     font-family: var(--mono);
     font-size: 10px;
@@ -2201,8 +2199,8 @@ main {
 }
 
 .pma-recalc-btn:hover:not(:disabled) {
-    background: rgba(232, 255, 71, .14);
-    box-shadow: 0 0 16px rgba(232, 255, 71, .12);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .pma-recalc-btn:disabled {
@@ -2254,6 +2252,7 @@ main {
     font-family: var(--display);
     font-size: 14px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 .pm-start-side {
@@ -2330,6 +2329,7 @@ main {
     font-family: var(--display);
     font-size: 22px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 .pm-pct-a {
@@ -2482,6 +2482,7 @@ main {
     padding-bottom: 6px;
     border-bottom: 1px solid var(--border);
     margin-bottom: 4px;
+    color: var(--txt-1);
 }
 
 .pa-team-a-header {
@@ -2505,7 +2506,7 @@ main {
 
 .pa-player-row.pa-has-op {
     border-color: var(--purple);
-    background: rgba(168, 85, 247, .04);
+    background: color-mix(in srgb, var(--agent) 4%, transparent);
 }
 
 .pa-player-name {
@@ -2534,6 +2535,7 @@ main {
 
 .pa-agent-select:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .pa-agent-select.pa-op-agent {
@@ -2590,6 +2592,7 @@ main {
 
 .pid-input:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .pid-badge {
@@ -2603,7 +2606,7 @@ main {
 
 .pid-badge.has-id {
     color: var(--accent);
-    border-color: rgba(232, 255, 71, .4);
+    border-color: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 
 .model-badge {
@@ -2661,7 +2664,7 @@ main {
 }
 
 .btn-preparar:not(:disabled):hover {
-    background: rgba(56, 189, 248, .06);
+    background: color-mix(in srgb, var(--info) 6%, transparent);
 }
 
 .btn-preparar:disabled {
@@ -2786,6 +2789,7 @@ main {
 
 .live-select:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .live-side-toggle {
@@ -2807,7 +2811,7 @@ main {
 .mqp-tile.mqp-selected {
     border-color: var(--accent);
     opacity: 1;
-    box-shadow: 0 0 0 1px var(--accent) inset, 0 0 18px rgba(232, 255, 71, .22);
+    box-shadow: 0 0 0 1px var(--accent) inset, 0 0 18px color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .mqp-tile.mqp-selected .mqp-img {
@@ -2821,7 +2825,7 @@ main {
     font-size: 14px;
     letter-spacing: 1px;
     color: var(--accent);
-    text-shadow: 0 1px 4px #000;
+    text-shadow: 0 1px 4px var(--bg);
     line-height: 1.1;
 }
 
@@ -2832,14 +2836,14 @@ main {
     font-size: 8px;
     letter-spacing: .5px;
     color: var(--orange);
-    text-shadow: 0 1px 4px #000;
+    text-shadow: 0 1px 4px var(--bg);
 }
 
 .live-detail-title {
     font-family: var(--display);
     font-size: 16px;
     letter-spacing: 2px;
-    color: var(--text);
+    color: var(--txt-1);
     margin-bottom: 10px;
 }
 
@@ -2871,6 +2875,7 @@ main {
     font-family: var(--display);
     font-size: 30px;
     letter-spacing: 1px;
+    color: var(--txt-1);
 }
 
 .live-a {
@@ -2931,6 +2936,7 @@ main {
     font-family: var(--display);
     font-size: 22px;
     letter-spacing: 1px;
+    color: var(--txt-1);
 }
 
 .cmp-table-wrap {
@@ -2977,7 +2983,7 @@ main {
 
 .cmp-row.cmp-upset {
     border-left: 3px solid var(--red);
-    background: rgba(255, 71, 87, .05);
+    background: color-mix(in srgb, var(--bad) 5%, transparent);
 }
 
 .cmp-row.cmp-unc {
@@ -3085,17 +3091,17 @@ main {
 
 .sim-item:hover {
     border-color: var(--accent);
-    background: rgba(232, 255, 71, .04);
+    background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
 
 .sim-item.selected {
     border-color: var(--accent);
-    background: rgba(232, 255, 71, .08);
-    box-shadow: 0 0 16px rgba(232, 255, 71, .1);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .sim-item.stale {
-    border-color: rgba(251, 146, 60, .5);
+    border-color: color-mix(in srgb, var(--warn) 50%, transparent);
     opacity: .8;
 }
 
@@ -3103,7 +3109,7 @@ main {
     font-family: var(--display);
     font-size: 15px;
     letter-spacing: 1px;
-    color: var(--text);
+    color: var(--txt-1);
 }
 
 .si-vs {
@@ -3156,6 +3162,7 @@ main {
     font-family: var(--display);
     font-size: 22px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 .ss-head-meta {
@@ -3187,6 +3194,7 @@ main {
     font-family: var(--display);
     font-size: 13px;
     letter-spacing: 1px;
+    color: var(--txt-1);
 }
 
 .smr-side {

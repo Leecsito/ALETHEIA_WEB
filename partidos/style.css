@@ -3,7 +3,7 @@
 #vistaDetalle .v-banner { border-left: 3px solid var(--accent); }
 
 .v-map-panel {
-    border: 1px solid #34343c;
+    border: 1px solid var(--g1);
     border-top: none;
     background: var(--surface);
     padding: 18px 20px;

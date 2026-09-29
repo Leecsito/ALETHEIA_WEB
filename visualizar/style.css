@@ -6,22 +6,7 @@
     padding: 0;
 }
 
-:root {
-    --bg: #0a0a0c;
-    --surface: #111114;
-    --surface2: #16161a;
-    --border: #222228;
-    --accent: #e8ff47;
-    --accent2: #ff4757;
-    --green: #4ade80;
-    --orange: #fb923c;
-    --blue: #38bdf8;
-    --purple: #a78bfa;
-    --text: #d4d4d8;
-    --dim: #52525b;
-    --mono: 'DM Mono', monospace;
-    --display: 'Bebas Neue', sans-serif;
-}
+/* La paleta vive en comun/theme.css (se carga antes que este archivo). */
 
 html {
     scroll-behavior: smooth;
@@ -43,8 +28,8 @@ body {
     z-index: 0;
     pointer-events: none;
     background-image:
-        linear-gradient(rgba(232, 255, 71, .025) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(232, 255, 71, .025) 1px, transparent 1px);
+        linear-gradient(color-mix(in srgb, var(--accent) 2.5%, transparent) 1px, transparent 1px),
+        linear-gradient(90deg, color-mix(in srgb, var(--accent) 2.5%, transparent) 1px, transparent 1px);
     background-size: 40px 40px;
 }
 
@@ -59,7 +44,7 @@ header {
     padding: 0 32px;
     height: 56px;
     border-bottom: 1px solid var(--border);
-    background: rgba(10, 10, 12, .95);
+    background: color-mix(in srgb, var(--bg) 95%, transparent);
     backdrop-filter: blur(12px);
 }
 
@@ -82,7 +67,7 @@ header {
     justify-content: center;
     padding: 0 32px;
     border-bottom: 1px solid var(--border);
-    background: rgba(10, 10, 12, .97);
+    background: color-mix(in srgb, var(--bg) 97%, transparent);
 }
 
 .nav-btn {
@@ -166,7 +151,7 @@ main {
     font-family: var(--display);
     font-size: 32px;
     letter-spacing: 4px;
-    color: var(--text);
+    color: var(--txt-1);
 }
 
 .count {
@@ -191,6 +176,7 @@ main {
 
 .search:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 8%, transparent);
 }
 
 .search::placeholder {
@@ -294,8 +280,8 @@ td {
 .team-tag {
     display: inline-block;
     padding: 2px 8px;
-    background: rgba(232, 255, 71, .08);
-    border: 1px solid rgba(232, 255, 71, .2);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
     color: var(--accent);
     font-size: 10px;
     letter-spacing: 1px;
@@ -304,8 +290,8 @@ td {
 .winner-tag {
     display: inline-block;
     padding: 2px 8px;
-    background: rgba(74, 222, 128, .08);
-    border: 1px solid rgba(74, 222, 128, .2);
+    background: color-mix(in srgb, var(--ok) 8%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ok) 20%, transparent);
     color: var(--green);
     font-size: 10px;
 }
@@ -314,6 +300,7 @@ td {
     font-family: var(--display);
     font-size: 18px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 /* ── CARDS GRID (mapas) ── */
@@ -334,7 +321,7 @@ td {
 }
 
 .map-card:hover {
-    border-color: #3f3f46;
+    border-color: var(--g3);
 }
 
 .map-card::before {
@@ -351,7 +338,7 @@ td {
     font-family: var(--display);
     font-size: 22px;
     letter-spacing: 3px;
-    color: var(--text);
+    color: var(--txt-1);
     margin-bottom: 12px;
 }
 
@@ -367,7 +354,7 @@ td {
 }
 
 .map-card-stat .value {
-    color: var(--text);
+    color: var(--txt-1);
 }
 
 .map-card-bar {
@@ -404,6 +391,7 @@ td {
     font-family: var(--display);
     font-size: 28px;
     letter-spacing: 2px;
+    color: var(--txt-1);
 }
 
 .round-card-pct {
@@ -427,7 +415,7 @@ td {
 }
 
 .agent-card:hover {
-    border-color: #3f3f46;
+    border-color: var(--g3);
 }
 
 .agent-card .picks-bar {
@@ -444,6 +432,7 @@ td {
     font-size: 20px;
     letter-spacing: 2px;
     margin-bottom: 10px;
+    color: var(--txt-1);
 }
 
 .agent-stat {
@@ -470,7 +459,7 @@ td {
     position: fixed;
     inset: 0;
     z-index: 999;
-    background: rgba(10, 10, 12, .9);
+    background: color-mix(in srgb, var(--bg) 90%, transparent);
     display: flex;
     flex-direction: column;
     align-items: center;

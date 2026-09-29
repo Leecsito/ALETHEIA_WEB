@@ -6,19 +6,7 @@
   padding: 0;
 }
 
-:root {
-  --bg: #0a0a0c;
-  --surface: #111114;
-  --border: #222228;
-  --accent: #e8ff47;
-  --accent2: #ff4757;
-  --text: #d4d4d8;
-  --text-dim: #52525b;
-  --green: #4ade80;
-  --orange: #fb923c;
-  --mono: 'DM Mono', monospace;
-  --display: 'Bebas Neue', sans-serif;
-}
+/* La paleta vive en comun/theme.css (se carga antes que este archivo). */
 
 html {
   scroll-behavior: smooth;
@@ -40,8 +28,8 @@ body {
   z-index: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(232, 255, 71, .03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(232, 255, 71, .03) 1px, transparent 1px);
+    linear-gradient(color-mix(in srgb, var(--accent) 3%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--accent) 3%, transparent) 1px, transparent 1px);
   background-size: 40px 40px;
 }
 
@@ -51,7 +39,7 @@ body {
   z-index: 0;
   pointer-events: none;
   background: repeating-linear-gradient(0deg, transparent, transparent 2px,
-      rgba(0, 0, 0, .07) 2px, rgba(0, 0, 0, .07) 4px);
+      color-mix(in srgb, var(--bg) 7%, transparent) 2px, color-mix(in srgb, var(--bg) 7%, transparent) 4px);
 }
 
 /* ── BARRA DE ESTADO DB (bajo el header reutilizable) ── */
@@ -64,7 +52,7 @@ body {
   gap: 20px;
   padding: 10px 40px;
   border-bottom: 1px solid var(--border);
-  background: rgba(10, 10, 12, .7);
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
 }
 
 .db-status {
@@ -130,7 +118,7 @@ main {
   font-size: clamp(52px, 8vw, 96px);
   line-height: 1;
   letter-spacing: 6px;
-  color: var(--text);
+  color: var(--txt-1);
 }
 
 .hero h1 .accent {
@@ -171,13 +159,13 @@ main {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(135deg, transparent 60%, rgba(232, 255, 71, .03));
+  background: linear-gradient(135deg, transparent 60%, color-mix(in srgb, var(--accent) 3%, transparent));
   pointer-events: none;
 }
 
 .file-card:hover {
-  border-color: #3f3f46;
-  background: #16161a;
+  border-color: var(--g3);
+  background: var(--panel-v);
 }
 
 .file-card.loaded {
@@ -208,7 +196,7 @@ main {
 .card-num {
   font-family: var(--display);
   font-size: 32px;
-  color: var(--border);
+  color: var(--g2);
   min-width: 40px;
   transition: color .2s;
 }
@@ -218,7 +206,7 @@ main {
 }
 
 .file-card:hover .card-num {
-  color: #3f3f46;
+  color: var(--g3);
 }
 
 .card-info {
@@ -228,7 +216,7 @@ main {
 .card-title {
   font-size: 12px;
   letter-spacing: 2px;
-  color: var(--text);
+  color: var(--txt-1);
   font-weight: 500;
 }
 
@@ -240,13 +228,13 @@ main {
 
 .card-tables {
   font-size: 10px;
-  color: #3f3f46;
+  color: var(--g2);
   margin-top: 6px;
   letter-spacing: 1px;
 }
 
 .file-card.loaded .card-tables {
-  color: rgba(232, 255, 71, .5);
+  color: color-mix(in srgb, var(--accent) 50%, transparent);
 }
 
 .card-state {
@@ -328,16 +316,21 @@ main {
 }
 
 .btn-run:disabled {
-  background: var(--border);
-  color: var(--text-dim);
+  background: var(--g1);
+  color: var(--txt-2);
   cursor: not-allowed;
   clip-path: none;
 }
 
 .btn-run:not(:disabled):hover {
-  background: #f5ff80;
+  background: color-mix(in srgb, var(--accent) 78%, var(--txt-1));
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(232, 255, 71, .3);
+  box-shadow: 0 8px 30px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+.btn-run:not(:disabled):active {
+  transform: translateY(0);
+  background: var(--g3);
 }
 
 .btn-run-count {
@@ -347,7 +340,7 @@ main {
 }
 
 .btn-run:disabled .btn-run-count {
-  color: #3f3f46;
+  color: var(--g1);
 }
 
 /* ── LOG ── */
@@ -497,8 +490,8 @@ main {
 }
 
 .btn-bulk:hover {
-  background: rgba(232, 255, 71, .08);
-  box-shadow: 0 0 20px rgba(232, 255, 71, .15);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .bulk-icon {
@@ -529,9 +522,9 @@ main {
   margin-left: auto;
   font-size: 11px;
   color: var(--accent);
-  background: rgba(232, 255, 71, .08);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   padding: 1px 8px;
-  border: 1px solid rgba(232, 255, 71, .2);
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .optional-label {
@@ -542,8 +535,8 @@ main {
   font-size: 10px;
   color: var(--orange);
   padding: 1px 8px;
-  border: 1px solid rgba(251, 146, 60, .3);
-  background: rgba(251, 146, 60, .05);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  background: color-mix(in srgb, var(--warn) 5%, transparent);
   letter-spacing: 1px;
 }
 
