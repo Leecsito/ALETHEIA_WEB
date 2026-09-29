@@ -19,11 +19,11 @@
     justify-content: space-between;
     gap: 16px;
     padding: 0 36px;
-    height: 56px;
+    height: var(--ae-header-h);
     overflow: hidden;
     isolation: isolate;
-    border-bottom: 1px solid var(--g1);
-    background: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 78%, var(--g3)) 100%);
+    border-bottom: 1px solid color-mix(in srgb, var(--bg) 30%, transparent);
+    background: var(--accent);
     color: var(--bg);
     font-family: var(--mono);
 }
@@ -48,23 +48,24 @@
 .ae-logo {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
+    gap: 14px;
     font-family: var(--display);
-    font-size: 24px;
-    letter-spacing: 4px;
-    color: var(--bg);
+    font-size: 18px;
+    letter-spacing: 3px;
+    color: var(--g1);
     text-decoration: none;
     white-space: nowrap;
     transition: color .2s, opacity .2s;
 }
 
 .ae-logo:hover {
-    color: var(--g1);
+    color: var(--bg);
 }
 
+/* El icono es el protagonista; la palabra queda en segundo plano. */
 .ae-logo-img {
-    width: 28px;
-    height: 28px;
+    width: 48px;
+    height: 48px;
     object-fit: contain;
     flex-shrink: 0;
     /* El SVG es negro: sobre el header lima se ve directo. */
@@ -73,12 +74,20 @@
 }
 
 .ae-logo:hover .ae-logo-img {
-    filter: brightness(0) drop-shadow(0 0 6px color-mix(in srgb, var(--bg) 30%, transparent));
-    transform: translateY(-1px);
+    filter: brightness(0) drop-shadow(0 0 9px color-mix(in srgb, var(--bg) 35%, transparent));
+    transform: translateY(-1px) scale(1.03);
+}
+
+.ae-logo-word {
+    color: color-mix(in srgb, var(--g1) 82%, var(--accent));
+}
+
+.ae-logo:hover .ae-logo-word {
+    color: var(--bg);
 }
 
 .ae-logo-a {
-    color: var(--g1);
+    color: var(--bg);
 }
 
 .ae-logo:hover .ae-logo-a {
@@ -116,13 +125,13 @@
 }
 
 .ae-btn {
-    padding: 5px 14px;
+    padding: 7px 16px;
     border: 1px solid color-mix(in srgb, var(--bg) 40%, transparent);
     color: color-mix(in srgb, var(--bg) 78%, transparent);
     background: color-mix(in srgb, var(--txt-1) 10%, transparent);
     text-decoration: none;
     font-family: inherit;
-    font-size: 11px;
+    font-size: 12px;
     letter-spacing: 1px;
     cursor: pointer;
     transition: border-color .2s, color .2s, background .2s, box-shadow .2s;
@@ -170,13 +179,42 @@
     color: var(--accent);
 }
 
+/* Portátiles: el nav cabe en una sola fila sin partirse. */
+@media (max-width: 1180px) and (min-width: 821px) {
+    .ae-header {
+        gap: 10px;
+        padding: 0 20px;
+    }
+
+    .ae-nav {
+        gap: 5px;
+    }
+
+    .ae-nav .ae-title {
+        font-size: 15px;
+        gap: 6px;
+        margin-right: 2px;
+    }
+
+    .ae-btn {
+        padding: 5px 9px;
+        font-size: 10px;
+        letter-spacing: .5px;
+    }
+}
+
 @media (max-width: 820px) {
     .ae-header {
         height: auto;
-        min-height: 56px;
+        min-height: var(--ae-header-h);
         flex-direction: column;
         align-items: flex-start;
         padding: 12px 20px;
+    }
+
+    .ae-logo-img {
+        width: 40px;
+        height: 40px;
     }
 
     .ae-nav {

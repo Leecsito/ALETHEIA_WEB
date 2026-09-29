@@ -164,7 +164,7 @@ main {
 }
 
 .file-card:hover {
-  border-color: var(--g3);
+  border-color: color-mix(in srgb, var(--txt-2) 55%, transparent);
   background: var(--panel-v);
 }
 
@@ -196,7 +196,7 @@ main {
 .card-num {
   font-family: var(--display);
   font-size: 32px;
-  color: var(--g2);
+  color: var(--txt-2);
   min-width: 40px;
   transition: color .2s;
 }
@@ -206,7 +206,7 @@ main {
 }
 
 .file-card:hover .card-num {
-  color: var(--g3);
+  color: var(--txt-2);
 }
 
 .card-info {
@@ -228,7 +228,7 @@ main {
 
 .card-tables {
   font-size: 10px;
-  color: var(--g2);
+  color: var(--txt-2);
   margin-top: 6px;
   letter-spacing: 1px;
 }
@@ -316,7 +316,7 @@ main {
 }
 
 .btn-run:disabled {
-  background: var(--g1);
+  background: color-mix(in srgb, var(--panel) 70%, var(--bg));
   color: var(--txt-2);
   cursor: not-allowed;
   clip-path: none;
@@ -330,7 +330,7 @@ main {
 
 .btn-run:not(:disabled):active {
   transform: translateY(0);
-  background: var(--g3);
+  background: color-mix(in srgb, var(--accent) 88%, var(--bg));
 }
 
 .btn-run-count {
@@ -340,7 +340,7 @@ main {
 }
 
 .btn-run:disabled .btn-run-count {
-  color: var(--g1);
+  color: var(--txt-2);
 }
 
 /* ── LOG ── */

@@ -321,7 +321,7 @@ td {
 }
 
 .map-card:hover {
-    border-color: var(--g3);
+    border-color: color-mix(in srgb, var(--txt-2) 55%, transparent);
 }
 
 .map-card::before {
@@ -415,7 +415,7 @@ td {
 }
 
 .agent-card:hover {
-    border-color: var(--g3);
+    border-color: color-mix(in srgb, var(--txt-2) 55%, transparent);
 }
 
 .agent-card .picks-bar {

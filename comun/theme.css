@@ -62,8 +62,9 @@
     --blue: var(--info);
     --purple: var(--agent);
     --accent2: var(--bad);
-    --border: var(--g1);
-    --border-soft: color-mix(in srgb, var(--g1) 55%, transparent);
+    /* Bordes neutros (negro/gris) para que el verde sea solo un acento. */
+    --border: color-mix(in srgb, var(--panel) 80%, var(--txt-2));
+    --border-soft: color-mix(in srgb, var(--panel) 90%, var(--txt-2));
     --border-strong: var(--g1);
 
     /* ── Superficies y sombras ──────────────────────────────────────────── */
@@ -77,7 +78,22 @@
     --mono: 'DM Mono', monospace;
     --display: 'Bebas Neue', sans-serif;
 
+    /* Alto del header (compartido por el nav VCT y layouts fijos). */
+    --ae-header-h: 80px;
+
     color-scheme: dark;
+}
+
+/* Canvas de nodos de fondo: sutil, detrás de todo el contenido. */
+.ae-nodes-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: .6;
 }
 
 /* ── Base ───────────────────────────────────────────────────────────────── */
@@ -89,6 +105,11 @@ html {
 body {
     background: var(--bg);
     color: var(--txt);
+}
+
+main {
+    position: relative;
+    z-index: 1;
 }
 
 h1,
@@ -112,7 +133,7 @@ a {
 /* Scrollbars coherentes en toda la web */
 * {
     scrollbar-width: thin;
-    scrollbar-color: var(--g1) var(--bg);
+    scrollbar-color: var(--border) var(--bg);
 }
 
 *::-webkit-scrollbar {
@@ -125,13 +146,13 @@ a {
 }
 
 *::-webkit-scrollbar-thumb {
-    background: var(--g1);
+    background: var(--border);
     border: 2px solid var(--bg);
     border-radius: 8px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-    background: var(--g2);
+    background: color-mix(in srgb, var(--panel) 55%, var(--txt-2));
 }
 
 /* Foco visible consistente */

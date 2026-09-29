@@ -1,35 +1,56 @@
 /**
- * ALETHEIA — Canvas de nodos del header.
+ * ALETHEIA — Canvas de nodos reutilizable.
  *
  * Se incluye en cada página DESPUÉS de header.js:
  *     <script src="../header/header.js"></script>
  *     <script src="../header/header-nodes.js"></script>
  *
- * Dibuja detrás del contenido del header (lima) una red técnica de nodos
- * oscuros que se mueven despacio y rebotan en los bordes. Los nodos cercanos
- * al cursor reaccionan con repulsión suave (con easing) y se conectan a él
- * con líneas oscuras. Sin librerías. Los colores salen de las variables de
- * comun/theme.css (con la paleta como respaldo).
+ * Monta el efecto en:
+ *   1. El header (nodos oscuros sobre el fondo lima; cerca del cursor se
+ *      funden a negro).
+ *   2. Un canvas fijo detrás del contenido de toda la página (`.ae-nodes-bg`),
+ *      sutil: nodos verde oscuro sobre el fondo negro, líneas tenues y
+ *      líneas al cursor en acento.
+ *
+ * Sin librerías. Los colores salen de las variables de comun/theme.css
+ * (con la paleta como respaldo). Se puede desactivar el fondo con
+ * `window.AE_NODES_BG = false` antes de cargar el script.
  */
 (function () {
     'use strict';
 
-    /* Respaldo (el header es lima: los nodos van en tonos oscuros) */
-    const FALLBACK = {
-        dark: '#0A0A0C',
-        g1: '#4C5C2D',
-        g2: '#788428',
-    };
+    /* Paleta de respaldo (la misma que comun/theme.css) */
+    const FALLBACK = { bg: '#0A0A0C', g1: '#4C5C2D', g2: '#788428', g3: '#B0C138', accent: '#E8FF47' };
 
-    const NODES_MIN = 40;
-    const NODES_MAX = 90;
-    const LINK_DIST = 78;         /* distancia máxima entre nodos para unirlos */
-    const LINK_MAX_PER_NODE = 5;
-    const CURSOR_LINK_DIST = 150; /* distancia máxima nodo-cursor */
-    const REPULSE_DIST = 110;     /* radio de reacción al cursor */
-    const REPULSE_FORCE = 46;     /* px/s^2 a distancia 0 */
-    const SPEED_MIN = 6;          /* px/s */
-    const SPEED_MAX = 15;
+    /* Cada modo define colores (variables CSS), densidad y comportamiento. */
+    const MODES = {
+        /* Header lima: nodos oscuros que se funden a negro al acercarse. */
+        header: {
+            vars: { a: '--g1', b: '--g2', hot: '--bg' },
+            count: { div: 16, min: 40, max: 90 },
+            linkDist: 80,
+            linkAlpha: 0.2,
+            linkHeat: 0.14,
+            cursorDist: 150,
+            cursorAlpha: 0.55,
+            speed: [6, 15],
+            radius: [0.9, 1.8],
+            fixed: false,
+        },
+        /* Fondo oscuro: red VERDE detrás del contenido; el cursor la enciende. */
+        bg: {
+            vars: { a: '--g1', b: '--g2', hot: '--g3', spark: '--g3' },
+            count: { div: 20, min: 34, max: 90 },
+            linkDist: 100,
+            linkAlpha: 0.16,
+            linkHeat: 0.12,
+            cursorDist: 170,
+            cursorAlpha: 0.42,
+            speed: [4, 11],
+            radius: [0.7, 1.7],
+            fixed: true,
+        },
+    };
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -44,14 +65,14 @@
         return /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v) ? v : fallback;
     }
 
-    function readPalette() {
+    function readPalette(mode) {
         const style = window.getComputedStyle(document.documentElement);
+        const v = mode.vars;
         return {
-            /* Sobre el header lima los nodos son oscuros; cerca del cursor
-               se funden al negro base. */
-            a: hexToRgb(cssVar(style, '--g1', FALLBACK.g1)),
-            b: hexToRgb(cssVar(style, '--g2', FALLBACK.g2)),
-            hot: hexToRgb(cssVar(style, '--bg', FALLBACK.dark)),
+            a: hexToRgb(cssVar(style, v.a, FALLBACK.g1)),
+            b: hexToRgb(cssVar(style, v.b, FALLBACK.g2)),
+            hot: hexToRgb(cssVar(style, v.hot, v.hot === '--g3' ? FALLBACK.g3 : FALLBACK.bg)),
+            spark: v.spark ? hexToRgb(cssVar(style, v.spark, FALLBACK.g3)) : null,
         };
     }
 
@@ -66,16 +87,11 @@
     const rand = (min, max) => min + Math.random() * (max - min);
 
     /* ── instancia ── */
-    function create(header) {
-        const canvas = document.createElement('canvas');
-        canvas.className = 'ae-nodes';
-        canvas.setAttribute('aria-hidden', 'true');
-        header.prepend(canvas);
-
+    function create(canvas, mode, sizeEl, mouseEl) {
         const ctx = canvas.getContext('2d', { alpha: true });
         if (!ctx) return null;
 
-        const P = readPalette();
+        const P = readPalette(mode);
 
         let W = 1;
         let H = 1;
@@ -88,15 +104,17 @@
         const mouse = { x: -9999, y: -9999, active: false };
 
         function makeNode() {
-            const base = Math.random() < 0.5 ? P.b : P.a;
+            const base = (P.spark && Math.random() < 0.16)
+                ? P.spark
+                : (Math.random() < 0.5 ? P.b : P.a);
             const angle = rand(0, Math.PI * 2);
-            const speed = rand(SPEED_MIN, SPEED_MAX);
+            const speed = rand(mode.speed[0], mode.speed[1]);
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
             return {
                 x: rand(0, W),
                 y: rand(0, H),
-                r: rand(0.8, 1.7),
+                r: rand(mode.radius[0], mode.radius[1]),
                 vx,
                 vy,
                 bvx: vx,
@@ -106,10 +124,15 @@
             };
         }
 
-        function resize() {
-            const rect = header.getBoundingClientRect();
-            W = Math.max(1, Math.round(rect.width));
-            H = Math.max(1, Math.round(rect.height));
+        function size() {
+            if (sizeEl) {
+                const rect = sizeEl.getBoundingClientRect();
+                W = Math.max(1, Math.round(rect.width));
+                H = Math.max(1, Math.round(rect.height));
+            } else {
+                W = Math.max(1, window.innerWidth);
+                H = Math.max(1, window.innerHeight);
+            }
             DPR = Math.min(2.5, window.devicePixelRatio || 1);
 
             canvas.width = Math.round(W * DPR);
@@ -117,7 +140,8 @@
             canvas.style.width = W + 'px';
             canvas.style.height = H + 'px';
 
-            const target = Math.max(NODES_MIN, Math.min(NODES_MAX, Math.round(W / 16)));
+            const c = mode.count;
+            const target = Math.max(c.min, Math.min(c.max, Math.round(W / c.div)));
 
             if (nodes.length > target) {
                 nodes.length = target;
@@ -134,15 +158,17 @@
         }
 
         function step(dt) {
+            const repulse = mode.fixed ? 120 : 110;
+            const force = mode.fixed ? 34 : 46;
             for (const n of nodes) {
                 /* Repulsión suave cerca del cursor, con easing posterior. */
                 if (mouse.active) {
                     const dx = n.x - mouse.x;
                     const dy = n.y - mouse.y;
                     const d = Math.hypot(dx, dy) || 0.0001;
-                    if (d < REPULSE_DIST) {
-                        const f = (1 - d / REPULSE_DIST);
-                        const push = (f * f * REPULSE_FORCE) * dt;
+                    if (d < repulse) {
+                        const f = (1 - d / repulse);
+                        const push = (f * f * force) * dt;
                         n.vx += (dx / d) * push;
                         n.vy += (dy / d) * push;
                     }
@@ -165,17 +191,14 @@
                 let targetHeat = 0;
                 if (mouse.active) {
                     const d = Math.hypot(n.x - mouse.x, n.y - mouse.y);
-                    if (d < REPULSE_DIST + 40) {
-                        targetHeat = Math.max(0, 1 - d / (REPULSE_DIST + 40));
-                    }
+                    if (d < repulse + 40) targetHeat = Math.max(0, 1 - d / (repulse + 40));
                 }
                 n.heat += (targetHeat - n.heat) * Math.min(1, dt * 6);
             }
         }
 
         function nodeColor(n) {
-            const t = Math.min(1, n.heat * 1.3);
-            return mix(n.base, P.hot, t);
+            return mix(n.base, P.hot, Math.min(1, n.heat * 1.3));
         }
 
         function draw() {
@@ -187,21 +210,19 @@
             const links = new Array(nodes.length).fill(0);
             for (let i = 0; i < nodes.length; i++) {
                 const a = nodes[i];
-                if (links[i] >= LINK_MAX_PER_NODE) continue;
+                if (links[i] >= 5) continue;
                 for (let j = i + 1; j < nodes.length; j++) {
-                    if (links[j] >= LINK_MAX_PER_NODE) continue;
+                    if (links[j] >= 5) continue;
                     const b = nodes[j];
                     const dx = a.x - b.x;
                     const dy = a.y - b.y;
                     const d2 = dx * dx + dy * dy;
-                    if (d2 > LINK_DIST * LINK_DIST) continue;
+                    if (d2 > mode.linkDist * mode.linkDist) continue;
                     const d = Math.sqrt(d2);
-                    const alpha = (1 - d / LINK_DIST) * 0.2;
+                    const alpha = (1 - d / mode.linkDist) * mode.linkAlpha;
                     const heat = Math.max(a.heat, b.heat);
-                    const color = heat > 0.35
-                        ? mix(P.b, P.hot, Math.min(1, heat))
-                        : P.b;
-                    ctx.strokeStyle = rgba(color, alpha + heat * 0.14);
+                    const color = heat > 0.35 ? mix(P.b, P.hot, Math.min(1, heat)) : P.b;
+                    ctx.strokeStyle = rgba(color, alpha + heat * mode.linkHeat);
                     ctx.beginPath();
                     ctx.moveTo(a.x, a.y);
                     ctx.lineTo(b.x, b.y);
@@ -211,19 +232,19 @@
                 }
             }
 
-            /* Líneas del cursor a los nodos cercanos (acento, opacidad decreciente). */
+            /* Líneas del cursor a los nodos cercanos (opacidad decreciente). */
             if (mouse.active) {
                 for (const n of nodes) {
                     const d = Math.hypot(n.x - mouse.x, n.y - mouse.y);
-                    if (d >= CURSOR_LINK_DIST) continue;
-                    const alpha = (1 - d / CURSOR_LINK_DIST) * 0.55;
+                    if (d >= mode.cursorDist) continue;
+                    const alpha = (1 - d / mode.cursorDist) * mode.cursorAlpha;
                     ctx.strokeStyle = rgba(P.hot, alpha);
                     ctx.beginPath();
                     ctx.moveTo(mouse.x, mouse.y);
                     ctx.lineTo(n.x, n.y);
                     ctx.stroke();
                 }
-                ctx.fillStyle = rgba(P.hot, 0.55);
+                ctx.fillStyle = rgba(P.hot, mode.cursorAlpha);
                 ctx.beginPath();
                 ctx.arc(mouse.x, mouse.y, 1.6, 0, Math.PI * 2);
                 ctx.fill();
@@ -267,7 +288,7 @@
             raf = null;
         }
 
-        /* ── interacción con el ratón (solo dentro del header) ── */
+        /* ── ratón ── */
         function onMove(e) {
             const rect = canvas.getBoundingClientRect();
             mouse.x = e.clientX - rect.left;
@@ -283,34 +304,54 @@
             if (reducedMotion) draw();
         }
 
-        header.addEventListener('mousemove', onMove, { passive: true });
-        header.addEventListener('mouseleave', onLeave, { passive: true });
+        mouseEl.addEventListener('mousemove', onMove, { passive: true });
+        mouseEl.addEventListener('mouseleave', onLeave, { passive: true });
 
         /* ── tamaño / visibilidad ── */
-        if (typeof ResizeObserver !== 'undefined') {
-            new ResizeObserver(resize).observe(header);
+        if (sizeEl && typeof ResizeObserver !== 'undefined') {
+            new ResizeObserver(size).observe(sizeEl);
+        } else {
+            window.addEventListener('resize', size, { passive: true });
         }
-        window.addEventListener('resize', resize, { passive: true });
 
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) stop();
             else start();
         });
 
-        resize();
+        size();
         if (reducedMotion) draw();
         else start();
 
-        return { resize, stop, start };
+        return { size, stop, start };
+    }
+
+    function initHeader(header) {
+        if (!header || header.querySelector('.ae-nodes')) return;
+        const canvas = document.createElement('canvas');
+        canvas.className = 'ae-nodes';
+        canvas.setAttribute('aria-hidden', 'true');
+        header.prepend(canvas);
+        create(canvas, MODES.header, header, header);
+    }
+
+    function initBg() {
+        if (window.AE_NODES_BG === false) return;
+        if (document.querySelector('.ae-nodes-bg')) return;
+        const canvas = document.createElement('canvas');
+        canvas.className = 'ae-nodes-bg';
+        canvas.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(canvas);
+        create(canvas, MODES.bg, null, document);
     }
 
     function init() {
         const header = document.querySelector('.ae-header');
-        if (!header || header.querySelector('.ae-nodes')) return;
-        create(header);
+        if (header) initHeader(header);
+        initBg();
     }
 
-    /* header.js inyecta el header; nos aseguramos de exista ya o de esperarlo. */
+    /* header.js inyecta el header; aseguramos que exista ya o lo esperamos. */
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

@@ -70,7 +70,7 @@
     transition: border-color .15s;
 }
 
-.v-agent-row:hover { border-color: var(--g3); }
+.v-agent-row:hover { border-color: color-mix(in srgb, var(--txt-2) 55%, transparent); }
 .v-agent-row .name { text-transform: capitalize; }
 .v-agent-row .role { color: var(--dim); font-size: 9px; letter-spacing: 1px; }
 .v-agent-row .pct { text-align: right; color: var(--accent); }
