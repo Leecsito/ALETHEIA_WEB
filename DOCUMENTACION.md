@@ -67,7 +67,7 @@ ALETHEIA/
 │   ├── vct.css               # Design system de los componentes VCT (clases `v-*`)
 │   └── vct.js                # Helpers globales `VCT` (API, formato, filas de partido, tabs)
 ├── partidos/                 # Componente PARTIDOS estilo vlr.gg (lista + detalle)
-│   ├── partidos.py           # Blueprint (/api/partidos, /api/partidos/filtros, /api/partido/<id>)
+│   ├── partidos.py           # Blueprint (/api/partidos, /api/partidos/filtros, /api/partidos/resultados, /api/partido/<id>)
 │   ├── index.html, style.css, script.js
 ├── equipos/                  # Componente EQUIPOS (grid + detalle con roster/tabs)
 │   ├── equipos.py            # Blueprint (/api/equipos, /api/equipo/<id>)
@@ -406,6 +406,7 @@ estas tablas). Endpoints adicionales del proxy:
 ### 4.5. Módulo Partidos (`partidos_bp`) — componente `/partidos/`
 - `GET /api/partidos`: lista paginada estilo vlr.gg. Query: `page`, `limit` (máx 200, def 60), `q` (equipo/sigla/torneo/fase), `torneo` (nombre exacto), `year`, `event_id`, `orden` (`recientes|antiguos`). Cada fila trae equipos con tag/país, `event_id`/`event_name` resueltos y `maps_played`.
 - `GET /api/partidos/filtros`: `torneos` (30, con `event_id`, `n`, fechas) y `years` (2025/2026) para los selects.
+- `GET /api/partidos/resultados?match_ids=753456,753461`: dado un lote de ids (máx 500, separados por comas) responde `{"ok": true, "con_resultado": [...]}` con los que ya tienen **resultado real** (al menos un mapa jugado en `maps`). Lo usa EN VIVO para separar predicciones pendientes de las ya comparables.
 - `GET /api/partido/<match_id>`: detalle completo → `partido` (header), `veto` (ordenado), `maps[]` y, anidado por mapa, `rounds[]` (timeline de rondas), `players[]` (scoreboard agregado de los 2 lados: K/D/A, rating, ACS, KAST, ADR, HS%, FK/FD) y `economy[]` (pistol/eco/semi-eco/semi-buy/full-buy). `404` si no existe.
 
 ### 4.6. Módulo Equipos (`equipos_bp`) — componente `/equipos/`
@@ -491,10 +492,16 @@ estas tablas). Endpoints adicionales del proxy:
        ofrece **"cancelar espera"**. Se usa un favicon inline para evitar el 404 de
        `/favicon.ico`.
    - **`/aletheia/` — EN VIVO (nunca simula):**
-     - Al cargar, `GET /api/aletheia/simulaciones` pinta la lista de preparadas
-       (`EQUIPO_A vs EQUIPO_B · #match_id · N mapas · n_sim · [vigente]`); por
-       defecto solo `vigente:true`, con toggle "mostrar no vigentes" (marcadas
-       "re-preparar").
+      - Al cargar, `GET /api/aletheia/simulaciones` pinta la lista de preparadas
+        (`EQUIPO_A vs EQUIPO_B · #match_id · N mapas · n_sim · [vigente]`); por
+        defecto solo `vigente:true`, con toggle "mostrar no vigentes" (marcadas
+        "re-preparar").
+      - **Filtro por resultado real:** chips `TODAS / SIN RESULTADO / CON
+        RESULTADO` (con conteo) y badge por fila (`PENDIENTE` ámbar / `CON
+        RESULTADO` verde). El estado sale de
+        `GET /api/partidos/resultados?match_ids=...` (DB propia); la elección se
+        recuerda en `localStorage` (`ae_sim_filtro`). Si el endpoint falla, el
+        filtro avisa y no oculta nada (todo cuenta como pendiente).
      - **Gestión por enfrentamiento:** **✎ ID** reasigna el `match_id`
        (`POST /api/aletheia/asociar`; sirve si se preparó sin id) y **🗑 BORRAR**
        elimina el enfrentamiento (`POST /api/aletheia/borrar`; sirve para

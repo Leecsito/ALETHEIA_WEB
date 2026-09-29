@@ -3242,6 +3242,7 @@ main {
 .lb-head {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 14px;
     padding: 12px 20px;
     border-bottom: 1px solid var(--border);
@@ -3263,6 +3264,34 @@ main {
     color: var(--dim);
     letter-spacing: 1px;
     cursor: pointer;
+}
+
+.sim-filter {
+    display: flex;
+    gap: 4px;
+}
+
+.sim-filter-btn {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--dim);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 1px;
+    cursor: pointer;
+    transition: all .15s;
+}
+
+.sim-filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.sim-filter-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(232, 255, 71, .08);
 }
 
 .btn-refresh {
@@ -3311,6 +3340,32 @@ main {
 .sim-item.stale {
     border-color: rgba(251, 146, 60, .5);
     opacity: .8;
+}
+
+.si-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.si-res {
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.si-res.pend {
+    color: var(--orange);
+    border-color: rgba(251, 146, 60, .5);
+}
+
+.si-res.ok {
+    color: var(--green);
+    border-color: rgba(74, 222, 128, .5);
 }
 
 .si-teams {

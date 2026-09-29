@@ -22,6 +22,9 @@ let liveMap = null;        // mapa seleccionado en el panel mapa/bando
 let matchMaps = [];        // [{ map_name, lado_inicial_a }] para la serie
 let maxMapsSel = 3;        // slots del formato (1/3/5)
 let showStale = false;     // mostrar simulaciones no vigentes
+let filtroResultado = 'todas';   // todas | pendiente | resultado
+let simsConResultado = null;     // Set de match_id con resultado real (null = sin dato)
+let resultadosError = null;      // error al leer /api/partidos/resultados (null = ok)
 let serviceModelVersion = null;  // modelo vigente (GET /modelo_version)
 let recalculating = false;       // evita doble RE-PRECALCULAR
 let recalcStopped = false;       // cancelar la espera del job de re-precalculo
@@ -33,11 +36,26 @@ let modelVersionError = null;    // error al leer /modelo_version (null = ok)
 const RECALC_POLL_MS = 2000;
 const RECALC_TIMEOUT_MS = 30 * 60 * 1000;
 
+// Filtro de resultado persistido (si el navegador lo permite).
+const FILTRO_SIMS_KEY = 'ae_sim_filtro';
+try {
+    const filtroGuardado = localStorage.getItem(FILTRO_SIMS_KEY);
+    if (['todas', 'pendiente', 'resultado'].includes(filtroGuardado)) filtroResultado = filtroGuardado;
+} catch (e) { /* sin localStorage: se usa el default */ }
+
 // ─── DOM ──────────────────────────────────────────────────────────────────────
 const simList = document.getElementById('simList');
 const simListStatus = document.getElementById('simListStatus');
 const btnRefreshSims = document.getElementById('btnRefreshSims');
 const chkShowStale = document.getElementById('chkShowStale');
+const simFilter = document.getElementById('simFilter');
+const simFilterBtns = simFilter ? Array.from(simFilter.querySelectorAll('.sim-filter-btn')) : [];
+
+simFilterBtns.forEach(btn => btn.addEventListener('click', () => {
+    filtroResultado = btn.dataset.filtro || 'todas';
+    try { localStorage.setItem(FILTRO_SIMS_KEY, filtroResultado); } catch (e) { /* sin localStorage */ }
+    renderSimList();
+}));
 
 const liveSection = document.getElementById('liveSection');
 const selSimHead = document.getElementById('selSimHead');
@@ -179,12 +197,21 @@ async function loadSimulaciones() {
                 s.vigente = false;
             }
         });
+        await loadResultadosSims();
         renderSimList();
         const vigentes = sims.filter(s => s.vigente !== false).length;
-        simListStatus.className = modelVersionError ? 'live-status warn' : 'live-status ok';
-        simListStatus.textContent = `${vigentes} vigentes · ${sims.length} totales · modelo ${data.modelo_version || '—'}`
+        const pendientes = simsConResultado
+            ? sims.filter(s => s.vigente !== false && tieneResultado(s) === false).length
+            : null;
+        simListStatus.className = (modelVersionError || resultadosError) ? 'live-status warn' : 'live-status ok';
+        simListStatus.textContent = `${vigentes} vigentes · ${sims.length} totales`
+            + (pendientes != null ? ` · ${pendientes} sin resultado` : '')
+            + ` · modelo ${data.modelo_version || '—'}`
             + (modelVersionError
                 ? ` · ⚠ no se pudo leer /modelo_version (${modelVersionError}); vigencia según el servicio`
+                : '')
+            + (resultadosError
+                ? ` · ⚠ filtro por resultado no disponible (${resultadosError})`
                 : '');
     } catch (e) {
         simListStatus.className = 'live-status err';
@@ -192,20 +219,86 @@ async function loadSimulaciones() {
     }
 }
 
+// ¿El partido de la simulación ya tiene resultado real?
+// true = jugado, false = pendiente, null = sin dato (sin id o endpoint caído).
+function tieneResultado(s) {
+    const mid = Number(s && s.match_id) || 0;
+    if (!mid || !simsConResultado) return null;
+    return simsConResultado.has(mid);
+}
+
+// Lee de la DB propia (GET /api/partidos/resultados) qué match_id ya están
+// jugados; así EN VIVO separa las predicciones pendientes de las comparables.
+async function loadResultadosSims() {
+    resultadosError = null;
+    const ids = sims.map(s => Number(s.match_id) || 0).filter(id => id > 0);
+    if (!ids.length) {
+        simsConResultado = new Set();
+        return;
+    }
+    try {
+        const res = await fetch(`${API}/partidos/resultados?match_ids=${ids.join(',')}`);
+        const data = await res.json();
+        if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        simsConResultado = new Set((data.con_resultado || []).map(Number));
+    } catch (e) {
+        simsConResultado = null;
+        resultadosError = e.message || 'servicio no disponible';
+    }
+}
+
+// Refresca los chips del filtro con el conteo de la lista base (la que ya
+// aplica "mostrar no vigentes").
+function actualizarFiltroSims(base) {
+    if (!simFilterBtns.length) return;
+    const cuenta = {
+        todas: base.length,
+        pendiente: base.filter(s => tieneResultado(s) !== true).length,
+        resultado: base.filter(s => tieneResultado(s) === true).length,
+    };
+    simFilterBtns.forEach(btn => {
+        const f = btn.dataset.filtro || 'todas';
+        btn.classList.toggle('active', f === filtroResultado);
+        btn.textContent = `${btn.dataset.label || f.toUpperCase()} (${cuenta[f] || 0})`;
+    });
+}
+
 function renderSimList() {
-    const list = showStale ? sims : sims.filter(s => s.vigente !== false);
+    const base = showStale ? sims : sims.filter(s => s.vigente !== false);
+    const list = base.filter(s => {
+        if (filtroResultado === 'pendiente') return tieneResultado(s) !== true;
+        if (filtroResultado === 'resultado') return tieneResultado(s) === true;
+        return true;
+    });
+    actualizarFiltroSims(base);
     simList.innerHTML = '';
     if (!list.length) {
-        simList.innerHTML = '<div class="live-hint" style="padding:14px">No hay simulaciones preparadas. Ve a <strong>PREPARAR PARTIDO</strong>.</div>';
+        const msg = !base.length
+            ? 'No hay simulaciones preparadas. Ve a <strong>PREPARAR PARTIDO</strong>.'
+            : filtroResultado === 'resultado'
+                ? 'No hay simulaciones con resultado real con este filtro.'
+                : filtroResultado === 'pendiente'
+                    ? 'No hay simulaciones pendientes de resultado con este filtro.'
+                    : 'No hay simulaciones que mostrar.';
+        simList.innerHTML = `<div class="live-hint" style="padding:14px">${msg}</div>`;
         return;
     }
     list.forEach(s => {
         const vigente = s.vigente !== false;
+        const res = tieneResultado(s);
+        const resBadge = res === true
+            ? '<span class="si-res ok" title="Ya jugado: hay resultado real en la DB">CON RESULTADO</span>'
+            : res === false
+                ? '<span class="si-res pend" title="Pendiente: el partido todavía no tiene resultado real">PENDIENTE</span>'
+                : '';
         const item = document.createElement('div');
         item.className = 'sim-item' + (sameSim(current, s) ? ' selected' : '') + (vigente ? '' : ' stale');
         const mid = s.match_id ? `#${s.match_id}` : 'sin id';
         item.innerHTML = `
-      <div class="si-teams">${escapeHtml(s.equipo_a)} <span class="si-vs">vs</span> ${escapeHtml(s.equipo_b)}</div>
+      <div class="si-top">
+        <div class="si-teams">${escapeHtml(s.equipo_a)} <span class="si-vs">vs</span> ${escapeHtml(s.equipo_b)}</div>
+        ${resBadge}
+      </div>
       <div class="si-meta">${mid} · ${s.mapas != null ? s.mapas : '?'} mapas · ${(s.n_sim || 0).toLocaleString()} sims${vigente ? '' : ' · ⚠ re-preparar'}</div>
       <div class="si-actions">
         <button class="si-btn" data-act="id" title="Asignar/corregir el ID de vlr.gg">✎ ID</button>

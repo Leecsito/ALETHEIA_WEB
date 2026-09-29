@@ -1,6 +1,7 @@
 """
 ALETHEIA — Partidos Blueprint
-Rutas: /api/partidos, /api/partidos/filtros, /api/partido/<match_id>
+Rutas: /api/partidos, /api/partidos/filtros, /api/partidos/resultados,
+       /api/partido/<match_id>
 Listado estilo vlr.gg (con evento resuelto y filtros) y detalle completo
 de un partido (veto, mapas, rondas, economía y scoreboard por mapa).
 """
@@ -135,6 +136,35 @@ def filtros_partidos():
             GROUP BY year ORDER BY year DESC
         """)
         return jsonify({"ok": True, "torneos": torneos, "years": years})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ─── RESULTADO REAL (para separar predicciones pendientes de las jugadas) ────
+@partidos_bp.route('/api/partidos/resultados', methods=['GET'])
+def resultados_partidos():
+    """Dado `match_ids` (lista separada por comas) devuelve cuáles ya tienen
+    resultado real en la DB (al menos un mapa jugado). Lo usa EN VIVO para
+    filtrar las simulaciones pendientes de las ya jugadas."""
+    try:
+        crudos = request.args.get('match_ids', '')
+        ids = []
+        for parte in crudos.split(','):
+            parte = parte.strip()
+            if not parte:
+                continue
+            try:
+                n = int(parte)
+            except ValueError:
+                continue
+            if n > 0 and n not in ids:
+                ids.append(n)
+        ids = ids[:500]
+        if not ids:
+            return jsonify({"ok": True, "con_resultado": []})
+        marks = ",".join(["?"] * len(ids))
+        filas = query(f"SELECT DISTINCT match_id FROM maps WHERE match_id IN ({marks})", ids)
+        return jsonify({"ok": True, "con_resultado": [f['match_id'] for f in filas]})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
