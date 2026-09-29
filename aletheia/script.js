@@ -25,6 +25,8 @@ let showStale = false;     // mostrar simulaciones no vigentes
 let filtroResultado = 'todas';   // todas | pendiente | resultado
 let simsConResultado = null;     // Set de match_id con resultado real (null = sin dato)
 let simsInfo = {};               // match_id -> identidad + resumen predicción↔realidad
+let simSerie = {};               // match_id -> {p_a,p_b,p_real} | {error:true} (P de serie)
+let serieQueueRunning = false;   // evita doble cola de POST /serie para la lista
 let resultadosError = null;      // error al leer /api/partidos/resultados (null = ok)
 let serviceModelVersion = null;  // modelo vigente (GET /modelo_version)
 let recalculating = false;       // evita doble RE-PRECALCULAR
@@ -168,6 +170,16 @@ function probBandClass(p) {
     return 'p-baja';
 }
 
+// Escala verde / naranja / rojo para la TASA DE ACIERTO (fracción 0-1):
+// >=2/3 verde, >=1/2 naranja, resto rojo. Es el indicador de calidad, no P(REAL).
+function probAccClass(acc) {
+    if (acc == null || acc === '' || isNaN(Number(acc))) return '';
+    const n = Number(acc);
+    if (n >= 2 / 3) return 'p-alta';
+    if (n >= 0.5) return 'p-media';
+    return 'p-baja';
+}
+
 // Logo + nombre de equipo (usa el core VCT; sin id cae a las siglas/iniciales).
 function teamLogo(name, tag, teamId, cls = '') {
     return `<span class="team-inline">${VCT.lozenge(name, tag, cls, teamId || null)}` +
@@ -208,6 +220,7 @@ async function loadSimulaciones() {
             modelVersionError = null;
         }
         sims = data.simulaciones || [];
+        simSerie = {};
         // Marca no vigentes también por comparación de modelo_version (aunque el
         // backend no lo hubiera marcado), para ofrecer RE-PRECALCULAR.
         sims.forEach(s => {
@@ -284,10 +297,25 @@ function actualizarFiltroSims(base) {
     });
 }
 
+// Píldora de la SERIE: P del motor al ganador real de la serie (verde/naranja/
+// rojo por banda) + ✓/✕ si era su favorito. Se rellena en 2º plano con /serie.
+function seriePillHtml(mid, info) {
+    if (!info || info.score_a == null || info.score_b == null) return '';
+    const s = simSerie[mid];
+    if (s && s.p_real != null) {
+        const marca = Number(s.p_real) >= 0.5 ? '✓' : '✕';
+        const tt = `Serie: P del motor al ganador real = ${pct(s.p_real)} (motor ${pct(s.p_a)} / ${pct(s.p_b)}). ${marca === '✓' ? 'Era su favorito' : 'Upset de serie'}.`;
+        return `<span class="si-pred-pill ${probBandClass(s.p_real)}" data-serie="${mid}" title="${tt}">SERIE ${pct(s.p_real)} ${marca}</span>`;
+    }
+    if (s && s.error) return '';
+    return `<span class="si-pred-pill dim" data-serie="${mid}" title="Calculando P(serie) del motor…">SERIE …</span>`;
+}
+
 // Resumen compacto "predicción (motor) vs realidad" de una fila de la lista.
-// Solo aparece si hay datos del partido; el detalle por mapa queda en los
-// puntos coloreados (verde/naranja/rojo = P que el motor dio al ganador real).
-function simResumenHtml(info, res) {
+// Orden: MOTOR (P por mapa) · REAL (marcador de serie) · SERIE (P del ganador
+// real, color por banda) · MAPAS (acierto del favorito, color por tasa) ·
+// P(MAPA) (calibración media) · puntos por mapa.
+function simResumenHtml(info, res, mid) {
     if (!info) return '';
     const motor = `<span class="si-pred-item" title="P(mapa) del motor para ${escapeHtml(info.team_a || 'A')} / ${escapeHtml(info.team_b || 'B')} (calibrada, misma en todos los mapas)">MOTOR ${pct(info.p_a)}/${pct(info.p_a == null ? null : 1 - info.p_a)}</span>`;
     if (res !== true || info.score_a == null || info.score_b == null) {
@@ -299,14 +327,82 @@ function simResumenHtml(info, res) {
         const p = m.p_ganador != null ? `P(real) ${pct(m.p_ganador)} · ${m.p_ganador >= 0.5 ? 'favorito ✓' : 'upset ✕'}` : 'sin predicción cacheada';
         return `<span class="si-dot ${probBandClass(m.p_ganador)}" title="${escapeHtml(m.map_name || '')}: ${p}"></span>`;
     }).join('');
-    const acc = info.n_mapas ? `${info.favoritos_ok}/${info.n_mapas}` : '—';
+    const n = Number(info.n_mapas) || 0;
+    const acc = n ? (Number(info.favoritos_ok) || 0) / n : null;
     return `<div class="si-pred">
         ${motor}
         <span class="si-pred-item">REAL <b class="${ganaA ? 'gana' : ''}">${info.score_a}</b>-<b class="${ganaB ? 'gana' : ''}">${info.score_b}</b></span>
-        <span class="si-pred-pill ${probBandClass(info.p_real_media)}" title="P(REAL): probabilidad media que el motor dio al ganador real de cada mapa. Verde ≥62% (acierto esperado), naranja ≥55%, rojo <55% (sorpresa/upset).">P(REAL) ${pct(info.p_real_media)}</span>
-        <span class="si-pred-item" title="Mapas en que ganó el favorito del motor">✓ ${acc}</span>
+        ${seriePillHtml(mid, info)}
+        <span class="si-pred-pill ${probAccClass(acc)}" title="ACIERTO del favorito del motor por mapa (${info.favoritos_ok || 0}/${n}). Verde ≥67% · naranja ≥50% · rojo <50%.">MAPAS ${info.favoritos_ok || 0}/${n} (${pct(acc)})</span>
+        <span class="si-pred-item ${probBandClass(info.p_real_media)}" title="P(MAPA): probabilidad media que el motor dio al ganador real de cada mapa (calibración; no es la tasa de acierto).">P(MAPA) ${pct(info.p_real_media)}</span>
         ${dots ? `<span class="si-dots">${dots}</span>` : ''}
       </div>`;
+}
+
+// Mapas para calcular la P de serie: pool del veto (picks + decider, en orden).
+// Es clave pasar el pool completo: con solo los mapas jugados, un bo3 terminado
+// 2-0 le da al endpoint /serie una lista de 2 y devuelve una P incoherente.
+function mapasSerieDe(info) {
+    const nombres = (info && Array.isArray(info.serie_mapas) && info.serie_mapas.length)
+        ? info.serie_mapas
+        : ((info && Array.isArray(info.mapas)) ? info.mapas.map(m => m.map_name) : []);
+    return nombres.filter(Boolean).map(m => ({ map_name: m, lado_inicial_a: 'attack' }));
+}
+
+// Pide en 2º plano la P de serie (POST /serie, desde la caché) para las filas
+// con resultado y va actualizando su píldora, sin bloquear la lista.
+async function cargarSeriesLista() {
+    if (serieQueueRunning) return;
+    serieQueueRunning = true;
+    try {
+        const pendientes = sims.filter(s => tieneResultado(s) === true && s.match_id &&
+            simsInfo[s.match_id] && !simSerie[s.match_id]);
+        const vistos = new Set();
+        for (const s of pendientes.slice(0, 30)) {
+            if (vistos.has(s.match_id)) continue;
+            vistos.add(s.match_id);
+            const info = simsInfo[s.match_id];
+            const mapas = mapasSerieDe(info);
+            if (!mapas.length) {
+                simSerie[s.match_id] = { error: true };
+                continue;
+            }
+            simSerie[s.match_id] = { cargando: true };
+            try {
+                const res = await proxyFetch('/serie', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        match_id: s.match_id || 0,
+                        equipo_a: s.equipo_a,
+                        equipo_b: s.equipo_b,
+                        mapas,
+                    }),
+                });
+                const d = await res.json();
+                if (!d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+                const ganaA = Number(info.score_a) > Number(info.score_b);
+                const pA = Number(d.prob_serie_a), pB = Number(d.prob_serie_b);
+                simSerie[s.match_id] = { p_a: pA, p_b: pB, p_real: ganaA ? pA : pB };
+            } catch (e) {
+                simSerie[s.match_id] = { error: true };
+            }
+            actualizarSeriesLista();
+        }
+    } finally {
+        serieQueueRunning = false;
+    }
+}
+
+// Refresca en sitio las píldoras SERIE ya pintadas (sin re-render de la lista).
+function actualizarSeriesLista() {
+    document.querySelectorAll('[data-serie]').forEach(el => {
+        const mid = Number(el.dataset.serie);
+        const info = simsInfo[mid];
+        const html = seriePillHtml(mid, info);
+        if (!html) { el.remove(); return; }
+        el.outerHTML = html;
+    });
 }
 
 function renderSimList() {
@@ -353,7 +449,7 @@ function renderSimList() {
         ${resBadge}
       </div>
       <div class="si-meta">${mid} · ${s.mapas != null ? s.mapas : '?'} mapas · ${(s.n_sim || 0).toLocaleString()} sims${vigente ? '' : ' · ⚠ re-preparar'}</div>
-      ${simResumenHtml(info, res)}
+      ${simResumenHtml(info, res, s.match_id)}
       <div class="si-actions">
         <button class="si-btn" data-act="id" title="Asignar/corregir el ID de vlr.gg">✎ ID</button>
         <button class="si-btn danger" data-act="del" title="Borrar estas predicciones">🗑 BORRAR</button>
@@ -364,6 +460,7 @@ function renderSimList() {
         simList.appendChild(item);
     });
     VCT.aplicarMedia(simList);
+    cargarSeriesLista();
 }
 
 // Asigna/corrige el match_id (id de vlr.gg) de un enfrentamiento ya preparado.
@@ -472,7 +569,7 @@ function renderSimHead(s, needsRepre) {
       ${teamLogo(bName, info && info.team_b_tag, info && info.team_b_id, 'md')}
     </div>
     <div class="ss-head-meta">${s.match_id ? 'PARTIDO #' + s.match_id : 'sin id'} · ${s.n_sim ? Number(s.n_sim).toLocaleString() + ' sims' : ''} · modelo ${s.modelo_version || '—'}${needsRepre ? ` · <span style="color:var(--orange)">⚠ RE-PRECALCULAR${motivos.length ? ' (' + motivos.join(', ') + ')' : ''}</span>` : ''}</div>
-    ${res === true ? simResumenHtml(info, true) : ''}
+    ${res === true ? simResumenHtml(info, true, s.match_id) : ''}
     <div class="ss-head-actions">
       <button class="btn-nav" id="btnReprecalcular"${needsRepre ? '' : ' style="display:none"'}>↻ RE-PRECALCULAR</button>
     </div>`;
@@ -1433,7 +1530,7 @@ function renderComparison(data) {
     const r = data.resumen || {};
     const cards = [
         { label: 'N', val: r.n },
-        { label: 'ACCURACY', val: fmtRatio(r.accuracy) },
+        { label: 'ACCURACY', val: fmtRatio(r.accuracy), cls: probAccClass(r.accuracy) },
         { label: 'BRIER', val: fmtNum(r.brier) },
         { label: 'LOG-LOSS', val: fmtNum(r.log_loss) },
         { label: 'FAVORITOS OK', val: r.favoritos_ok },
@@ -1443,7 +1540,7 @@ function renderComparison(data) {
     cmpSummary.innerHTML = cards.map(c => `
     <div class="cmp-card">
       <div class="cmp-card-label">${c.label}</div>
-      <div class="cmp-card-val">${c.val == null ? '—' : c.val}</div>
+      <div class="cmp-card-val ${c.cls || ''}">${c.val == null ? '—' : c.val}</div>
     </div>`).join('');
 
     const tipoClass = t => t === 'favorito_gano' ? 'cmp-fav' : t === 'upset' ? 'cmp-upset' : 'cmp-unc';
@@ -1512,6 +1609,8 @@ async function fetchSerieReal(detalle) {
     const nombreA = (filas[0] && filas[0].equipo_a) || current.equipo_a;
     const nombreB = (filas[0] && filas[0].equipo_b) || current.equipo_b;
     const marcadorReal = `<b class="${ganaA ? 'gana' : ''}">${winA}</b>-<b class="${ganaA ? '' : 'gana'}">${winB}</b>`;
+    // P de serie: mejor con el pool del veto (evita el bug de listas de 2 mapas).
+    const mapasSerie = mapasSerieDe(info);
 
     const render = extra => {
         cmpSerie.innerHTML = `
@@ -1530,7 +1629,9 @@ async function fetchSerieReal(detalle) {
                 match_id: current.match_id || 0,
                 equipo_a: current.equipo_a,
                 equipo_b: current.equipo_b,
-                mapas: filas.map(d => ({ map_name: d.map_name, lado_inicial_a: d.lado_inicial_a })),
+                mapas: mapasSerie.length
+                    ? mapasSerie
+                    : filas.map(d => ({ map_name: d.map_name, lado_inicial_a: d.lado_inicial_a })),
             }),
         });
         const s = await res.json();
@@ -1574,7 +1675,7 @@ function renderScorecard(data) {
     const sinCruces = r.cruce_mae == null;
     const cards = [
         { label: 'N MAPAS', val: r.n_mapas },
-        { label: 'MAP ACCURACY', val: fmtRatio(r.map_accuracy) },
+        { label: 'MAP ACCURACY', val: fmtRatio(r.map_accuracy), cls: probAccClass(r.map_accuracy) },
         { label: 'MAP BRIER', val: fmtNum(r.map_brier) },
         { label: 'OT BRIER', val: fmtNum(r.ot_brier) },
         { label: 'MARCADOR TOP-1', val: fmtRatio(r.scoreline_top1_hit) },
@@ -1601,7 +1702,7 @@ function renderScorecard(data) {
     <div class="scorecard-title">SCORECARD · MICRO-EVENTOS
       <span class="eco-note">predicho vs real · MAE menor = mejor (0-1)${sinCruces ? ' · sin datos de cruces (cruces=1)' : ''}</span></div>
     <div class="cmp-summary scorecard-cards">${cards.map(c =>
-        `<div class="cmp-card"><div class="cmp-card-label">${c.label}</div><div class="cmp-card-val">${c.val == null ? '—' : c.val}</div></div>`).join('')}</div>
+        `<div class="cmp-card"><div class="cmp-card-label">${c.label}</div><div class="cmp-card-val ${c.cls || ''}">${c.val == null ? '—' : c.val}</div></div>`).join('')}</div>
     <div class="cmp-table-wrap"><table class="cmp-table">
         <thead><tr><th>MAPA</th><th>MARCADOR</th><th>P(A)</th><th>GANÓ</th><th>OT ≥50% (PRED/REAL)</th><th>P(MARCADOR REAL)</th><th>ECO MAE</th><th>CRUCE MAE</th></tr></thead>
         <tbody>${rows}</tbody>
@@ -1642,7 +1743,7 @@ function renderScorecardAgregado(data) {
     const cards = [
         { label: 'PARTIDOS', val: r.n_partidos != null ? r.n_partidos : r.n },
         { label: 'MAPAS', val: r.n_mapas },
-        { label: 'MAP ACCURACY', val: fmtRatio(r.map_accuracy) },
+        { label: 'MAP ACCURACY', val: fmtRatio(r.map_accuracy), cls: probAccClass(r.map_accuracy) },
         { label: 'MAP BRIER', val: fmtNum(r.map_brier) },
         { label: 'OT BRIER', val: fmtNum(r.ot_brier) },
         { label: 'ECO MAE', val: r.eco_mae == null ? '—' : `${fmtNum(r.eco_mae)} (n=${r.eco_n})` },
@@ -1661,7 +1762,7 @@ function renderScorecardAgregado(data) {
     <div class="scorecard-title">SCORECARD AGREGADO
       <span class="eco-note">predicho vs real, sumando partidos · MAE menor = mejor${sinCruces ? ' · sin datos de cruces (cruces=1)' : ''}</span></div>
     <div class="cmp-summary scorecard-cards">${cards.map(c =>
-        `<div class="cmp-card"><div class="cmp-card-label">${c.label}</div><div class="cmp-card-val">${c.val == null ? '—' : c.val}</div></div>`).join('')}</div>
+        `<div class="cmp-card"><div class="cmp-card-label">${c.label}</div><div class="cmp-card-val ${c.cls || ''}">${c.val == null ? '—' : c.val}</div></div>`).join('')}</div>
     ${tabla('POR CATEGORÍA', data.por_categoria)}
     ${tabla('POR CRUCE DE COMPRA', data.por_cruce)}`;
 }

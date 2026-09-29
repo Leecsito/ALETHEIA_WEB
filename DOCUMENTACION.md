@@ -406,7 +406,7 @@ estas tablas). Endpoints adicionales del proxy:
 ### 4.5. Módulo Partidos (`partidos_bp`) — componente `/partidos/`
 - `GET /api/partidos`: lista paginada estilo vlr.gg. Query: `page`, `limit` (máx 200, def 60), `q` (equipo/sigla/torneo/fase), `torneo` (nombre exacto), `year`, `event_id`, `orden` (`recientes|antiguos`). Cada fila trae equipos con tag/país, `event_id`/`event_name` resueltos y `maps_played`.
 - `GET /api/partidos/filtros`: `torneos` (30, con `event_id`, `n`, fechas) y `years` (2025/2026) para los selects.
-- `GET /api/partidos/resultados?match_ids=753456,753461`: dado un lote de ids (máx 500, separados por comas) responde `{"ok": true, "con_resultado": [...]}` con los que ya tienen **resultado real** (al menos un mapa jugado en `maps`). Lo usa EN VIVO para separar predicciones pendientes de las ya comparables. Además devuelve `partidos` (por `match_id`, en la orientación de la predicción: `team_a`/`team_b` = `equipo_a`/`equipo_b` del motor) con la identidad de los equipos (ids/tags para los logos), el marcador real de la serie, `p_a` (P del motor por mapa) y el resumen **predicción vs realidad**: `p_real_media` (P media que el motor dio a los ganadores reales), `favoritos_ok`/`n_mapas` y `mapas[]` (`map_name`, `gano_a`, `p_ganador`). Funciona también para simulaciones **sin resultado** (solo identidad + `p_a`, leídas de `predicciones_mapa`); si las tablas del servicio no existen (DB local vieja) se degrada a solo identidad/resultado.
+- `GET /api/partidos/resultados?match_ids=753456,753461`: dado un lote de ids (máx 500, separados por comas) responde `{"ok": true, "con_resultado": [...]}` con los que ya tienen **resultado real** (al menos un mapa jugado en `maps`). Lo usa EN VIVO para separar predicciones pendientes de las ya comparables. Además devuelve `partidos` (por `match_id`, en la orientación de la predicción: `team_a`/`team_b` = `equipo_a`/`equipo_b` del motor) con la identidad de los equipos (ids/tags para los logos), el marcador real de la serie, `p_a` (P del motor por mapa) y el resumen **predicción vs realidad**: `p_real_media` (P media que el motor dio a los ganadores reales), `favoritos_ok`/`n_mapas`, `mapas[]` (`map_name`, `gano_a`, `p_ganador`) y `serie_mapas` (pool del veto en orden: picks + decider; es la lista correcta para `POST /serie` — con solo los mapas jugados, un bo3 terminado 2-0 le da al servicio una lista de 2 y devuelve una P incoherente). Funciona también para simulaciones **sin resultado** (solo identidad + `p_a`, leídas de `predicciones_mapa`); si las tablas del servicio no existen (DB local vieja) se degrada a solo identidad/resultado.
 - `GET /api/partido/<match_id>`: detalle completo → `partido` (header), `veto` (ordenado), `maps[]` y, anidado por mapa, `rounds[]` (timeline de rondas), `players[]` (scoreboard agregado de los 2 lados: K/D/A, rating, ACS, KAST, ADR, HS%, FK/FD) y `economy[]` (pistol/eco/semi-eco/semi-buy/full-buy). `404` si no existe.
 
 ### 4.6. Módulo Equipos (`equipos_bp`) — componente `/equipos/`
@@ -510,12 +510,20 @@ estas tablas). Endpoints adicionales del proxy:
         partido no tiene id/identidad resuelta, cae a las siglas (sin imagen
         rota).
       - **Escala verde/naranja/rojo (predicción vs realidad):** por enfrentamiento
-        con resultado real, la fila muestra `MOTOR p(A)/p(B)` (P del motor por
-        mapa), el marcador real `x-y` (ganador resaltado) y una pastilla
-        `P(REAL)` (P media que el motor dio al ganador real de cada mapa) con
-        **verde ≥62% (acierto esperado), naranja ≥55%, rojo <55% (upset/sorpresa)**
-        y puntos coloreados por mapa (`title` = mapa + P real + favorito/upset).
-        Los `match_id` sin resultado muestran solo `MOTOR p(A)/p(B)`.
+        con resultado real, la fila muestra, en este orden: `MOTOR p(A)/p(B)` (P
+        del motor por mapa), el marcador real `x-y` (ganador resaltado), la
+        píldora **`SERIE P%` + ✓/✕** (P del motor al ganador real de la serie,
+        calculada en 2º plano con `POST /serie` usando `serie_mapas`; **verde
+        ≥62%, naranja ≥55%, rojo <55%**), la píldora **`MAPAS x/y (%)`**
+        (acierto del favorito por mapa: **verde ≥67%, naranja ≥50%, rojo <50%**),
+        `P(MAPA)` (P media al ganador real por mapa, color por banda; es
+        calibración, **no** la tasa de acierto) y puntos coloreados por mapa
+        (`title` = mapa + P real + favorito/upset). Las series se piden una vez
+        por `match_id` (cola secuencial en memoria, máx 30) y la píldora se
+        actualiza en sitio. Los `match_id` sin resultado muestran solo
+        `MOTOR p(A)/p(B)`. El acento está en el **acierto** (✓/✕ y `MAPAS`): en
+        Valorant la P del motor ronda 50-60% incluso acertando, así que `P(MAPA)`
+        y `SERIE` bajos no implican mal motor.
      - **Gestión por enfrentamiento:** **✎ ID** reasigna el `match_id`
        (`POST /api/aletheia/asociar`; sirve si se preparó sin id) y **🗑 BORRAR**
        elimina el enfrentamiento (`POST /api/aletheia/borrar`; sirve para
@@ -582,15 +590,17 @@ estas tablas). Endpoints adicionales del proxy:
        refresca la lista y vuelve a leer la caché.
       - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra
         tarjetas resumen (accuracy, brier, log-loss, favoritos_ok, upsets,
-        inciertos) y una tabla de detalle coloreada por fila (verde = favorito
+        inciertos) — `ACCURACY` con la escala verde/naranja/rojo (≥67/≥50/<50) —
+        y una tabla de detalle coloreada por fila (verde = favorito
         ganó, rojo = upset, ámbar = incierto) con columnas `MARCADOR` (rondas
         reales del mapa) y `P(REAL)` = P que el motor dio al ganador real del
         mapa, con la **escala verde (≥62%) / naranja (≥55%) / rojo (<55%)** y su
         leyenda; si el partido no está en la DB: "sin resultado real todavía".
         Sobre la tabla, el banner **SERIE · PREDICHO VS REAL** (`POST
-        /api/aletheia/serie` con los mapas reales del detalle) muestra la P de
-        serie del motor para ambos equipos, el marcador real `x-y` y `P(REAL)`
-        coloreada (✓ favorito / ✕ upset). Debajo se agrega el **SCORECARD**
+        /api/aletheia/serie` con el **pool del veto**, `serie_mapas`) muestra la
+        P de serie del motor para ambos equipos, el marcador real `x-y` y
+        `P(REAL)` coloreada (✓ favorito / ✕ upset). Debajo se agrega el
+        **SCORECARD**
         (`GET /api/aletheia/scorecard`): tarjetas de micro-eventos (MAP
         ACCURACY/BRIER, OT BRIER, MARCADOR TOP-1, ECO MAE, CRUCE MAE) y una
         tabla por mapa con marcador real, `P(A)`, ganador, OT (pred/real),

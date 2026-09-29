@@ -3284,6 +3284,11 @@ main {
     white-space: nowrap;
 }
 
+.si-pred-pill.dim {
+    color: var(--dim);
+    opacity: .75;
+}
+
 .si-pred-pill.p-alta,
 .cmp-serie-pill.p-alta {
     color: var(--green);

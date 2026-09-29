@@ -225,6 +225,25 @@ def resultados_partidos():
             except Exception:
                 mapas = {}
 
+        # Pool completo del veto (picks + decider, en orden): es la lista que se
+        # usa para calcular la P de serie. Pasar solo los mapas jugados rompe el
+        # caso bo3 terminado 2-0 (el endpoint /serie necesita los 3 del pool).
+        serie_mapas = {}
+        if con_resultado:
+            marcas_res = ",".join(["?"] * len(con_resultado))
+            try:
+                for v in query(
+                        f"SELECT match_id, map_name, veto_order, action FROM match_veto "
+                        f"WHERE match_id IN ({marcas_res}) ORDER BY veto_order", con_resultado):
+                    accion = str(v.get('action') or '').strip().lower()
+                    mapa = (v.get('map_name') or '').strip()
+                    if mapa and accion in ('pick', 'decider'):
+                        lista = serie_mapas.setdefault(v['match_id'], [])
+                        if mapa not in lista:
+                            lista.append(mapa)
+            except Exception:
+                serie_mapas = {}
+
         # Tags de equipos (la tabla `teams` es la fuente de verdad).
         tags = {}
         ids_equipo = set()
@@ -301,6 +320,7 @@ def resultados_partidos():
                 'favoritos_ok': favoritos_ok,
                 'n_mapas': len(detalle_mapas),
                 'mapas': detalle_mapas,
+                'serie_mapas': serie_mapas.get(mid) or [m.get('map_name') for m in mapas.get(mid, []) if m.get('map_name')],
             }
         return jsonify({"ok": True, "con_resultado": con_resultado, "partidos": partidos})
     except Exception as e:
