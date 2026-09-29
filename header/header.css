@@ -22,9 +22,9 @@
     height: 56px;
     overflow: hidden;
     isolation: isolate;
-    border-bottom: 1px solid var(--border);
-    background: color-mix(in srgb, var(--bg) 96%, transparent);
-    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--g1);
+    background: linear-gradient(180deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 78%, var(--g3)) 100%);
+    color: var(--bg);
     font-family: var(--mono);
 }
 
@@ -52,14 +52,14 @@
     font-family: var(--display);
     font-size: 24px;
     letter-spacing: 4px;
-    color: var(--txt-1);
+    color: var(--bg);
     text-decoration: none;
     white-space: nowrap;
     transition: color .2s, opacity .2s;
 }
 
 .ae-logo:hover {
-    color: var(--accent);
+    color: var(--g1);
 }
 
 .ae-logo-img {
@@ -67,23 +67,22 @@
     height: 28px;
     object-fit: contain;
     flex-shrink: 0;
-    /* El SVG es negro: se tiñe al acento lima de la paleta. */
-    filter: brightness(0) invert(1) sepia(1) saturate(7) hue-rotate(14deg) brightness(1.02);
+    /* El SVG es negro: sobre el header lima se ve directo. */
+    filter: brightness(0);
     transition: filter .2s, transform .2s;
 }
 
 .ae-logo:hover .ae-logo-img {
-    filter: brightness(0) invert(1) sepia(1) saturate(7) hue-rotate(14deg) brightness(1.1)
-        drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 45%, transparent));
+    filter: brightness(0) drop-shadow(0 0 6px color-mix(in srgb, var(--bg) 30%, transparent));
     transform: translateY(-1px);
 }
 
 .ae-logo-a {
-    color: var(--accent);
+    color: var(--g1);
 }
 
 .ae-logo:hover .ae-logo-a {
-    color: var(--txt-1);
+    color: var(--bg);
 }
 
 /* ── NAV ── */
@@ -99,7 +98,7 @@
     font-family: var(--display);
     font-size: 18px;
     letter-spacing: 3px;
-    color: var(--txt-1);
+    color: color-mix(in srgb, var(--bg) 88%, var(--g1));
     display: flex;
     align-items: center;
     gap: 10px;
@@ -110,17 +109,17 @@
     font-family: var(--mono);
     font-size: 10px;
     letter-spacing: 2px;
-    color: var(--accent);
-    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
-    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    color: var(--bg);
+    border: 1px solid color-mix(in srgb, var(--bg) 45%, transparent);
+    background: color-mix(in srgb, var(--txt-1) 30%, transparent);
     padding: 2px 8px;
 }
 
 .ae-btn {
     padding: 5px 14px;
-    border: 1px solid var(--border);
-    color: var(--txt-2);
-    background: transparent;
+    border: 1px solid color-mix(in srgb, var(--bg) 40%, transparent);
+    color: color-mix(in srgb, var(--bg) 78%, transparent);
+    background: color-mix(in srgb, var(--txt-1) 10%, transparent);
     text-decoration: none;
     font-family: inherit;
     font-size: 11px;
@@ -131,13 +130,13 @@
 }
 
 .ae-btn:hover {
-    border-color: var(--g3);
-    color: var(--txt-1);
-    background: color-mix(in srgb, var(--g1) 25%, transparent);
+    border-color: var(--bg);
+    color: var(--bg);
+    background: color-mix(in srgb, var(--txt-1) 35%, transparent);
 }
 
 .ae-btn:focus-visible {
-    outline: 2px solid var(--accent);
+    outline: 2px solid var(--bg);
     outline-offset: 2px;
 }
 
@@ -146,10 +145,10 @@
 }
 
 .ae-btn.active {
-    border-color: var(--accent);
+    border-color: var(--bg);
     color: var(--accent);
-    background: color-mix(in srgb, var(--accent) 8%, transparent);
-    box-shadow: 0 0 14px color-mix(in srgb, var(--accent) 12%, transparent);
+    background: var(--bg);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--bg) 35%, transparent);
 }
 
 /* Título de página que se coloca justo debajo del header. */

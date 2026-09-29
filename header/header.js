@@ -58,7 +58,8 @@
 
         let html = `
             <a href="${base}aletheia/" class="ae-logo" aria-label="ALETHEIA — Inicio">
-                <img class="ae-logo-img" src="${base}ALETHEIA_ico.svg" alt="" width="28" height="28" />
+                <img class="ae-logo-img" src="${base}comun/ALETHEIA_ico.svg" alt="" width="28" height="28"
+                    onerror="this.remove()" />
                 <span class="ae-logo-word"><span class="ae-logo-a">A</span>LETHEIA</span>
             </a>
             <nav class="ae-nav">`;

@@ -5,21 +5,20 @@
  *     <script src="../header/header.js"></script>
  *     <script src="../header/header-nodes.js"></script>
  *
- * Dibuja detrás del contenido del header una red técnica de nodos que se
- * mueven despacio y rebotan en los bordes. Los nodos cercanos al cursor
- * reaccionan con repulsión suave (con easing) y se conectan a él con líneas
- * en acento. Sin librerías. Los colores salen de las variables de
+ * Dibuja detrás del contenido del header (lima) una red técnica de nodos
+ * oscuros que se mueven despacio y rebotan en los bordes. Los nodos cercanos
+ * al cursor reaccionan con repulsión suave (con easing) y se conectan a él
+ * con líneas oscuras. Sin librerías. Los colores salen de las variables de
  * comun/theme.css (con la paleta como respaldo).
  */
 (function () {
     'use strict';
 
-    /* Paleta de respaldo (la misma que comun/theme.css) */
+    /* Respaldo (el header es lima: los nodos van en tonos oscuros) */
     const FALLBACK = {
+        dark: '#0A0A0C',
         g1: '#4C5C2D',
         g2: '#788428',
-        g3: '#B0C138',
-        accent: '#E8FF47',
     };
 
     const NODES_MIN = 40;
@@ -48,10 +47,11 @@
     function readPalette() {
         const style = window.getComputedStyle(document.documentElement);
         return {
-            dark: hexToRgb(cssVar(style, '--g1', FALLBACK.g1)),
-            mid: hexToRgb(cssVar(style, '--g2', FALLBACK.g2)),
-            near: hexToRgb(cssVar(style, '--g3', FALLBACK.g3)),
-            hot: hexToRgb(cssVar(style, '--accent', FALLBACK.accent)),
+            /* Sobre el header lima los nodos son oscuros; cerca del cursor
+               se funden al negro base. */
+            a: hexToRgb(cssVar(style, '--g1', FALLBACK.g1)),
+            b: hexToRgb(cssVar(style, '--g2', FALLBACK.g2)),
+            hot: hexToRgb(cssVar(style, '--bg', FALLBACK.dark)),
         };
     }
 
@@ -88,7 +88,7 @@
         const mouse = { x: -9999, y: -9999, active: false };
 
         function makeNode() {
-            const base = Math.random() < 0.5 ? P.mid : P.dark;
+            const base = Math.random() < 0.5 ? P.b : P.a;
             const angle = rand(0, Math.PI * 2);
             const speed = rand(SPEED_MIN, SPEED_MAX);
             const vx = Math.cos(angle) * speed;
@@ -174,9 +174,8 @@
         }
 
         function nodeColor(n) {
-            const near = Math.min(1, n.heat * 1.5);
-            const hot = Math.max(0, Math.min(1, (n.heat - 0.6) / 0.4));
-            return mix(mix(n.base, P.near, near), P.hot, hot * 0.85);
+            const t = Math.min(1, n.heat * 1.3);
+            return mix(n.base, P.hot, t);
         }
 
         function draw() {
@@ -197,12 +196,12 @@
                     const d2 = dx * dx + dy * dy;
                     if (d2 > LINK_DIST * LINK_DIST) continue;
                     const d = Math.sqrt(d2);
-                    const alpha = (1 - d / LINK_DIST) * 0.22;
+                    const alpha = (1 - d / LINK_DIST) * 0.2;
                     const heat = Math.max(a.heat, b.heat);
                     const color = heat > 0.35
-                        ? mix(P.mid, P.near, Math.min(1, heat))
-                        : P.mid;
-                    ctx.strokeStyle = rgba(color, alpha + heat * 0.12);
+                        ? mix(P.b, P.hot, Math.min(1, heat))
+                        : P.b;
+                    ctx.strokeStyle = rgba(color, alpha + heat * 0.14);
                     ctx.beginPath();
                     ctx.moveTo(a.x, a.y);
                     ctx.lineTo(b.x, b.y);
@@ -217,7 +216,7 @@
                 for (const n of nodes) {
                     const d = Math.hypot(n.x - mouse.x, n.y - mouse.y);
                     if (d >= CURSOR_LINK_DIST) continue;
-                    const alpha = (1 - d / CURSOR_LINK_DIST) * 0.5;
+                    const alpha = (1 - d / CURSOR_LINK_DIST) * 0.55;
                     ctx.strokeStyle = rgba(P.hot, alpha);
                     ctx.beginPath();
                     ctx.moveTo(mouse.x, mouse.y);

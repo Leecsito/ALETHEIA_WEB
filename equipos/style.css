@@ -31,7 +31,7 @@
 
 .v-team-hero .v-record { text-align: right; margin-left: auto; }
 
-#vistaDetalle .v-banner { border-left: 3px solid var(--accent); }
+#vistaDetalle .v-banner { border-left: 3px solid var(--c, var(--accent)); }
 
 .v-roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 2px; }
 
