@@ -184,7 +184,7 @@ Por eso los **blueprints de lectura** (`partidos`, `equipos`, `jugadores`, `even
 
 ### 4.1. Módulo CARGAR DATOS / ETL (`inicio_bp`)
 - `POST /api/init-db`: Crea las tablas de la base de datos si no existen y ejecuta migraciones.
-- `POST /api/etl`: Recibe archivos Excel (`vct_partidos`, `vlr_mapas`, `vlr_rondas`, etc.) y procesa la inserción masiva. Responde `202` con un `job_id`; el ETL corre en segundo plano. Archivos globales: `vct_equipos`, `vct_jugadores`, `vct_transacciones`, `vct_stats_agentes`.
+- `POST /api/etl`: Recibe archivos Excel (`vct_partidos`, `vlr_mapas`, `vlr_rondas`, etc.) y procesa la inserción masiva. Responde `202` con un `job_id`; el ETL corre en segundo plano. Archivos globales: `vct_equipos`, `vct_jugadores`, `vct_transacciones`, `vct_stats_agentes`. Para cargar un torneo se requiere `vct_partidos`; los archivos globales **pueden subirse solos** (sin torneo): el ETL ejecuta solo las etapas cuyos Excel están presentes (útil p. ej. para actualizar solo `vct_transacciones`).
 - `POST /api/etl-batch`: Recibe múltiples archivos con su ruta relativa (subida de carpetas por torneo) y ejecuta el ETL de cada torneo. Responde `202` con `job_id`.
 - `GET /api/etl-status/<job_id>`: Consulta el estado de un ETL asíncrono (`status`, `step`, `progress`, `inserted`, `error`).
 - `GET /api/status`: Retorna el conteo de filas de cada una de las 10 tablas.
@@ -406,7 +406,7 @@ estas tablas). Endpoints adicionales del proxy:
 ### 4.5. Módulo Partidos (`partidos_bp`) — componente `/partidos/`
 - `GET /api/partidos`: lista paginada estilo vlr.gg. Query: `page`, `limit` (máx 200, def 60), `q` (equipo/sigla/torneo/fase), `torneo` (nombre exacto), `year`, `event_id`, `orden` (`recientes|antiguos`). Cada fila trae equipos con tag/país, `event_id`/`event_name` resueltos y `maps_played`.
 - `GET /api/partidos/filtros`: `torneos` (30, con `event_id`, `n`, fechas) y `years` (2025/2026) para los selects.
-- `GET /api/partidos/resultados?match_ids=753456,753461`: dado un lote de ids (máx 500, separados por comas) responde `{"ok": true, "con_resultado": [...]}` con los que ya tienen **resultado real** (al menos un mapa jugado en `maps`). Lo usa EN VIVO para separar predicciones pendientes de las ya comparables.
+- `GET /api/partidos/resultados?match_ids=753456,753461`: dado un lote de ids (máx 500, separados por comas) responde `{"ok": true, "con_resultado": [...]}` con los que ya tienen **resultado real** (al menos un mapa jugado en `maps`). Lo usa EN VIVO para separar predicciones pendientes de las ya comparables. Además devuelve `partidos` (por `match_id`, en la orientación de la predicción: `team_a`/`team_b` = `equipo_a`/`equipo_b` del motor) con la identidad de los equipos (ids/tags para los logos), el marcador real de la serie, `p_a` (P del motor por mapa) y el resumen **predicción vs realidad**: `p_real_media` (P media que el motor dio a los ganadores reales), `favoritos_ok`/`n_mapas` y `mapas[]` (`map_name`, `gano_a`, `p_ganador`). Funciona también para simulaciones **sin resultado** (solo identidad + `p_a`, leídas de `predicciones_mapa`); si las tablas del servicio no existen (DB local vieja) se degrada a solo identidad/resultado.
 - `GET /api/partido/<match_id>`: detalle completo → `partido` (header), `veto` (ordenado), `maps[]` y, anidado por mapa, `rounds[]` (timeline de rondas), `players[]` (scoreboard agregado de los 2 lados: K/D/A, rating, ACS, KAST, ADR, HS%, FK/FD) y `economy[]` (pistol/eco/semi-eco/semi-buy/full-buy). `404` si no existe.
 
 ### 4.6. Módulo Equipos (`equipos_bp`) — componente `/equipos/`
@@ -498,10 +498,24 @@ estas tablas). Endpoints adicionales del proxy:
         "re-preparar").
       - **Filtro por resultado real:** chips `TODAS / SIN RESULTADO / CON
         RESULTADO` (con conteo) y badge por fila (`PENDIENTE` ámbar / `CON
-        RESULTADO` verde). El estado sale de
+        RESULTADO` verde). El estado y la identidad de los equipos (ids/tags) y
+        el resumen predicción↔realidad salen de
         `GET /api/partidos/resultados?match_ids=...` (DB propia); la elección se
         recuerda en `localStorage` (`ae_sim_filtro`). Si el endpoint falla, el
         filtro avisa y no oculta nada (todo cuenta como pendiente).
+      - **Logos e identidad:** la página carga el core `comun/` (`vct.css` +
+        `vct.js`) y pinta **logo + nombre** de cada equipo con `VCT.lozenge` en
+        la lista y en la cabecera del enfrentamiento seleccionado
+        (`VCT.aplicarMedia` apunta las imágenes al CDN/`/api/media/...`). Si el
+        partido no tiene id/identidad resuelta, cae a las siglas (sin imagen
+        rota).
+      - **Escala verde/naranja/rojo (predicción vs realidad):** por enfrentamiento
+        con resultado real, la fila muestra `MOTOR p(A)/p(B)` (P del motor por
+        mapa), el marcador real `x-y` (ganador resaltado) y una pastilla
+        `P(REAL)` (P media que el motor dio al ganador real de cada mapa) con
+        **verde ≥62% (acierto esperado), naranja ≥55%, rojo <55% (upset/sorpresa)**
+        y puntos coloreados por mapa (`title` = mapa + P real + favorito/upset).
+        Los `match_id` sin resultado muestran solo `MOTOR p(A)/p(B)`.
      - **Gestión por enfrentamiento:** **✎ ID** reasigna el `match_id`
        (`POST /api/aletheia/asociar`; sirve si se preparó sin id) y **🗑 BORRAR**
        elimina el enfrentamiento (`POST /api/aletheia/borrar`; sirve para
@@ -566,14 +580,21 @@ estas tablas). Endpoints adicionales del proxy:
        que hace `POST /api/precalcular` con `forzar:true` **directo a
        `PREDICT_DIRECTO`** (async: `job_id` + polling de `/api/precalcular/estado`),
        refresca la lista y vuelve a leer la caché.
-      - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra tarjetas resumen
-        (accuracy, brier, log-loss, favoritos_ok, upsets, inciertos) y una tabla de
-        detalle coloreada (verde = favorito ganó, rojo = upset, ámbar = incierto);
-        si el partido no está en la DB: "sin resultado real todavía". Debajo se
-        agrega el **SCORECARD** (`GET /api/aletheia/scorecard`): tarjetas de
-        micro-eventos (MAP ACCURACY/BRIER, OT BRIER, MARCADOR TOP-1, ECO MAE,
-        CRUCE MAE) y una tabla por mapa con marcador real, `P(A)`, ganador, OT
-        (pred/real), probabilidad del marcador real y MAE de economía/cruces.
+      - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra
+        tarjetas resumen (accuracy, brier, log-loss, favoritos_ok, upsets,
+        inciertos) y una tabla de detalle coloreada por fila (verde = favorito
+        ganó, rojo = upset, ámbar = incierto) con columnas `MARCADOR` (rondas
+        reales del mapa) y `P(REAL)` = P que el motor dio al ganador real del
+        mapa, con la **escala verde (≥62%) / naranja (≥55%) / rojo (<55%)** y su
+        leyenda; si el partido no está en la DB: "sin resultado real todavía".
+        Sobre la tabla, el banner **SERIE · PREDICHO VS REAL** (`POST
+        /api/aletheia/serie` con los mapas reales del detalle) muestra la P de
+        serie del motor para ambos equipos, el marcador real `x-y` y `P(REAL)`
+        coloreada (✓ favorito / ✕ upset). Debajo se agrega el **SCORECARD**
+        (`GET /api/aletheia/scorecard`): tarjetas de micro-eventos (MAP
+        ACCURACY/BRIER, OT BRIER, MARCADOR TOP-1, ECO MAE, CRUCE MAE) y una
+        tabla por mapa con marcador real, `P(A)`, ganador, OT (pred/real),
+        probabilidad del marcador real y MAE de economía/cruces.
         Además, botones **SCORECARD AGREGADO** (`GET /api/aletheia/scorecard_agregado`:
         suma todos los partidos → tablas `por_categoria` y `por_cruce` con
         pred/real/MAE) y **EXPORTAR DATASET** (`GET /api/aletheia/dataset?guardar=1`:

@@ -11,6 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
         rel="stylesheet" />
     <link rel="stylesheet" href="../header/header.css" />
+    <link rel="stylesheet" href="../comun/vct.css" />
     <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -110,6 +111,7 @@
 
             <!-- Tab: comparación (predicho vs. real) -->
             <div class="live-panel" id="panelComparacion" style="display:none">
+                <div class="cmp-serie-wrap" id="cmpSerie"></div>
                 <div class="cmp-summary" id="cmpSummary"></div>
                 <div class="cmp-table-wrap" id="cmpTableWrap"></div>
                 <div class="live-status" id="cmpStatus"></div>
@@ -127,6 +129,7 @@
 
     <script>window.AE_HEADER = { title: 'EN VIVO', badge: 'PREDICTOR' };</script>
     <script src="../header/header.js"></script>
+    <script src="../comun/vct.js"></script>
     <script src="script.js"></script>
 </body>
 

@@ -1002,11 +1002,14 @@ def _process_etl(raw_files, job=None):
                     team_names[tid] = ss(r.get('team_name'))
 
         # Fallback: equipos referenciados por partidos y jugadores (garantiza FKs)
-        for _, r in files['vct_partidos'].iterrows():
-            for id_col, name_col in (('equipo_a_id','equipo_a'), ('equipo_b_id','equipo_b')):
-                tid = ii(r.get(id_col))
-                if tid is not None and tid not in team_names:
-                    team_names[tid] = ss(r.get(name_col))
+        # vct_partidos es opcional: sin él se cargan solo los archivos globales.
+        df_partidos = files.get('vct_partidos')
+        if df_partidos is not None:
+            for _, r in df_partidos.iterrows():
+                for id_col, name_col in (('equipo_a_id','equipo_a'), ('equipo_b_id','equipo_b')):
+                    tid = ii(r.get(id_col))
+                    if tid is not None and tid not in team_names:
+                        team_names[tid] = ss(r.get(name_col))
         if 'vct_jugadores' in files:
             for _, r in files['vct_jugadores'].iterrows():
                 tid = ii(r.get('team_id'))
@@ -1089,8 +1092,9 @@ def _process_etl(raw_files, job=None):
 
         # match_id -> (team_a_id, team_b_id) para picker_id / veto / etc.
         match_teams = {}
-        for _, r in files['vct_partidos'].iterrows():
-            match_teams[int(r['match_id'])] = (ii(r.get('equipo_a_id')), ii(r.get('equipo_b_id')))
+        if df_partidos is not None:
+            for _, r in df_partidos.iterrows():
+                match_teams[int(r['match_id'])] = (ii(r.get('equipo_a_id')), ii(r.get('equipo_b_id')))
 
         # map_id -> match_id para resolver team_top_id/team_bot_id en rounds.
         map_to_match = {}
@@ -1139,7 +1143,7 @@ def _process_etl(raw_files, job=None):
 
         # Crear partidos huérfanos (mínimos) para no romper FKs ni perder datos
         if huerfanos:
-            torneo = ss(files['vct_partidos']['torneo'].iloc[0]) if len(files['vct_partidos']) else None
+            torneo = ss(df_partidos['torneo'].iloc[0]) if df_partidos is not None and len(df_partidos) else None
             exec_batch(cur,
                 "INSERT OR IGNORE INTO matches (match_id,tournament) VALUES ",
                 [(mid, torneo) for mid in huerfanos], 2)
@@ -1147,8 +1151,9 @@ def _process_etl(raw_files, job=None):
                 match_teams.setdefault(mid, (None, None))
 
         # ── 3) RESTO DE TABLAS ──
-        _job_set(job, step='partidos')
-        results['matches'] = etl_matches(files['vct_partidos'], cur)
+        if df_partidos is not None:
+            _job_set(job, step='partidos')
+            results['matches'] = etl_matches(df_partidos, cur)
 
         # Enlazar los torneos de los partidos con `events` (tras insertarlos).
         results['tournament_aliases'] = autocreate_tournament_aliases(cur)
@@ -1194,8 +1199,10 @@ def _process_etl(raw_files, job=None):
 
 @inicio_bp.route('/api/etl', methods=['POST'])
 def run_etl():
-    # Solo vct_partidos es obligatorio (es la "espina dorsal" de match_id)
-    # El resto son opcionales — útil para torneos con datos incompletos (ej. China)
+    # vct_partidos es la "espina dorsal" de match_id para cargar torneos, pero
+    # los archivos globales (vct_equipos, vct_jugadores, vct_transacciones,
+    # vct_stats_agentes, stats por evento) pueden subirse solos: el ETL ejecuta
+    # únicamente las etapas cuyos Excel están presentes.
     all_files = [
         'vct_partidos', 'vlr_mapas', 'vlr_rondas', 'vlr_economia_rondas',
         'vlr_stats_players_sides', 'vlr_economia_resumen',
@@ -1204,8 +1211,13 @@ def run_etl():
         'vct_evento_map_stats', 'vct_evento_agent_pickrate'
     ]
 
-    if not request.files.get('vct_partidos'):
-        return jsonify({"ok": False, "error": "vct_partidos.xlsx es obligatorio."}), 400
+    GLOBALES = ('vct_equipos', 'vct_jugadores', 'vct_transacciones',
+                'vct_stats_agentes', 'vct_evento_map_stats', 'vct_evento_agent_pickrate')
+    recibidos = [n for n in all_files if request.files.get(n)]
+    if not recibidos:
+        return jsonify({"ok": False, "error": "Subí al menos un Excel (.xlsx)."}), 400
+    if not request.files.get('vct_partidos') and any(n not in GLOBALES for n in recibidos):
+        return jsonify({"ok": False, "error": "Sin vct_partidos.xlsx solo se pueden subir los archivos globales."}), 400
 
     # Leer bytes (rápido) y delegar el parseo + ETL al hilo en segundo plano,
     # para que la petición HTTP nunca supere el timeout del worker.

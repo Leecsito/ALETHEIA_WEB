@@ -3210,6 +3210,252 @@ main {
     color: var(--orange);
 }
 
+/* ── ESCALA VERDE / NARANJA / ROJO (predicción vs realidad) ── */
+.p-alta {
+    color: var(--green);
+}
+
+.p-media {
+    color: var(--orange);
+}
+
+.p-baja {
+    color: var(--red);
+}
+
+/* Equipo con logo inline (listas y cabecera de EN VIVO) */
+.team-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    vertical-align: middle;
+    min-width: 0;
+}
+
+.team-inline-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sim-item .v-lozenge {
+    width: 34px;
+    height: 34px;
+    font-size: 10px;
+}
+
+.si-teams {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+/* Resumen compacto "motor vs realidad" en la lista y la cabecera */
+.si-pred {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 8px;
+    padding-top: 7px;
+    border-top: 1px dashed var(--border);
+    font-size: 9px;
+    letter-spacing: .5px;
+}
+
+.si-pred-item {
+    color: var(--dim);
+    white-space: nowrap;
+}
+
+.si-pred-item b {
+    color: var(--dim);
+    font-weight: 500;
+}
+
+.si-pred-item b.gana {
+    color: var(--text);
+}
+
+.si-pred-pill {
+    padding: 1px 6px;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.si-pred-pill.p-alta,
+.cmp-serie-pill.p-alta {
+    color: var(--green);
+    border-color: rgba(74, 222, 128, .5);
+    background: rgba(74, 222, 128, .07);
+}
+
+.si-pred-pill.p-media,
+.cmp-serie-pill.p-media {
+    color: var(--orange);
+    border-color: rgba(251, 146, 60, .5);
+    background: rgba(251, 146, 60, .07);
+}
+
+.si-pred-pill.p-baja,
+.cmp-serie-pill.p-baja {
+    color: var(--red);
+    border-color: rgba(255, 71, 87, .5);
+    background: rgba(255, 71, 87, .07);
+}
+
+.si-dots {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: auto;
+}
+
+.si-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--dim);
+    display: inline-block;
+}
+
+.si-dot.p-alta {
+    background: var(--green);
+}
+
+.si-dot.p-media {
+    background: var(--orange);
+}
+
+.si-dot.p-baja {
+    background: var(--red);
+}
+
+.ss-head-pred {
+    max-width: 680px;
+}
+
+.ss-head-pred .si-pred {
+    margin-top: 9px;
+}
+
+/* Comparación: marcador real, P(real) y leyenda de la escala */
+.cmp-score b {
+    color: var(--dim);
+    font-weight: 500;
+}
+
+.cmp-score b.gana {
+    color: var(--text);
+}
+
+.cmp-preal {
+    font-weight: 500;
+}
+
+.cmp-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-top: 10px;
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 1px;
+}
+
+.cmp-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.legend-dot.p-alta {
+    background: var(--green);
+}
+
+.legend-dot.p-media {
+    background: var(--orange);
+}
+
+.legend-dot.p-baja {
+    background: var(--red);
+}
+
+.legend-line {
+    width: 3px;
+    height: 12px;
+    display: inline-block;
+}
+
+.legend-line.cmp-fav {
+    background: var(--green);
+}
+
+.legend-line.cmp-upset {
+    background: var(--red);
+}
+
+.legend-line.cmp-unc {
+    background: var(--orange);
+}
+
+/* Banner de serie: predicho vs real */
+.cmp-serie {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    background: var(--surface2);
+    font-size: 10px;
+    letter-spacing: 1px;
+}
+
+.cmp-serie-title {
+    font-family: var(--display);
+    font-size: 15px;
+    letter-spacing: 2px;
+    color: var(--dim);
+}
+
+.cmp-serie-item {
+    color: var(--text);
+    white-space: nowrap;
+}
+
+.cmp-serie-item b {
+    color: var(--dim);
+    font-weight: 500;
+}
+
+.cmp-serie-item b.gana {
+    color: var(--accent);
+}
+
+.cmp-serie-pill {
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+}
+
+.cmp-serie-cargando {
+    color: var(--dim);
+}
+
+.cmp-serie-err {
+    color: var(--orange);
+}
+
 .pm-fuente {
     font-family: var(--mono);
     font-size: 8px;

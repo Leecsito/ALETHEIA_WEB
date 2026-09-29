@@ -141,11 +141,29 @@ def filtros_partidos():
 
 
 # ─── RESULTADO REAL (para separar predicciones pendientes de las jugadas) ────
+def _total_score(ataque, defensa):
+    """Suma las rondas de un lado del mapa; None si la fila no trae marcador."""
+    try:
+        return int(ataque) + int(defensa)
+    except (TypeError, ValueError):
+        return None
+
+
 @partidos_bp.route('/api/partidos/resultados', methods=['GET'])
 def resultados_partidos():
     """Dado `match_ids` (lista separada por comas) devuelve cuáles ya tienen
     resultado real en la DB (al menos un mapa jugado). Lo usa EN VIVO para
-    filtrar las simulaciones pendientes de las ya jugadas."""
+    filtrar las simulaciones pendientes de las ya jugadas.
+
+    Además devuelve `partidos` (por match_id) con la identidad de los equipos
+    (ids/tags para los logos) y un resumen **predicción vs realidad** en la
+    orientación de la predicción (`equipo_a`/`equipo_b` del motor): marcador
+    real de la serie, P del motor por mapa (`p_a`), P media que el motor dio a
+    los ganadores reales (`p_real_media`) y aciertos del favorito
+    (`favoritos_ok`/`n_mapas`), más el detalle por mapa (`mapas[]`). Si las
+    tablas del servicio ALETHEIA_PREDICT no existen (DB local vieja) se degrada
+    a solo la identidad y el resultado real.
+    """
     try:
         crudos = request.args.get('match_ids', '')
         ids = []
@@ -161,10 +179,130 @@ def resultados_partidos():
                 ids.append(n)
         ids = ids[:500]
         if not ids:
-            return jsonify({"ok": True, "con_resultado": []})
+            return jsonify({"ok": True, "con_resultado": [], "partidos": {}})
         marks = ",".join(["?"] * len(ids))
         filas = query(f"SELECT DISTINCT match_id FROM maps WHERE match_id IN ({marks})", ids)
-        return jsonify({"ok": True, "con_resultado": [f['match_id'] for f in filas]})
+        con_resultado = [f['match_id'] for f in filas]
+
+        # Predicciones del motor para cualquier id (aunque no tenga resultado):
+        # dan la identidad (nombres/ids) y la P por mapa (constante en el partido).
+        preds = {}
+        try:
+            filas_pred = query(
+                f"SELECT match_id, equipo_a, equipo_b, equipo_a_id, equipo_b_id, prob_victoria_a "
+                f"FROM predicciones_mapa WHERE match_id IN ({marks})", ids)
+            for r in filas_pred:
+                p = preds.setdefault(r['match_id'], {
+                    'nombre_a': r.get('equipo_a'), 'nombre_b': r.get('equipo_b'),
+                    'a_id': r.get('equipo_a_id'), 'b_id': r.get('equipo_b_id'), 'p_a': None,
+                })
+                p['nombre_a'] = p['nombre_a'] or r.get('equipo_a')
+                p['nombre_b'] = p['nombre_b'] or r.get('equipo_b')
+                p['a_id'] = p['a_id'] or r.get('equipo_a_id')
+                p['b_id'] = p['b_id'] or r.get('equipo_b_id')
+                if p['p_a'] is None:
+                    p['p_a'] = r.get('prob_victoria_a')
+        except Exception:
+            preds = {}
+
+        # Info real de los partidos jugados (equipos, marcador de serie).
+        info = {}
+        if con_resultado:
+            marcas_res = ",".join(["?"] * len(con_resultado))
+            for p in query(MATCH_SELECT + f" WHERE v.match_id IN ({marcas_res})", con_resultado):
+                info[p['match_id']] = p
+
+        # Mapas reales (marcador por mapa) para medir la predicción mapa a mapa.
+        mapas = {}
+        if con_resultado:
+            marcas_res = ",".join(["?"] * len(con_resultado))
+            try:
+                for m in query(
+                        f"SELECT match_id, map_name, map_number, "
+                        f"score_a_attack, score_a_defense, score_b_attack, score_b_defense "
+                        f"FROM maps WHERE match_id IN ({marcas_res}) ORDER BY map_number", con_resultado):
+                    mapas.setdefault(m['match_id'], []).append(m)
+            except Exception:
+                mapas = {}
+
+        # Tags de equipos (la tabla `teams` es la fuente de verdad).
+        tags = {}
+        ids_equipo = set()
+        for p in list(info.values()) + list(preds.values()):
+            for k in ('team_a_id', 'team_b_id', 'a_id', 'b_id'):
+                if p.get(k):
+                    ids_equipo.add(p[k])
+        if ids_equipo:
+            lista_ids = sorted(ids_equipo)
+            marcas_teams = ",".join(["?"] * len(lista_ids))
+            try:
+                for t in query(f"SELECT team_id, tag FROM teams WHERE team_id IN ({marcas_teams})", lista_ids):
+                    tags[t['team_id']] = t['tag']
+            except Exception:
+                tags = {}
+
+        partidos = {}
+        for mid in ids:
+            pr = preds.get(mid) or {}
+            pa = info.get(mid) or {}
+            a_id = pr.get('a_id') or pa.get('team_a_id')
+            b_id = pr.get('b_id') or pa.get('team_b_id')
+            if not (a_id or b_id or pa):
+                continue
+            # ¿La "equipo_a" de la predicción es la team_a de `matches`?
+            # (si no hay ids, se intenta por nombre; sin datos, no se invierte).
+            if pr.get('a_id') and pa.get('team_a_id'):
+                mismo_lado = pr['a_id'] == pa['team_a_id']
+            elif pr.get('nombre_a') and pa.get('team_a'):
+                mismo_lado = pr['nombre_a'].strip().lower() == pa['team_a'].strip().lower()
+            else:
+                mismo_lado = True
+
+            # Normalizar a la orientación de la predicción (equipo_a del motor).
+            if mismo_lado:
+                nombre_a = pa.get('team_a')
+                nombre_b = pa.get('team_b')
+                score_a, score_b = pa.get('score_a'), pa.get('score_b')
+            else:
+                nombre_a = pa.get('team_b')
+                nombre_b = pa.get('team_a')
+                score_a, score_b = pa.get('score_b'), pa.get('score_a')
+            nombre_a = pr.get('nombre_a') or nombre_a
+            nombre_b = pr.get('nombre_b') or nombre_b
+            p_a = pr.get('p_a')
+
+            detalle_mapas, p_reales, favoritos_ok = [], [], 0
+            for m in mapas.get(mid, []):
+                sa = _total_score(m.get('score_a_attack'), m.get('score_a_defense'))
+                sb = _total_score(m.get('score_b_attack'), m.get('score_b_defense'))
+                if sa is None or sb is None or sa == sb:
+                    continue
+                gano_a = (sa > sb) if mismo_lado else (sb > sa)
+                fila = {'map_name': m.get('map_name'), 'gano_a': 1 if gano_a else 0}
+                if p_a is not None:
+                    p_ganador = p_a if gano_a else 1 - p_a
+                    fila['p_ganador'] = round(p_ganador, 4)
+                    p_reales.append(p_ganador)
+                    if p_ganador >= 0.5:
+                        favoritos_ok += 1
+                detalle_mapas.append(fila)
+
+            partidos[str(mid)] = {
+                'match_id': mid,
+                'team_a_id': a_id, 'team_b_id': b_id,
+                'team_a': nombre_a, 'team_b': nombre_b,
+                'team_a_tag': tags.get(a_id) if a_id else None,
+                'team_b_tag': tags.get(b_id) if b_id else None,
+                'score_a': score_a, 'score_b': score_b,
+                'winner_id': pa.get('winner_id'),
+                'match_date': pa.get('match_date'),
+                'p_a': round(p_a, 4) if p_a is not None else None,
+                'p_real_media': round(sum(p_reales) / len(p_reales), 4) if p_reales else None,
+                'favoritos_ok': favoritos_ok,
+                'n_mapas': len(detalle_mapas),
+                'mapas': detalle_mapas,
+            }
+        return jsonify({"ok": True, "con_resultado": con_resultado, "partidos": partidos})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 

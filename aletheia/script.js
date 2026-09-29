@@ -24,6 +24,7 @@ let maxMapsSel = 3;        // slots del formato (1/3/5)
 let showStale = false;     // mostrar simulaciones no vigentes
 let filtroResultado = 'todas';   // todas | pendiente | resultado
 let simsConResultado = null;     // Set de match_id con resultado real (null = sin dato)
+let simsInfo = {};               // match_id -> identidad + resumen predicción↔realidad
 let resultadosError = null;      // error al leer /api/partidos/resultados (null = ok)
 let serviceModelVersion = null;  // modelo vigente (GET /modelo_version)
 let recalculating = false;       // evita doble RE-PRECALCULAR
@@ -77,6 +78,7 @@ const serieNote = document.getElementById('serieNote');
 const mbFormat = document.getElementById('mbFormat');
 
 const panelComparacion = document.getElementById('panelComparacion');
+const cmpSerie = document.getElementById('cmpSerie');
 const cmpSummary = document.getElementById('cmpSummary');
 const cmpTableWrap = document.getElementById('cmpTableWrap');
 const cmpStatus = document.getElementById('cmpStatus');
@@ -154,6 +156,22 @@ function confBand(p) {
 function confBadge(conf) {
     if (!conf) return '';
     return `<span class="conf-badge ${conf}"><span class="conf-dot"></span>${escapeHtml(conf)}</span>`;
+}
+
+// Escala verde / naranja / rojo para la probabilidad del resultado real
+// (misma banda conservadora del motor: >=0.62 alta, >=0.55 media, resto baja).
+function probBandClass(p) {
+    if (p == null || p === '' || isNaN(Number(p))) return '';
+    const n = Number(p);
+    if (n >= 0.62) return 'p-alta';
+    if (n >= 0.55) return 'p-media';
+    return 'p-baja';
+}
+
+// Logo + nombre de equipo (usa el core VCT; sin id cae a las siglas/iniciales).
+function teamLogo(name, tag, teamId, cls = '') {
+    return `<span class="team-inline">${VCT.lozenge(name, tag, cls, teamId || null)}` +
+        `<span class="team-inline-name">${escapeHtml(name || '—')}</span></span>`;
 }
 
 // ─── MAPAS (proxy) ────────────────────────────────────────────────────────────
@@ -234,6 +252,7 @@ async function loadResultadosSims() {
     const ids = sims.map(s => Number(s.match_id) || 0).filter(id => id > 0);
     if (!ids.length) {
         simsConResultado = new Set();
+        simsInfo = {};
         return;
     }
     try {
@@ -241,8 +260,10 @@ async function loadResultadosSims() {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
         simsConResultado = new Set((data.con_resultado || []).map(Number));
+        simsInfo = (data.partidos && typeof data.partidos === 'object') ? data.partidos : {};
     } catch (e) {
         simsConResultado = null;
+        simsInfo = {};
         resultadosError = e.message || 'servicio no disponible';
     }
 }
@@ -261,6 +282,31 @@ function actualizarFiltroSims(base) {
         btn.classList.toggle('active', f === filtroResultado);
         btn.textContent = `${btn.dataset.label || f.toUpperCase()} (${cuenta[f] || 0})`;
     });
+}
+
+// Resumen compacto "predicción (motor) vs realidad" de una fila de la lista.
+// Solo aparece si hay datos del partido; el detalle por mapa queda en los
+// puntos coloreados (verde/naranja/rojo = P que el motor dio al ganador real).
+function simResumenHtml(info, res) {
+    if (!info) return '';
+    const motor = `<span class="si-pred-item" title="P(mapa) del motor para ${escapeHtml(info.team_a || 'A')} / ${escapeHtml(info.team_b || 'B')} (calibrada, misma en todos los mapas)">MOTOR ${pct(info.p_a)}/${pct(info.p_a == null ? null : 1 - info.p_a)}</span>`;
+    if (res !== true || info.score_a == null || info.score_b == null) {
+        return `<div class="si-pred">${motor}</div>`;
+    }
+    const ganaA = Number(info.score_a) > Number(info.score_b);
+    const ganaB = Number(info.score_b) > Number(info.score_a);
+    const dots = (info.mapas || []).map(m => {
+        const p = m.p_ganador != null ? `P(real) ${pct(m.p_ganador)} · ${m.p_ganador >= 0.5 ? 'favorito ✓' : 'upset ✕'}` : 'sin predicción cacheada';
+        return `<span class="si-dot ${probBandClass(m.p_ganador)}" title="${escapeHtml(m.map_name || '')}: ${p}"></span>`;
+    }).join('');
+    const acc = info.n_mapas ? `${info.favoritos_ok}/${info.n_mapas}` : '—';
+    return `<div class="si-pred">
+        ${motor}
+        <span class="si-pred-item">REAL <b class="${ganaA ? 'gana' : ''}">${info.score_a}</b>-<b class="${ganaB ? 'gana' : ''}">${info.score_b}</b></span>
+        <span class="si-pred-pill ${probBandClass(info.p_real_media)}" title="P(REAL): probabilidad media que el motor dio al ganador real de cada mapa. Verde ≥62% (acierto esperado), naranja ≥55%, rojo <55% (sorpresa/upset).">P(REAL) ${pct(info.p_real_media)}</span>
+        <span class="si-pred-item" title="Mapas en que ganó el favorito del motor">✓ ${acc}</span>
+        ${dots ? `<span class="si-dots">${dots}</span>` : ''}
+      </div>`;
 }
 
 function renderSimList() {
@@ -286,6 +332,7 @@ function renderSimList() {
     list.forEach(s => {
         const vigente = s.vigente !== false;
         const res = tieneResultado(s);
+        const info = simsInfo[s.match_id] || null;
         const resBadge = res === true
             ? '<span class="si-res ok" title="Ya jugado: hay resultado real en la DB">CON RESULTADO</span>'
             : res === false
@@ -294,12 +341,19 @@ function renderSimList() {
         const item = document.createElement('div');
         item.className = 'sim-item' + (sameSim(current, s) ? ' selected' : '') + (vigente ? '' : ' stale');
         const mid = s.match_id ? `#${s.match_id}` : 'sin id';
+        const aName = (info && info.team_a) || s.equipo_a;
+        const bName = (info && info.team_b) || s.equipo_b;
         item.innerHTML = `
       <div class="si-top">
-        <div class="si-teams">${escapeHtml(s.equipo_a)} <span class="si-vs">vs</span> ${escapeHtml(s.equipo_b)}</div>
+        <div class="si-teams">
+          ${teamLogo(aName, info && info.team_a_tag, info && info.team_a_id)}
+          <span class="si-vs">VS</span>
+          ${teamLogo(bName, info && info.team_b_tag, info && info.team_b_id)}
+        </div>
         ${resBadge}
       </div>
       <div class="si-meta">${mid} · ${s.mapas != null ? s.mapas : '?'} mapas · ${(s.n_sim || 0).toLocaleString()} sims${vigente ? '' : ' · ⚠ re-preparar'}</div>
+      ${simResumenHtml(info, res)}
       <div class="si-actions">
         <button class="si-btn" data-act="id" title="Asignar/corregir el ID de vlr.gg">✎ ID</button>
         <button class="si-btn danger" data-act="del" title="Borrar estas predicciones">🗑 BORRAR</button>
@@ -309,6 +363,7 @@ function renderSimList() {
         item.querySelector('[data-act="del"]').addEventListener('click', e => { e.stopPropagation(); borrarSim(s); });
         simList.appendChild(item);
     });
+    VCT.aplicarMedia(simList);
 }
 
 // Asigna/corrige el match_id (id de vlr.gg) de un enfrentamiento ya preparado.
@@ -406,14 +461,24 @@ function renderSimHead(s, needsRepre) {
     if (staleModel) motivos.push('modelo cambió');
     if (falta.marcadores) motivos.push('sin marcadores');
     if (falta.economia) motivos.push('sin economía');
+    const info = simsInfo[s.match_id] || null;
+    const res = tieneResultado(s);
+    const aName = (info && info.team_a) || s.equipo_a;
+    const bName = (info && info.team_b) || s.equipo_b;
     selSimHead.innerHTML = `
-    <div class="ss-head-teams">${escapeHtml(s.equipo_a)} <span class="si-vs">vs</span> ${escapeHtml(s.equipo_b)}</div>
+    <div class="ss-head-teams">
+      ${teamLogo(aName, info && info.team_a_tag, info && info.team_a_id, 'md')}
+      <span class="si-vs">VS</span>
+      ${teamLogo(bName, info && info.team_b_tag, info && info.team_b_id, 'md')}
+    </div>
     <div class="ss-head-meta">${s.match_id ? 'PARTIDO #' + s.match_id : 'sin id'} · ${s.n_sim ? Number(s.n_sim).toLocaleString() + ' sims' : ''} · modelo ${s.modelo_version || '—'}${needsRepre ? ` · <span style="color:var(--orange)">⚠ RE-PRECALCULAR${motivos.length ? ' (' + motivos.join(', ') + ')' : ''}</span>` : ''}</div>
+    ${res === true ? simResumenHtml(info, true) : ''}
     <div class="ss-head-actions">
       <button class="btn-nav" id="btnReprecalcular"${needsRepre ? '' : ' style="display:none"'}>↻ RE-PRECALCULAR</button>
     </div>`;
     const btnRepre = document.getElementById('btnReprecalcular');
     if (btnRepre) btnRepre.addEventListener('click', () => reprecalcular(s));
+    VCT.aplicarMedia(selSimHead);
 }
 
 // ─── SELECCIÓN DE SIMULACIÓN ──────────────────────────────────────────────────
@@ -1337,6 +1402,7 @@ async function fetchComparacion() {
     cmpStatus.textContent = 'Consultando comparación...';
     cmpSummary.innerHTML = '';
     cmpTableWrap.innerHTML = '';
+    if (cmpSerie) cmpSerie.innerHTML = '';
 
     const params = new URLSearchParams();
     if (current.match_id > 0) {
@@ -1356,6 +1422,7 @@ async function fetchComparacion() {
             return;
         }
         renderComparison(data);
+        fetchSerieReal(data.detalle);
     } catch (e) {
         cmpStatus.className = 'live-status err';
         cmpStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
@@ -1384,6 +1451,7 @@ function renderComparison(data) {
 
     const rows = (data.detalle || []).map(d => {
         const ganador = d.gano_a_real ? (d.equipo_a || 'A') : (d.equipo_b || 'B');
+        const pReal = d.gano_a_real ? d.prob_victoria_a : d.prob_victoria_b;
         return `
       <tr class="cmp-row ${tipoClass(d.tipo)}">
         <td>${escapeHtml(d.map_name)}</td>
@@ -1391,7 +1459,9 @@ function renderComparison(data) {
         <td class="cmp-a">${pct(d.prob_victoria_a)}</td>
         <td class="cmp-b">${pct(d.prob_victoria_b)}</td>
         <td>${pct(d.prob_overtime)}</td>
+        <td class="cmp-score"><b class="${d.gano_a_real ? 'gana' : ''}">${d.score_a}</b>-<b class="${d.gano_a_real ? '' : 'gana'}">${d.score_b}</b></td>
         <td>${escapeHtml(ganador)}</td>
+        <td class="cmp-preal ${probBandClass(pReal)}" title="Probabilidad que el motor dio al ganador real de este mapa">${pct(pReal)}</td>
         <td>${tipoLabel(d.tipo)}</td>
         <td>${d.resultado === 'acierto' ? '✓' : '✕'} ${escapeHtml(d.resultado)}</td>
       </tr>`;
@@ -1402,14 +1472,77 @@ function renderComparison(data) {
       <thead>
         <tr>
           <th>MAPA</th><th>LADO</th><th>P(A)</th><th>P(B)</th><th>OT</th>
-          <th>GANÓ (REAL)</th><th>TIPO</th><th>RESULTADO</th>
+          <th>MARCADOR</th><th>GANÓ (REAL)</th><th>P(REAL)</th><th>TIPO</th><th>RESULTADO</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table>
+    <div class="cmp-legend">
+      <span class="cmp-legend-item"><span class="legend-dot p-alta"></span>P(REAL) ≥62%: acierto esperado</span>
+      <span class="cmp-legend-item"><span class="legend-dot p-media"></span>≥55%: ajustado</span>
+      <span class="cmp-legend-item"><span class="legend-dot p-baja"></span>&lt;55%: sorpresa/upset</span>
+      <span class="cmp-legend-item"><span class="legend-line cmp-fav"></span>favorito ganó</span>
+      <span class="cmp-legend-item"><span class="legend-line cmp-upset"></span>upset</span>
+      <span class="cmp-legend-item"><span class="legend-line cmp-unc"></span>incierto</span>
+    </div>`;
 
     cmpStatus.className = 'live-status ok';
     cmpStatus.textContent = `✓ comparación con modelo ${data.modelo_version || '—'}`;
+}
+
+// Banner de la serie: probabilidad predicha (POST /serie, desde la caché) vs
+// resultado real (marcador de mapas del detalle de comparación).
+async function fetchSerieReal(detalle) {
+    if (!cmpSerie) return;
+    cmpSerie.innerHTML = '';
+    const filas = (detalle || []).slice();
+    if (!current || !filas.length) return;
+
+    // Orden real de mapas (si el resumen de la lista lo trae) para armar la serie.
+    const info = simsInfo[current.match_id] || null;
+    if (info && Array.isArray(info.mapas) && info.mapas.length) {
+        const orden = new Map(info.mapas.map((m, i) => [m.map_name, i]));
+        filas.sort((a, b) => (orden.has(a.map_name) ? orden.get(a.map_name) : 99) -
+            (orden.has(b.map_name) ? orden.get(b.map_name) : 99));
+    }
+    let winA = 0, winB = 0;
+    filas.forEach(d => { if (d.gano_a_real) winA++; else winB++; });
+    if (winA === winB) return;
+    const ganaA = winA > winB;
+    const nombreA = (filas[0] && filas[0].equipo_a) || current.equipo_a;
+    const nombreB = (filas[0] && filas[0].equipo_b) || current.equipo_b;
+    const marcadorReal = `<b class="${ganaA ? 'gana' : ''}">${winA}</b>-<b class="${ganaA ? '' : 'gana'}">${winB}</b>`;
+
+    const render = extra => {
+        cmpSerie.innerHTML = `
+        <div class="cmp-serie">
+          <span class="cmp-serie-title">SERIE · PREDICHO VS REAL</span>
+          <span class="cmp-serie-item">REAL: <b>${escapeHtml(ganaA ? nombreA : nombreB)}</b> ${marcadorReal}</span>
+          ${extra}
+        </div>`;
+    };
+    render('<span class="cmp-serie-item cmp-serie-cargando">calculando P(serie) del motor…</span>');
+    try {
+        const res = await proxyFetch('/serie', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                match_id: current.match_id || 0,
+                equipo_a: current.equipo_a,
+                equipo_b: current.equipo_b,
+                mapas: filas.map(d => ({ map_name: d.map_name, lado_inicial_a: d.lado_inicial_a })),
+            }),
+        });
+        const s = await res.json();
+        if (!s.ok) throw new Error(s.error || `HTTP ${res.status}`);
+        const pReal = ganaA ? Number(s.prob_serie_a) : Number(s.prob_serie_b);
+        const marca = pReal >= 0.5 ? '✓ favorito' : '✕ upset';
+        render(`
+          <span class="cmp-serie-item">MOTOR: ${escapeHtml(nombreA)} ${pct(s.prob_serie_a)} · ${escapeHtml(nombreB)} ${pct(s.prob_serie_b)}</span>
+          <span class="cmp-serie-pill ${probBandClass(pReal)}" title="Probabilidad que el motor dio al ganador real de la serie">P(REAL) ${pct(pReal)} ${marca}</span>`);
+    } catch (e) {
+        render(`<span class="cmp-serie-item cmp-serie-err">sin P(serie) del motor (${escapeHtml(e.message || 'servicio no disponible')})</span>`);
+    }
 }
 
 // ─── SCORECARD (micro-eventos predichos vs reales) ──────────────────────────

@@ -182,7 +182,7 @@ folderInput.addEventListener('change', async () => {
     hideProgress();
   } finally {
     folderInput.value = '';
-    btnRun.disabled = !state.files['vct_partidos'];
+    btnRun.disabled = Object.keys(state.files).length === 0;
     btnBulk.disabled = false; btnFolder.disabled = false;
   }
 });
@@ -201,8 +201,8 @@ function updateCounts() {
   countRequired.textContent = `${reqLoaded} / 8`;
   countOptional.textContent = `${optLoaded} / 6`;
   fileCount.textContent = `${total} archivo${total !== 1 ? 's' : ''}`;
-  // Solo necesitamos vct_partidos para poder ejecutar
-  btnRun.disabled = !state.files['vct_partidos'];
+  // Con al menos un Excel se puede ejecutar (los globales van solos)
+  btnRun.disabled = Object.keys(state.files).length === 0;
 }
 
 // ─── PROGRESS ────────────────────────────────────────────────────────────────
@@ -322,7 +322,7 @@ btnRun.addEventListener('click', async () => {
     if (e.trace) log(String(e.trace).split('\n').slice(-3).join(' '), 'error');
     hideProgress();
   } finally {
-    btnRun.disabled = !state.files['vct_partidos'];
+    btnRun.disabled = Object.keys(state.files).length === 0;
   }
 });
 
