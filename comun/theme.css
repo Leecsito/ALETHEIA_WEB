@@ -30,17 +30,23 @@
     --txt-1: #F4F2E6;
     /* títulos                  */
 
-    /* ── Estados (derivados de la paleta) ───────────────────────────────── */
+    /* ── Estados ────────────────────────────────────────────────────────── */
+    /* Escala semántica verde / amarillo / naranja / rojo: SOLO para datos
+       lógicos (porcentajes de predicción, acierto, victoria/derrota, error).
+       El verde y el amarillo salen de la paleta; el naranja y el rojo son la
+       excepción acordada para que la escala se lea de un vistazo. */
     --ok: var(--g3);
-    /* éxito / acierto          */
-    --warn: var(--accent);
-    /* advertencia / pendiente  */
-    --bad: var(--g2);
-    /* error / upset            */
+    /* verde: acierto / victoria / alto */
+    --warn: var(--mid);
+    /* naranja: pendiente / medio / OT  */
+    --mid: #FB923C;
+    /* naranja semántico                */
+    --bad: #FF4757;
+    /* rojo: error / upset / derrota    */
     --info: var(--txt-2);
-    /* información neutra       */
+    /* información neutra               */
     --agent: var(--g3);
-    /* agente / categoría       */
+    /* agente / categoría               */
 
     /* ── Alias heredados (compatibilidad con los CSS existentes) ────────── */
     --surface: var(--panel);
@@ -51,7 +57,7 @@
     --dim: var(--txt-2);
     --title: var(--txt-1);
     --green: var(--ok);
-    --orange: var(--warn);
+    --orange: var(--mid);
     --red: var(--bad);
     --blue: var(--info);
     --purple: var(--agent);
