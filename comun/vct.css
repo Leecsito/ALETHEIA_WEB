@@ -285,9 +285,9 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-match:hover {
     background: linear-gradient(90deg,
-        color-mix(in srgb, var(--c, var(--panel-v)) 26%, var(--panel-v)) 0%,
-        var(--panel-v) 48%, var(--panel-v) 52%,
-        color-mix(in srgb, var(--c2, var(--panel-v)) 26%, var(--panel-v)) 100%);
+        color-mix(in srgb, var(--c, var(--panel-hover)) 26%, var(--panel-hover)) 0%,
+        var(--panel-hover) 48%, var(--panel-hover) 52%,
+        color-mix(in srgb, var(--c2, var(--panel-hover)) 26%, var(--panel-hover)) 100%);
 }
 
 .v-match:hover::before { background: var(--accent); box-shadow: var(--glow-accent); }
@@ -815,7 +815,7 @@ main.v-main.wide { max-width: 1500px; }
     align-items: center;
     gap: 12px;
     padding: 10px 16px;
-    background: linear-gradient(180deg, var(--panel-v), var(--panel));
+    background: linear-gradient(180deg, var(--panel-hover), var(--panel));
     border-bottom: 1px solid var(--border);
 }
 
@@ -919,7 +919,7 @@ main.v-main.wide { max-width: 1500px; }
     display: block;
     background: var(--card-grad);
     background: linear-gradient(160deg,
-        color-mix(in srgb, var(--c, var(--panel-v)) 16%, var(--panel)) 0%,
+        color-mix(in srgb, var(--c, var(--panel)) 16%, var(--panel)) 0%,
         var(--panel) 62%);
     border: 1px solid var(--border);
     padding: 18px 20px;
@@ -938,7 +938,7 @@ main.v-main.wide { max-width: 1500px; }
     top: 0;
     bottom: 0;
     width: 3px;
-    background: linear-gradient(180deg, var(--c, var(--g2)), transparent 85%);
+    background: linear-gradient(180deg, var(--c, var(--border)), transparent 85%);
     transition: background .2s;
 }
 
@@ -946,8 +946,8 @@ main.v-main.wide { max-width: 1500px; }
 
 .v-card:hover {
     background: linear-gradient(160deg,
-        color-mix(in srgb, var(--c, var(--panel-v)) 26%, var(--panel-v)) 0%,
-        var(--panel-v) 62%);
+        color-mix(in srgb, var(--c, var(--panel-hover)) 26%, var(--panel-hover)) 0%,
+        var(--panel-hover) 62%);
     border-color: color-mix(in srgb, var(--accent) 30%, transparent);
     transform: translateY(-2px);
     box-shadow: var(--shadow-card), 0 0 0 1px color-mix(in srgb, var(--accent) 8%, transparent);

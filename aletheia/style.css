@@ -1007,7 +1007,7 @@ main {
 }
 
 .map-row:hover {
-    background: var(--panel-v);
+    background: var(--panel-hover);
 }
 
 .map-label {
@@ -1872,7 +1872,7 @@ main {
 }
 
 .cons-row:hover {
-    background: var(--panel-v);
+    background: var(--panel-hover);
 }
 
 .cons-player {

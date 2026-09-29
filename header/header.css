@@ -63,19 +63,43 @@
 }
 
 /* El icono es el protagonista; la palabra queda en segundo plano. */
-.ae-logo-img {
-    width: 48px;
-    height: 48px;
-    object-fit: contain;
+.ae-logo-mark {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
     flex-shrink: 0;
+}
+
+/* Misma marca, agrandada y difuminada detrás: el resplandor del logo. */
+.ae-logo-glow {
+    position: absolute;
+    width: 90px;
+    height: 90px;
+    object-fit: contain;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(13px);
+    opacity: .35;
+    transform: scale(1.05);
+}
+
+.ae-logo-img {
+    position: relative;
+    z-index: 1;
+    width: 56px;
+    height: 56px;
+    object-fit: contain;
     /* El SVG es negro: sobre el header lima se ve directo. */
     filter: brightness(0);
     transition: filter .2s, transform .2s;
 }
 
 .ae-logo:hover .ae-logo-img {
-    filter: brightness(0) drop-shadow(0 0 9px color-mix(in srgb, var(--bg) 35%, transparent));
-    transform: translateY(-1px) scale(1.03);
+    filter: brightness(0) drop-shadow(0 0 10px color-mix(in srgb, var(--bg) 40%, transparent));
+    transform: translateY(-1px) scale(1.04);
 }
 
 .ae-logo-word {
@@ -101,27 +125,6 @@
     gap: 8px;
     flex-wrap: wrap;
     justify-content: flex-end;
-}
-
-.ae-nav .ae-title {
-    font-family: var(--display);
-    font-size: 18px;
-    letter-spacing: 3px;
-    color: color-mix(in srgb, var(--bg) 88%, var(--g1));
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-right: 6px;
-}
-
-.ae-nav .ae-badge {
-    font-family: var(--mono);
-    font-size: 10px;
-    letter-spacing: 2px;
-    color: var(--bg);
-    border: 1px solid color-mix(in srgb, var(--bg) 45%, transparent);
-    background: color-mix(in srgb, var(--txt-1) 30%, transparent);
-    padding: 2px 8px;
 }
 
 .ae-btn {
@@ -190,12 +193,6 @@
         gap: 5px;
     }
 
-    .ae-nav .ae-title {
-        font-size: 15px;
-        gap: 6px;
-        margin-right: 2px;
-    }
-
     .ae-btn {
         padding: 5px 9px;
         font-size: 10px;
@@ -212,9 +209,19 @@
         padding: 12px 20px;
     }
 
+    .ae-logo-mark {
+        width: 44px;
+        height: 44px;
+    }
+
     .ae-logo-img {
-        width: 40px;
-        height: 40px;
+        width: 44px;
+        height: 44px;
+    }
+
+    .ae-logo-glow {
+        width: 84px;
+        height: 84px;
     }
 
     .ae-nav {

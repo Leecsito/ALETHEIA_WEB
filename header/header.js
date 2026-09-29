@@ -9,8 +9,7 @@
  * raíz del sitio y marca como activa la página actual según `window.location`.
  *
  * Config opcional por página (antes de cargar el script):
- *     <script>window.AE_HEADER = { title: 'EN VIVO', badge: 'PREDICTOR' };</script>
- * `title`/`badge` agregan un título central al header.
+ *     <script>window.AE_HEADER = { hidden: ['datos'] };</script>
  * `hidden` (array de ids) oculta entradas concretas del nav.
  */
 (function () {
@@ -58,15 +57,15 @@
 
         let html = `
             <a href="${base}aletheia/" class="ae-logo" aria-label="ALETHEIA — Inicio">
-                <img class="ae-logo-img" src="${base}comun/ALETHEIA_ico.svg" alt="" width="48" height="48"
-                    onerror="this.remove()" />
+                <span class="ae-logo-mark">
+                    <img class="ae-logo-glow" src="${base}comun/ALETHEIA_ico.svg" alt="" aria-hidden="true"
+                        onerror="this.remove()" />
+                    <img class="ae-logo-img" src="${base}comun/ALETHEIA_ico.svg" alt="" width="56" height="56"
+                        onerror="this.remove()" />
+                </span>
                 <span class="ae-logo-word"><span class="ae-logo-a">A</span>LETHEIA</span>
             </a>
             <nav class="ae-nav">`;
-
-        if (cfg.title) {
-            html += `<span class="ae-title">${cfg.title}${cfg.badge ? ` <span class="ae-badge">${cfg.badge}</span>` : ''}</span>`;
-        }
 
         ITEMS.forEach(item => {
             if (hidden.includes(item.id)) return;

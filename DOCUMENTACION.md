@@ -61,9 +61,12 @@ ALETHEIA/
 │   └── script.js
 ├── header/                   # Componente HEADER reutilizable (no es una página)
 │   ├── index.html            # Demo/preview del componente
-│   ├── header.css            # Estilos del header (clases `ae-*`)
-│   └── header.js             # Inyecta el header en `#aeHeaderMount` y marca el nav activo
-├── comun/                    # Core visual VCT compartido (no es una página)
+│   ├── header.css            # Estilos del header (clases `ae-*`): fondo lima, logo y nav
+│   ├── header.js             # Inyecta el header en `#aeHeaderMount` y marca el nav activo
+│   └── header-nodes.js       # Canvas de nodos: efecto del header + fondo global `.ae-nodes-bg`
+├── comun/                    # Core visual compartido (no es una página)
+│   ├── theme.css             # Tema global: paleta única en `:root`, base y tokens de diseño
+│   ├── ALETHEIA_ico.svg      # Copia servible del ico/logo (la ruta raíz responde 308 → 404)
 │   ├── vct.css               # Design system de los componentes VCT (clases `v-*`)
 │   └── vct.js                # Helpers globales `VCT` (API, formato, filas de partido, tabs)
 ├── partidos/                 # Componente PARTIDOS estilo vlr.gg (lista + detalle)
@@ -84,6 +87,7 @@ ALETHEIA/
 ├── multimedia/               # Archivos multimedia / imágenes
 │   ├── agents/               # 28 retratos de agentes (.avif, locales, usados en scoreboards)
 │   └── maps/                 # 13 imágenes de mapas (.avif, locales, usadas en tabs de mapa)
+├── ALETHEIA_ico.svg          # Logo/ico original del proyecto (raíz; se copia a comun/ para servir)
 ├── wsgi.py                   # Punto de entrada WSGI para Gunicorn
 ├── render.yaml               # Configuración de despliegue en Render
 ├── requirements.txt          # Dependencias de Python
@@ -449,7 +453,12 @@ estas tablas). Endpoints adicionales del proxy:
    - `/aletheia_preparar/` o `/aletheia_preparar/index.html` (**PREPARAR**)
    - `/partidos/`, `/equipos/`, `/jugadores/`, `/eventos/` → **componentes VCT** (lista + detalle en la misma página vía query param: `?match=`, `?team=`, `?player=`, `?event=`/`?torneo=`)
    - `/header/` o `/header/index.html` (demo del componente header)
-   - `header/header.css`, `header/header.js`, `comun/vct.css` y `comun/vct.js` se sirven como estáticos desde la raíz (`static_url_path=''`).
+   - `comun/theme.css`, `header/header.css`, `header/header.js`, `header/header-nodes.js`,
+     `comun/vct.css` y `comun/vct.js` se sirven como estáticos desde la raíz (`static_url_path=''`).
+   - **Ojo con los archivos sueltos en la raíz:** Werkzeug responde **308** a rutas de un
+     solo segmento (`/ALETHEIA_ico.svg` → `/ALETHEIA_ico.svg/`) porque compiten con la
+     regla `/<folder>/`, y termina en 404. Por eso el ico/logo se sirve desde
+     `comun/ALETHEIA_ico.svg` y todos los `<link rel="icon">`/`<img>` apuntan ahí.
    > Los módulos `predecir/` y `exportar/` **ya no existen**.
    > `comun/` **no es una página**: es el core visual compartido (CSS `v-*` + objeto JS global `VCT`); no está en `FRONTEND_FOLDERS` y no debe registrarse blueprint.
 
@@ -612,11 +621,32 @@ estas tablas). Endpoints adicionales del proxy:
      - Botón **"← PREPARAR PARTIDO"**.
    - Servicio apagado: cada llamada se maneja con avisos, sin romper la página.
 
-4. **Sistema de Diseño Visual:**
-   - Estética oscura / Cyberpunk (`--bg-color: #0b0e14`, paneles con fondo translúcido y bordes luminosos).
-   - Tipografías principales desde Google Fonts:
+4. **Sistema de Diseño Visual (`comun/theme.css`):**
+   La **única** definición de la paleta vive en `comun/theme.css` (`:root`); ese
+   archivo se enlaza en el `<head>` de **todas** las páginas antes que cualquier
+   otro CSS. El resto de CSS usa sus variables (o los alias heredados) y **no**
+   colores literales.
+
+   - **Paleta:** `--bg #0A0A0C`, `--panel #222228`, `--panel-v #1C2412`
+     (verde muy oscuro, uso puntual), verdes `--g1 #4C5C2D` / `--g2 #788428` /
+     `--g3 #B0C138`, acento `--accent #E8FF47`, textos `--txt-2 #B8BCA8`,
+     `--txt #D4D4D8`, títulos `--txt-1 #F4F2E6`.
+   - **Contenido neutro:** superficies y bordes son negros/grises derivados
+     (`--surface`, `--surface2`, `--surface3`, `--panel-hover`, `--border`,
+     `--border-soft`). El verde **no** se usa en bordes ni chrome.
+   - **Escala semántica de datos:** `--ok` (verde), `--mid` (naranja `#FB923C`),
+     `--bad` (rojo `#FF4757`), con `--warn` = naranja, para porcentajes de
+     predicción, acierto, victoria/derrota, upset y errores. Naranja y rojo son
+     la excepción acordada a la paleta (solo datos).
+   - **Header lima:** `.ae-header` en `--accent` plano, 80px de alto
+     (`--ae-header-h`, compartida con `.vct-tabs` y el layout de `tablas/`),
+     logo con copia difuminada detrás y texto oscuro.
+   - **Animación de nodos:** `header/header-nodes.js` (ver §5.5).
+   - Tipografías principales desde Google Fonts (se mantienen):
      - Titulares y Badges: `'Bebas Neue', sans-serif`
      - Textos, Tablas y Métricas: `'DM Mono', monospace`
+   - **Favicon:** todas las páginas enlazan `<link rel="icon" type="image/svg+xml"
+     href="../comun/ALETHEIA_ico.svg" />`.
 
 5. **Componente HEADER reutilizable (`header/`):**
    La cabecera de navegación ya **no se duplica** en cada `index.html`: vive en
@@ -624,6 +654,7 @@ estas tablas). Endpoints adicionales del proxy:
 
    - **Inclusión** en el `<head>` de la página:
      ```html
+     <link rel="stylesheet" href="../comun/theme.css" />
      <link rel="stylesheet" href="../header/header.css" />
      ```
    - **Marcado** (un solo montaje dentro del `<body>`):
@@ -634,16 +665,37 @@ estas tablas). Endpoints adicionales del proxy:
      ```html
      <script>window.AE_HEADER = { title: 'EN VIVO', badge: 'PREDICTOR' };</script>
      <script src="../header/header.js"></script>
+     <script src="../header/header-nodes.js"></script>
      ```
+   - **Aspecto:** fondo `--accent` plano (amarillo lima), 80px de alto
+     (`--ae-header-h`), logo `comun/ALETHEIA_ico.svg` a 56px con una copia
+     agrandada y difuminada detrás (mismo efecto que los logos VCT) y el
+     wordmark en segundo plano. Todos los controles del header usan texto
+     oscuro sobre el lima.
+   - **`header-nodes.js` (efecto de nodos reutilizable):**
+     - Monta un `<canvas>` detrás del contenido del header (nodos verde oscuro
+       que se funden a negro cerca del cursor) y un canvas fijo de fondo en
+       toda la página (`body > .ae-nodes-bg`), sutil (opacidad .6), con nodos
+       verdes `--g1`/`--g2`/`--g3`, líneas tenues y encendido verde al pasar
+       el cursor.
+     - Nodos 40–90 según el ancho; rebotan en los bordes; líneas solo entre
+       nodos cercanos con opacidad decreciente; repulsión suave con easing en
+       el header y en el fondo.
+     - `requestAnimationFrame`, `devicePixelRatio`, `ResizeObserver`, pausa
+       con la pestaña oculta y `prefers-reduced-motion` (nodos estáticos).
+     - Se puede desactivar el fondo por página con `window.AE_NODES_BG = false;`
+       antes de cargar el script. Sin librerías; los colores se leen de las
+       variables de `comun/theme.css`.
    - `header.js` construye el nav (`EN VIVO`, `PREPARAR PARTIDO`, `VCT`, `TABLAS`,
      `VISUALIZAR`, `CARGAR DATOS`), resuelve las rutas relativas a la raíz y
      **marca activa** la página actual según `window.location.pathname`.
      La entrada `VCT` apunta a `/partidos/` y queda activa en los 4 componentes
      VCT (`partidos`, `equipos`, `jugadores`, `eventos`).
    - Config opcional `window.AE_HEADER`:
-     - `title` / `badge`: título central (p. ej. `EN VIVO` · `PREDICTOR`).
      - `hidden`: array de ids (`'aletheia'`, `'preparar'`, `'vct'`, `'tablas'`,
-       `'visualizar'`, `'datos'`) para ocultar entradas concretas.
+       `'visualizar'`, `'datos'`) para ocultar entradas concretas del nav.
+     - El antiguo título/badge central se **eliminó**: el header solo muestra el
+       logo y el nav (el estado activo ya marca la página).
    - Todas las clases del componente usan prefijo `ae-` (`.ae-header`, `.ae-nav`,
      `.ae-btn`, `.ae-logo`, `.ae-page-title`…) para no colisionar con los estilos
      propios de cada componente.
@@ -739,3 +791,4 @@ Al recibir una nueva tarea o solicitud de cambio:
 8. **Imágenes de equipos/jugadores/eventos**: usa siempre `/api/media/meta` (enlaces+color, 1 request por render) y los endpoints `/api/media/...` como fallback (resuelven y redirigen al CDN; **no se descargan ni guardan imágenes**). No scrapees Google Images ni guardes archivos de imagen; la caché es solo de enlaces/color (`media/urls_cache.json`). Si necesitas precargar enlaces, usa `cachear_media.py` con `--delay`.
 9. **Rendimiento**: para blueprints de solo lectura usa `fetch_all` (`backend.conexion`) + `@ttl_cache(120)` (`backend.cache`); no abras conexiones nuevas por consulta ni paralelices consultas a Turso (el cliente serializa). Mantén gzip (`flask-compress`) y paginación en listados grandes.
 10. **Enlaces internos**: navega siempre con `/componente/` (o relativo `../componente/`, `./`), **nunca** `/componente/index.html` (regla de estética de URL, §5.1). Al añadir una vista dentro de una página, usa query params (`?team=`, `?match=`…), no nuevas carpetas con `index.html` en el enlace.
+11. **Diseño y colores**: la paleta y los tokens viven SOLO en `comun/theme.css`; no introduzcas colores literales en HTML/CSS (usa variables). El contenido/chrome va en negros, grises y blancos neutros: el verde no se usa en bordes ni superficies, solo en la escala semántica de datos (verde/naranja/amarillo/rojo) y en la animación de nodos. Toda página nueva debe enlazar `comun/theme.css` antes de sus CSS y `header/header-nodes.js` después de `header.js`. El ico/logo se referencia desde `comun/ALETHEIA_ico.svg` (los archivos sueltos de la raíz dan 308/404 en Flask).

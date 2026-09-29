@@ -165,7 +165,7 @@ main {
 
 .file-card:hover {
   border-color: color-mix(in srgb, var(--txt-2) 55%, transparent);
-  background: var(--panel-v);
+  background: var(--panel-hover);
 }
 
 .file-card.loaded {

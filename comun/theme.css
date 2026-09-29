@@ -5,7 +5,11 @@
  *     <link rel="stylesheet" href="../comun/theme.css" />
  *
  * Aquí vive la ÚNICA definición de la paleta. El resto de CSS debe usar
- * exclusivamente estas variables (o sus alias) y nunca colores literales.
+ * exclusivamente estas variables o sus alias (nada de colores literales).
+ * Excepción: los tonos naranja/rojo de --mid/--bad, usados SOLO para la
+ * escala semántica de datos (predicción, acierto, victoria/derrota, error).
+ * El verde es para los datos y la animación de nodos; el contenido/chrome
+ * va en negros, grises y blancos neutros.
  */
 :root {
     /* ── Paleta ─────────────────────────────────────────────────────────── */
@@ -14,9 +18,9 @@
     --panel: #222228;
     /* paneles                  */
     --panel-v: #1C2412;
-    /* panel verdoso            */
+    /* panel verdoso (puntual)  */
     --g1: #4C5C2D;
-    /* verde oscuro (bordes)    */
+    /* verde oscuro             */
     --g2: #788428;
     /* verde medio              */
     --g3: #B0C138;
@@ -45,13 +49,15 @@
     /* rojo: error / upset / derrota    */
     --info: var(--txt-2);
     /* información neutra               */
-    --agent: var(--g3);
-    /* agente / categoría               */
+    --agent: var(--txt-2);
+    /* agente / categoría (neutro)      */
 
     /* ── Alias heredados (compatibilidad con los CSS existentes) ────────── */
     --surface: var(--panel);
-    --surface2: var(--panel-v);
-    --surface3: var(--panel-v);
+    /* Superficies neutras: el contenido va en negro/gris, sin verde. */
+    --surface2: color-mix(in srgb, var(--panel) 72%, var(--bg));
+    --surface3: color-mix(in srgb, var(--panel) 60%, var(--bg));
+    --panel-hover: color-mix(in srgb, var(--panel) 85%, var(--txt-2));
     --text: var(--txt);
     --text-dim: var(--txt-2);
     --dim: var(--txt-2);
@@ -65,13 +71,12 @@
     /* Bordes neutros (negro/gris) para que el verde sea solo un acento. */
     --border: color-mix(in srgb, var(--panel) 80%, var(--txt-2));
     --border-soft: color-mix(in srgb, var(--panel) 90%, var(--txt-2));
-    --border-strong: var(--g1);
+    --border-strong: color-mix(in srgb, var(--panel) 55%, var(--txt-2));
 
     /* ── Superficies y sombras ──────────────────────────────────────────── */
-    --card-grad: linear-gradient(180deg, var(--panel) 0%, var(--panel-v) 100%);
-    --hero-grad: linear-gradient(135deg, var(--panel-v) 0%, var(--panel) 55%, var(--bg) 100%);
+    --card-grad: linear-gradient(180deg, var(--panel) 0%, color-mix(in srgb, var(--panel) 78%, var(--bg)) 100%);
+    --hero-grad: linear-gradient(135deg, color-mix(in srgb, var(--panel) 86%, var(--bg)) 0%, var(--panel) 55%, var(--bg) 100%);
     --glow-accent: 0 0 24px color-mix(in srgb, var(--accent) 18%, transparent);
-    --glow-soft: 0 0 18px color-mix(in srgb, var(--g3) 22%, transparent);
     --shadow-card: 0 10px 30px color-mix(in srgb, var(--bg) 55%, transparent);
 
     /* ── Tipografías (se mantienen las actuales) ────────────────────────── */
