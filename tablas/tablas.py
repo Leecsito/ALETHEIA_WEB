@@ -8,11 +8,20 @@ y generar un reporte de calidad de datos por partido.
 from collections import defaultdict
 from flask import Blueprint, request, jsonify
 try:
-    from backend.conexion import get_conn, release_conn
+    from backend.conexion import get_conn, release_conn, fetch_all
+    from backend.cache import ttl_cache
 except ImportError:
-    from conexion import get_conn, release_conn
+    from conexion import get_conn, release_conn, fetch_all
+    from cache import ttl_cache
 
 tablas_bp = Blueprint('tablas', __name__)
+
+# Lecturas cacheadas por TTL y con conexión reutilizada del hilo: cada ida y
+# vuelta a Turso remoto cuesta ~0.2 s (abrir conexión ~0.7 s).
+@ttl_cache(300)
+def query(sql, params=None):
+    return fetch_all(sql, params)
+
 
 TABLAS_PERMITIDAS = [
     'matches', 'match_veto', 'maps', 'rounds',
@@ -34,16 +43,13 @@ def get_tabla(nombre):
     offset = (page - 1) * limit
 
     try:
-        conn = get_conn()
-        cur  = conn.cursor()
-
-        # Obtener columnas via PRAGMA (equivalente a information_schema en SQLite)
-        cur.execute(f"PRAGMA table_info({nombre})")
-        cols_info = cur.fetchall()
-        # cols_info: (cid, name, type, notnull, dflt_value, pk)
-        columnas  = [c[1] for c in cols_info]
-        text_cols = [c[1] for c in cols_info
-                     if any(t in c[2].upper() for t in ('TEXT', 'CHAR', 'CLOB', 'VARCHAR'))]
+        # Columnas via PRAGMA (equivalente a information_schema en SQLite)
+        cols_info = query(f"PRAGMA table_info({nombre})")
+        # cols_info: {cid, name, type, notnull, dflt_value, pk}
+        columnas  = [c['name'] for c in cols_info]
+        text_cols = [c['name'] for c in cols_info
+                     if any(t in (c.get('type') or '').upper()
+                            for t in ('TEXT', 'CHAR', 'CLOB', 'VARCHAR'))]
 
         # WHERE para busqueda — SQLite usa LIKE (case-insensitive para ASCII)
         where_clause = ""
@@ -54,25 +60,13 @@ def get_tabla(nombre):
             params = [f"%{search}%"] * len(text_cols)
 
         # Total de filas
-        cur.execute(f"SELECT COUNT(*) FROM {nombre} {where_clause}", params)
-        total = cur.fetchone()[0]
+        total = query(f"SELECT COUNT(*) AS n FROM {nombre} {where_clause}", params)[0]['n']
 
         # Filas paginadas
-        cur.execute(
+        rows = query(
             f"SELECT * FROM {nombre} {where_clause} LIMIT ? OFFSET ?",
             params + [limit, offset]
         )
-        raw_rows = cur.fetchall()
-        rows = []
-        for row in raw_rows:
-            clean = {}
-            for i, col in enumerate(columnas):
-                v = row[i]
-                clean[col] = v  # SQLite ya devuelve tipos nativos Python
-            rows.append(clean)
-
-        cur.close()
-        release_conn(conn)
 
         return jsonify({
             "ok":      True,
@@ -92,19 +86,25 @@ def get_tabla(nombre):
 @tablas_bp.route('/api/tablas', methods=['GET'])
 def list_tablas():
     try:
-        conn = get_conn()
-        cur  = conn.cursor()
-        result = []
-        for t in TABLAS_PERMITIDAS:
-            try:
-                cur.execute(f"SELECT COUNT(*) FROM {t}")
-                count = cur.fetchone()[0]
-            except Exception:
-                count = 0
-            result.append({"tabla": t, "filas": count})
-        cur.close()
-        release_conn(conn)
-        return jsonify({"ok": True, "data": result})
+        # Un solo round-trip con UNION ALL (17 counts secuenciales = ~5 s).
+        # Si alguna tabla no existe en la DB (esquema local viejo), se degrada
+        # al conteo individual tolerante a errores.
+        try:
+            union_sql = " UNION ALL ".join(
+                f"SELECT ? AS tabla, COUNT(*) AS filas FROM {t}"
+                for t in TABLAS_PERMITIDAS)
+            filas = query(union_sql, list(TABLAS_PERMITIDAS))
+            por_tabla = {r['tabla']: r['filas'] for r in filas}
+            data = [{"tabla": t, "filas": por_tabla.get(t, 0)} for t in TABLAS_PERMITIDAS]
+        except Exception:
+            data = []
+            for t in TABLAS_PERMITIDAS:
+                try:
+                    n = query(f"SELECT COUNT(*) AS filas FROM {t}")[0]['filas']
+                except Exception:
+                    n = 0
+                data.append({"tabla": t, "filas": n})
+        return jsonify({"ok": True, "data": data})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
@@ -276,14 +276,19 @@ def build_reporte(conn):
     }
 
 
+@ttl_cache(300)
+def _reporte_cacheado():
+    """El reporte encadena ~35 consultas sobre Turso: se cachea entero."""
+    conn = get_conn()
+    try:
+        return build_reporte(conn)
+    finally:
+        release_conn(conn)
+
+
 @tablas_bp.route('/api/tablas/reporte', methods=['GET'])
 def reporte_tablas():
     try:
-        conn = get_conn()
-        try:
-            data = build_reporte(conn)
-        finally:
-            release_conn(conn)
-        return jsonify({'ok': True, 'reporte': data})
+        return jsonify({'ok': True, 'reporte': _reporte_cacheado()})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500

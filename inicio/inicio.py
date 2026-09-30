@@ -241,6 +241,34 @@ CREATE_VIEWS_SQL = [
        FROM matches m""",
 ]
 
+# Índices sobre las columnas de filtro/JOIN más usadas. Sin ellos cada consulta
+# escanea la tabla completa contra Turso remoto (lento y costoso en red).
+# Se crean con INIT DB (idempotente). En tablas ya cargadas la creación puede
+# tardar unos segundos la primera vez.
+CREATE_INDEXES_SQL = [
+    "CREATE INDEX IF NOT EXISTS idx_maps_match          ON maps(match_id)",
+    "CREATE INDEX IF NOT EXISTS idx_player_stats_match  ON player_stats(match_id)",
+    "CREATE INDEX IF NOT EXISTS idx_player_stats_player ON player_stats(player_id)",
+    "CREATE INDEX IF NOT EXISTS idx_player_stats_team   ON player_stats(team_id)",
+    "CREATE INDEX IF NOT EXISTS idx_player_stats_map    ON player_stats(map_id)",
+    "CREATE INDEX IF NOT EXISTS idx_economy_match       ON economy_summary(match_id)",
+    "CREATE INDEX IF NOT EXISTS idx_economy_team        ON economy_summary(team_id)",
+    "CREATE INDEX IF NOT EXISTS idx_duels_match         ON duels(match_id)",
+    "CREATE INDEX IF NOT EXISTS idx_mk_match            ON multikills_clutches(match_id)",
+    "CREATE INDEX IF NOT EXISTS idx_mk_player           ON multikills_clutches(player_id)",
+    "CREATE INDEX IF NOT EXISTS idx_veto_match          ON match_veto(match_id)",
+    "CREATE INDEX IF NOT EXISTS idx_matches_date        ON matches(match_date)",
+    "CREATE INDEX IF NOT EXISTS idx_matches_tournament  ON matches(tournament)",
+    "CREATE INDEX IF NOT EXISTS idx_matches_team_a      ON matches(team_a_id)",
+    "CREATE INDEX IF NOT EXISTS idx_matches_team_b      ON matches(team_b_id)",
+    "CREATE INDEX IF NOT EXISTS idx_matches_winner      ON matches(winner_id)",
+    "CREATE INDEX IF NOT EXISTS idx_players_team        ON players(team_id)",
+    "CREATE INDEX IF NOT EXISTS idx_roster_team         ON roster_transactions(team_id)",
+    "CREATE INDEX IF NOT EXISTS idx_roster_player       ON roster_transactions(player_id)",
+    "CREATE INDEX IF NOT EXISTS idx_pas_player           ON player_agent_stats(player_id)",
+    "CREATE INDEX IF NOT EXISTS idx_aliases_event       ON tournament_aliases(event_id)",
+]
+
 # Rol de cada agente (fuente: Riot). Se siembra una vez; no cambia.
 AGENTS = [
     ('brimstone', 'Controller'), ('viper', 'Controller'), ('omen', 'Controller'),
@@ -428,12 +456,24 @@ def run_migrations(conn):
     backfill_ids(conn)
     normalize_schema(conn)
     create_views(conn)
+    create_indexes(conn)
 
 
 def create_views(conn):
     """Crea las vistas derivadas (idempotente)."""
     cur = conn.cursor()
     for sql in CREATE_VIEWS_SQL:
+        try:
+            cur.execute(sql)
+        except Exception:
+            pass
+    cur.close()
+
+
+def create_indexes(conn):
+    """Crea los índices de lectura (idempotente; tolera tablas ausentes)."""
+    cur = conn.cursor()
+    for sql in CREATE_INDEXES_SQL:
         try:
             cur.execute(sql)
         except Exception:

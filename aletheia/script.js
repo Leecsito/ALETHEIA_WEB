@@ -39,6 +39,11 @@ let modelVersionError = null;    // error al leer /modelo_version (null = ok)
 const RECALC_POLL_MS = 2000;
 const RECALC_TIMEOUT_MS = 30 * 60 * 1000;
 
+// Cola de POST /serie de la lista: máximo de pedidos por carga y corte de
+// espera por request (el servicio vive detrás de ngrok y puede tardar).
+const SERIE_QUEUE_MAX = 12;
+const SERIE_TIMEOUT_MS = 20000;
+
 // Filtro de resultado persistido (si el navegador lo permite).
 const FILTRO_SIMS_KEY = 'ae_sim_filtro';
 try {
@@ -358,7 +363,8 @@ async function cargarSeriesLista() {
         const pendientes = sims.filter(s => tieneResultado(s) === true && s.match_id &&
             simsInfo[s.match_id] && !simSerie[s.match_id]);
         const vistos = new Set();
-        for (const s of pendientes.slice(0, 30)) {
+        let fallos = 0;
+        for (const s of pendientes.slice(0, SERIE_QUEUE_MAX)) {
             if (vistos.has(s.match_id)) continue;
             vistos.add(s.match_id);
             const info = simsInfo[s.match_id];
@@ -368,6 +374,8 @@ async function cargarSeriesLista() {
                 continue;
             }
             simSerie[s.match_id] = { cargando: true };
+            const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            const timer = ctrl ? setTimeout(() => ctrl.abort(), SERIE_TIMEOUT_MS) : null;
             try {
                 const res = await proxyFetch('/serie', {
                     method: 'POST',
@@ -378,6 +386,7 @@ async function cargarSeriesLista() {
                         equipo_b: s.equipo_b,
                         mapas,
                     }),
+                    signal: ctrl ? ctrl.signal : undefined,
                 });
                 const d = await res.json();
                 if (!d.ok) throw new Error(d.error || `HTTP ${res.status}`);
@@ -386,8 +395,14 @@ async function cargarSeriesLista() {
                 simSerie[s.match_id] = { p_a: pA, p_b: pB, p_real: ganaA ? pA : pB };
             } catch (e) {
                 simSerie[s.match_id] = { error: true };
+                // Solo cuentan los fallos de red/timeout (el servicio respondió
+                // con error de datos para ese partido => se sigue con el resto).
+                if (e && (e.name === 'AbortError' || e instanceof TypeError)) fallos++;
+            } finally {
+                if (timer) clearTimeout(timer);
             }
             actualizarSeriesLista();
+            if (fallos >= 2) break;   // servicio caído: no martillar con 12 pedidos
         }
     } finally {
         serieQueueRunning = false;
@@ -1813,5 +1828,8 @@ simListStatus.addEventListener('click', e => {
 });
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
+// En paralelo: /simulaciones ya devuelve `modelo_version`, así que no hace
+// falta esperar a /modelo_version (antes se encadenaba y sumaba ~1.5 s).
 loadAvailableMaps();
-loadModeloVersion().then(loadSimulaciones);
+loadModeloVersion();
+loadSimulaciones();

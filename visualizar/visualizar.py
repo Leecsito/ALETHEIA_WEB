@@ -6,24 +6,20 @@ Rutas: /api/matches, /api/player-stats, /api/maps-stats,
 
 from flask import Blueprint, jsonify
 try:
-    from backend.conexion import get_conn, release_conn
+    from backend.conexion import fetch_all
+    from backend.cache import ttl_cache
 except ImportError:
-    from conexion import get_conn, release_conn
+    from conexion import fetch_all
+    from cache import ttl_cache
 
 visualizar_bp = Blueprint('visualizar', __name__)
 
 # ─── HELPER ──────────────────────────────────────────────────────────────────
+# Agregados pesados sobre Turso remoto: se cachean por TTL y se reutiliza la
+# conexión del hilo (ver backend/conexion.py) para no pagar ~0.7 s por consulta.
+@ttl_cache(300)
 def query(sql, params=None):
-    conn = get_conn()
-    try:
-        cur = conn.cursor()
-        cur.execute(sql, params or [])
-        cols = [d[0] for d in cur.description]
-        rows = [dict(zip(cols, row)) for row in cur.fetchall()]
-        cur.close()
-        return rows
-    finally:
-        release_conn(conn)
+    return fetch_all(sql, params)
 
 # ─── PARTIDOS ────────────────────────────────────────────────────────────────
 @visualizar_bp.route('/api/matches', methods=['GET'])
