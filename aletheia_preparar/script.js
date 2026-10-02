@@ -1,12 +1,9 @@
 const API = `${window.location.origin}/api`;
 
-// Las llamadas normales (equipos, caché, modelo_version, asociar) van por el
-// proxy de la web (/api/aletheia/...). Solo la corrida larga (precalcular) y su
-// polling de estado se piden DIRECTO a ngrok para no chocar con el timeout de
-// gunicorn/Render. Toda petición a ngrok lleva el header anti-warning.
-const PREDICT_DIRECTO = 'https://snugly-encore-sweep.ngrok-free.dev';
-const NGROK_HEADER = { 'ngrok-skip-browser-warning': '1' };
-
+// Todas las llamadas al servicio de predicción van por el proxy de la web
+// (/api/aletheia/...): el poll de equipos/mapa/modelo_version/asociar y también
+// precalcular + su polling de estado (el POST async responde 202 al instante).
+// La clave API la añade el proxy server-side; nunca llega al navegador.
 function proxyFetch(path, options = {}) {
     return fetch(`${API}/aletheia/${String(path).replace(/^\/+/, '')}`, options);
 }
@@ -23,6 +20,7 @@ let matchId = 0;                 // id de vlr.gg parseado del input
 let preparedMatchId = 0;         // id usado en el último PREPARAR (para desde_match_id)
 let preparedModelVersion = null; // hash del modelo con el que se preparó
 let serviceModelVersion = null;  // hash del modelo vigente en el servicio
+let serviceModeloDesactualizado = false;  // true = reentreno/cambio sin reiniciar
 let prepareBusy = false;
 let jobStopped = false;          // permite cancelar la espera del job
 let cacheError = null;           // error al leer la caché (null = ok)
@@ -49,11 +47,6 @@ const prepareStatus = document.getElementById('prepareStatus');
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const pct = v => Math.round((v || 0) * 100);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-function predictFetch(path, options = {}) {
-    const headers = Object.assign({}, NGROK_HEADER, options.headers || {});
-    return fetch(`${PREDICT_DIRECTO}${path}`, Object.assign({}, options, { headers }));
-}
 
 function parseMatchId(raw) {
     const m = String(raw || '').match(/(\d+)/);
@@ -243,6 +236,7 @@ async function refreshModelVersion() {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
         serviceModelVersion = data.modelo_version;
+        serviceModeloDesactualizado = data.desactualizado === true;
     } catch (e) {
         modelVersionError = e.message || 'servicio no disponible';
     }
@@ -258,17 +252,21 @@ function updateModelBadge() {
     }
     if (!serviceModelVersion) { modelBadge.textContent = ''; modelBadge.className = 'model-badge'; return; }
     const stale = !!(preparedModelVersion && preparedModelVersion !== serviceModelVersion);
-    modelBadge.className = 'model-badge' + (stale ? ' stale' : '');
+    const desactualizado = serviceModeloDesactualizado;
+    const aviso = desactualizado
+        ? ' · ⚠ servicio desactualizado: reinicia ALETHEIA_PREDICT; las filas nuevas quedarán viejas al reiniciar'
+        : '';
+    modelBadge.className = 'model-badge' + (stale || desactualizado ? ' stale' : '');
     if (stale) {
-        modelBadge.textContent = `⚠ modelo ${serviceModelVersion} — RE-PREPARAR`;
+        modelBadge.textContent = `⚠ modelo ${serviceModelVersion} — RE-PREPARAR${aviso}`;
     } else if (preparedModelVersion) {
-        modelBadge.textContent = `modelo ${serviceModelVersion} · preparado`;
+        modelBadge.textContent = `modelo ${serviceModelVersion} · preparado${aviso}`;
     } else {
-        modelBadge.textContent = `modelo ${serviceModelVersion}`;
+        modelBadge.textContent = `modelo ${serviceModelVersion}${aviso}`;
     }
 }
 
-// ─── PREPARAR PARTIDO (precalcular async, DIRECTO) ───────────────────────────
+// ─── PREPARAR PARTIDO (precalcular async, por el proxy) ─────────────────────
 btnPreparar.addEventListener('click', prepararPartido);
 
 // Botón "cancelar espera" que aparece si el túnel/PC no responde.
@@ -308,7 +306,7 @@ async function prepararPartido() {
 
     let data;
     try {
-        const res = await predictFetch('/api/precalcular', {
+        const res = await proxyFetch('/precalcular', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -396,7 +394,7 @@ async function pollPrecalcularJob(jobId, t0, totalCombinaciones) {
     while (!jobStopped) {
         let r;
         try {
-            r = await predictFetch(`/api/precalcular/estado?job_id=${encodeURIComponent(jobId)}`);
+            r = await proxyFetch(`/precalcular/estado?job_id=${encodeURIComponent(jobId)}`);
         } catch (e) {
             fails++;
             const elapsed = Math.floor((Date.now() - t0) / 1000);

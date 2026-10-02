@@ -216,6 +216,11 @@ logística sobre `rating_diff` (P(mapa)) + Monte Carlo re-escalado** (marcador/e
 para estimar overtime. La URL base se lee de la variable de entorno
 `ALETHEIA_PREDICT_URL` (por defecto `http://localhost:8000`).
 
+La clave `ALETHEIA_API_KEY` (si está configurada en el entorno de la web) viaja
+**solo server-side**: `_request_service` la añade como header `X-API-Key` a
+todas las llamadas que reenvía; el navegador nunca la ve. Sin clave en el
+servicio de predicción, los endpoints admin responden **401** (fail-closed).
+
 Endpoints expuestos por ALETHEIA (todos reenvían al servicio externo):
 
 - `GET /api/aletheia/equipos` → proxy de `GET {BASE}/api/equipos`.
@@ -291,7 +296,9 @@ histórico de cada equipo **en ese mapa** + `p_mapa_a`, una P **por mapa** que
 difiere; es análisis, no la predicción calibrada del motor); a nivel serie,
 `resultados_serie` (`{"2-0","2-1","1-2","0-2"}` en Bo3, `3-x` en Bo5) y
 `caminos_serie` (secuencia mapa a mapa: `V` gana A, `D` gana B). Todo también en
-las lecturas crudas `/api/predicciones` y `/api/prediccion`.
+las lecturas crudas `/api/predicciones` y `/api/prediccion`, que además
+recalculan `prob_intervalo` (IC95% aditivo del RD, A6) sin persistirlo. La P
+puntual y `modelo_version` no cambian por este campo.
 
 **Semántica de la banda de confianza** (la fija el backend, conservadora):
 se calcula sobre `max(p, 1-p)` → `>=0.62` **alta**, `>=0.55` **media**, si no
@@ -309,15 +316,22 @@ todo el partido. La DB Turso es compartida con el servicio (ALETHEIA no crea
 estas tablas). Endpoints adicionales del proxy:
 
 - `GET /api/aletheia/modelo_version` → proxy de `GET {BASE}/api/modelo_version`.
-  Devuelve `{"ok": true, "modelo_version": "<hash>", "fecha": "<iso>"}`.
+  Devuelve `{"ok": true, "modelo_version": "<hash>", "fecha": "<iso>",
+  "en_disco": "<hash>", "desactualizado": <bool>}`. `desactualizado:true` avisa
+  de un reentreno/cambio pendiente de reiniciar el servicio; **EN VIVO** lo
+  muestra como aviso ("reinicia ALETHEIA_PREDICT") sin bloquear la UI.
 - `POST /api/aletheia/precalcular` → proxy de `POST {BASE}/api/precalcular`.
   Body: `{"equipo_a", "equipo_b", "n_sim": 10000, "match_id": 753455, "mapas": [...]?,
   "forzar": false}`. Calcula los 13 mapas × 2 lados (26 filas) y hace UPSERT en
-  `predicciones_mapa` con ese `match_id`.
-  **Por defecto ASÍNCRONO:** responde `202` con
+  `predicciones_mapa` con ese `match_id`. Requiere `X-API-Key` (la añade el
+  proxy).
+  **Por defecto ASÍNCRONO:** responde `202` al instante con
   `{"ok", "job_id", "total": 26, "modelo_version", "progreso", "mapas_hechos"}`.
-  Progreso: `GET {BASE}/api/precalcular/estado?job_id=...` →
+  Progreso: `GET /api/aletheia/precalcular/estado?job_id=...` → proxy de
+  `GET {BASE}/api/precalcular/estado` →
   `{"ok", "job": {"estado", "progreso", "mapas_hechos", "computados", "desde_cache", "error"}}`.
+  El servicio lee del dict en memoria y, si el worker se recicló, cae a la
+  copia persistida en la tabla **`precalculo_jobs`** (L16).
   Con `sync:true` corre inline y responde `{"ok", "total", "computados", "desde_cache", "tiempo_s"}`.
 - `POST /api/aletheia/asociar` → proxy de `POST {BASE}/api/asociar`.
   Body: `{"equipo_a", "equipo_b", "match_id": 753455, "desde_match_id": 0}`.
@@ -325,10 +339,13 @@ estas tablas). Endpoints adicionales del proxy:
   `{"ok": true, "filas_actualizadas": N, "match_id": 753455}`.
 - `GET /api/aletheia/prediccion?match_id=753455&map_name=Split&lado_inicial_a=attack`
   (o `?equipo_a=&equipo_b=`) → proxy de `GET {BASE}/api/prediccion`. Lee la fila
-  cacheada (instantáneo). Responde `{"ok": true, "prediccion": {...}, "modelo_version": "<hash>", "vigente": true}`
+  cacheada (instantáneo) con `marcadores`, `economia`, `confianza`,
+  `analisis_mapa` y `prob_intervalo` (IC95% aditivo, recalculado del RD vigente).
+  Responde `{"ok": true, "prediccion": {...}, "modelo_version": "<hash>", "vigente": true}`
   o `404 {"ok": false, "error": "Sin predicción cacheada."}`.
 - `GET /api/aletheia/predicciones?match_id=753455` (o `?equipo_a=&equipo_b=`) →
-  proxy de `GET {BASE}/api/predicciones`.
+  proxy de `GET {BASE}/api/predicciones` (cada fila trae los mismos campos,
+  incluido `prob_intervalo`).
 - `GET /api/aletheia/comparacion?match_id=753455&limite=100` (o `?equipo_a=&equipo_b=`) →
   proxy de `GET {BASE}/api/comparacion`. Compara lo predicho (`predicciones_mapa`)
   con el resultado real (`matches` + `maps`) del mismo `match_id`:
@@ -371,9 +388,11 @@ estas tablas). Endpoints adicionales del proxy:
   ```
   `match_id=0` = "sin id" (para leer sus filas usar `equipo_a`/`equipo_b`).
 - `POST /api/aletheia/serie` → proxy de `POST {BASE}/api/serie`. Probabilidad de
-  serie desde caché (sin Monte Carlo; no escribe en la DB). Body:
+  serie **cache-aware**: reutiliza las filas de caché vigentes y **calcula y
+  persiste** (mapa y serie) lo que falte; la segunda llamada idéntica sale de
+  caché. Body:
   `{"match_id":753455,"equipo_a":...,"equipo_b":...,"mapas":[{map_name,lado_inicial_a},...]}`.
-  Respuesta: `{"ok":true,"formato":"bo3","mapas_para_ganar":2,"mapas":[{...,"fuente":"cache"}],"prob_serie_a":...,"prob_serie_b":...}`.
+  Respuesta: `{"ok":true,"formato":"bo3","mapas_para_ganar":2,"mapas":[{...,"fuente":"cache|calculado","confianza":...,"economia":...,"analisis_mapa":...,"prob_intervalo":[lo,hi]|null}],"prob_serie_a":...,"prob_serie_b":...,"confianza_serie":"...","modelo_version":"<hash>","n_sim":10000,"resultados_serie":{...},"caminos_serie":{...}}`.
 - `POST /api/aletheia/borrar` → proxy de `POST {BASE}/api/borrar`. Body:
   `{"equipo_a", "equipo_b", "match_id"}`. Borra las filas de `predicciones_mapa`
   y `predicciones_serie` de ese enfrentamiento (útil para duplicados o
@@ -381,23 +400,25 @@ estas tablas). Endpoints adicionales del proxy:
   Nota: el endpoint vive en ALETHEIA_PREDICT; ALETHEIA solo lo invoca por proxy
   (no borra directamente en Turso).
 
-**Flujo del ciclo (frontend → `PREDICT_DIRECTO` ngrok solo para lo largo):**
-1. **PREPARAR** (`/aletheia_preparar/`): `POST {PREDICT_DIRECTO}/api/precalcular`
-   con el id de vlr.gg (llamada larga, directa al servicio; async con `job_id`).
-   El polling `GET {PREDICT_DIRECTO}/api/precalcular/estado?job_id=...` también es
-   directo. El resto (`equipos`, `modelo_version`, `predicciones`, `asociar`) va
-   por el **proxy** de la web (`/api/aletheia/...`). Se guarda el `modelo_version`
+**Flujo del ciclo (frontend → proxy `/api/aletheia/...`; el navegador nunca
+llama directo a ngrok y la clave API la añade el proxy server-side):**
+1. **PREPARAR** (`/aletheia_preparar/`): `POST /api/aletheia/precalcular`
+   con el id de vlr.gg (async con `job_id`; el POST responde `202` al instante).
+   El polling `GET /api/aletheia/precalcular/estado?job_id=...` también va por el
+   proxy. El resto (`equipos`, `modelo_version`, `predicciones`, `asociar`) usa
+   el mismo proxy. Se guarda el `modelo_version`
    (viene en el `202`); se puede **ASOCIAR ID** y **re-preparar** con
    `forzar:true` si el modelo cambió.
 2. **LISTAR/LEER** (`/aletheia/`, EN VIVO): `GET /api/aletheia/simulaciones` lista
    lo preparado (por defecto solo `vigente:true`); al elegir una se leen sus filas
-   UNA vez con `GET /api/aletheia/predicciones` (caché). EN VIVO **nunca** llama a
-   ngrok directo ni simula.
-3. **MAPA/BANDO**: elegir mapa+lado muestra `prob_victoria_a/b`, `prob_overtime` y
-   `confianza` desde la caché local (solo consulta `/api/aletheia/prediccion` si
-   falta el dato).
+   UNA vez con `GET /api/aletheia/predicciones` (caché). El navegador **nunca**
+   llama a ngrok directo.
+3. **MAPA/BANDO**: elegir mapa+lado muestra `prob_victoria_a/b`, `prob_overtime`,
+   `confianza` y `prob_intervalo` (IC95%, si el rating trae RD) desde la caché
+   local (solo consulta `/api/aletheia/prediccion` si falta el dato).
 4. **ARMAR SERIE**: `POST /api/aletheia/serie` da `prob_serie_a/b`,
-   `confianza_serie` y `mapas_para_ganar` al instante (desde caché, sin Monte Carlo).
+   `confianza_serie` y `mapas_para_ganar` al instante (cache-aware: reutiliza la
+   caché y calcula/persiste lo que falte).
 5. **COMPARACIÓN** (EN VIVO): `GET /api/aletheia/comparacion` contrasta lo predicho
    con el resultado real del mismo `match_id`.
 6. **GESTIÓN** (EN VIVO): por enfrentamiento, **asignar/corregir ID**
@@ -478,24 +499,25 @@ estas tablas). Endpoints adicionales del proxy:
    Esto garantiza que las peticiones se dirijan correctamente al mismo host tanto en entornos locales (`http://localhost:5000/api`) como en producción en Render (`https://tu-app.onrender.com/api`).
 
 3. **Servicio ALETHEIA_PREDICT (ngrok) y las DOS páginas (`aletheia/` y `aletheia_preparar/`):**
-   - El predictor externo corre en el PC del autor y se expone con ngrok en la
-     constante `PREDICT_DIRECTO` (`https://snugly-encore-sweep.ngrok-free.dev`).
-     Todas las llamadas a ese host llevan el header `ngrok-skip-browser-warning: 1`
-     (helper `predictFetch`).
-   - Las corridas **largas** (`POST /api/precalcular` y su polling
-     `GET /api/precalcular/estado`) se piden **directo** a `PREDICT_DIRECTO` (no por
-     el proxy de la web) para no chocar con el timeout de gunicorn/Render.
+   - El predictor externo corre en el PC del autor y se expone con ngrok; la URL
+     llega al proxy por `ALETHEIA_PREDICT_URL`. **Todas** las llamadas del
+     navegador van por el proxy `/api/aletheia/...` (helper `proxyFetch`). El
+     header `ngrok-skip-browser-warning` y la clave `X-API-Key` los añade
+     `aletheia/aletheia.py` **server-side** (`_request_service`); la clave nunca
+     llega al HTML/JS.
+   - `POST /api/aletheia/precalcular` (async: responde `202` al instante) y su
+     polling `GET /api/aletheia/precalcular/estado` van por el proxy igual que
      `equipos`, `mapas`, `modelo_version`, `predicciones`, `prediccion`, `serie`,
-     `comparacion`, `simulaciones`, `asociar` y `borrar` van por el **proxy**
-     `/api/aletheia/...` (helper `proxyFetch`; son rápidos).
-   - **EN VIVO** (`/aletheia/`) no importa `PREDICT_DIRECTO`: todas sus lecturas
-     salen de la caché a través del proxy.
+     `comparacion`, `simulaciones`, `asociar` y `borrar`; así no chocan con el
+     timeout de gunicorn/Render.
+   - **EN VIVO** (`/aletheia/`) lee todo de la caché a través del proxy.
    - **`/aletheia_preparar/` — PREPARAR:** selección de equipos (search+grids),
      selector de simulaciones (1K/5K/10K; **sin 25K/50K en hosting free**), campo de ID vlr.gg (parsea URL o
-     número), **PREPARAR PARTIDO** (async: `POST /api/precalcular` → `job_id` → poll
-     `/api/precalcular/estado`, con % y tiempo transcurrido), **ASOCIAR ID** y badges
-     de caché ("ya predicho") y de `modelo_version` ("si cambia el modelo" marca
-     RE-PREPARAR). Botón **"IR A EN VIVO →"**.
+     número), **PREPARAR PARTIDO** (async: `POST /api/aletheia/precalcular` → `job_id`
+     → poll `/api/aletheia/precalcular/estado`, con % y tiempo transcurrido),
+     **ASOCIAR ID** y badges de caché ("ya predicho") y de `modelo_version` ("si
+     cambia el modelo" marca RE-PREPARAR; si el servicio trae `desactualizado:true`
+     avisa de reiniciarlo). Botón **"IR A EN VIVO →"**.
      - El **poll es resiliente**: ante cortes del túnel/PC (p. ej.
        `ERR_PROXY_CONNECTION_FAILED`) reintenta con backoff en vez de abortar, y
        ofrece **"cancelar espera"**. Se usa un favicon inline para evitar el 404 de
@@ -592,11 +614,12 @@ estas tablas). Endpoints adicionales del proxy:
         ARMAR SERIE antes).
      - **VIGENCIA Y RE-PRECALCULAR:** la web compara `modelo_version` de cada
        enfrentamiento con `GET /api/aletheia/modelo_version` (y usa `vigente` de
-       `/api/simulaciones`). Si difiere, o si las filas no traen `marcadores`,
-       marca el enfrentamiento como **RE-PRECALCULAR** y ofrece **↻ RE-PRECALCULAR**,
-       que hace `POST /api/precalcular` con `forzar:true` **directo a
-       `PREDICT_DIRECTO`** (async: `job_id` + polling de `/api/precalcular/estado`),
-       refresca la lista y vuelve a leer la caché.
+       `/api/simulaciones`); si el servicio trae `desactualizado:true` muestra el
+       aviso de reinicio. Si el modelo difiere, o si las filas no traen
+       `marcadores`/`economia`, marca el enfrentamiento como **RE-PRECALCULAR** y
+       ofrece **↻ RE-PRECALCULAR**, que hace `POST /api/aletheia/precalcular` con
+       `forzar:true` **por el proxy** (async: `job_id` + polling de
+       `/api/aletheia/precalcular/estado`), refresca la lista y vuelve a leer la caché.
       - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra
         tarjetas resumen (accuracy, brier, log-loss, favoritos_ok, upsets,
         inciertos) — `ACCURACY` con la escala verde/naranja/rojo (≥67/≥50/<50) —
@@ -772,10 +795,19 @@ estas tablas). Endpoints adicionales del proxy:
 - **Archivo de Configuración:** `render.yaml` declara el servicio web Python con las variables de entorno necesarias para la conexión remota a Turso.
 - **Variables de Entorno:**
   - `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`: conexión a la base de datos Turso.
+    El **token no se versiona**: `render.yaml` lo declara con `sync: false`, se
+    fija en el panel de Render (mismo patrón que el `render.yaml` de Predict) y
+    `backend/conexion.py` no tiene valor por defecto (lo lee del entorno; en
+    local `wsgi.py` carga `.env`, que está gitignored). Si se filtró alguna vez,
+    hay que **rotarlo** en Turso y actualizar el panel.
   - `ALETHEIA_PREDICT_URL`: URL base del servicio externo **ALETHEIA_PREDICT**
     (motor de predicción). En local se define en el archivo `.env`
     (`http://localhost:8000`); en Render se declara en `render.yaml`.
     El módulo `aletheia/aletheia.py` actúa como proxy hacia esta URL.
+  - `ALETHEIA_API_KEY`: clave compartida con ALETHEIA_PREDICT para los endpoints
+    admin/mutantes. Se define en el `.env` local (web y Predict con la **misma**
+    clave) y en el panel de Render (secreto, `sync: false`). El proxy la añade
+    server-side; nunca se expone al navegador.
 
 ---
 
@@ -793,3 +825,29 @@ Al recibir una nueva tarea o solicitud de cambio:
 9. **Rendimiento**: para blueprints de solo lectura usa `fetch_all` (`backend.conexion`) + `@ttl_cache(120)` (`backend.cache`); no abras conexiones nuevas por consulta ni paralelices consultas a Turso (el cliente serializa). Mantén gzip (`flask-compress`) y paginación en listados grandes.
 10. **Enlaces internos**: navega siempre con `/componente/` (o relativo `../componente/`, `./`), **nunca** `/componente/index.html` (regla de estética de URL, §5.1). Al añadir una vista dentro de una página, usa query params (`?team=`, `?match=`…), no nuevas carpetas con `index.html` en el enlace.
 11. **Diseño y colores**: la paleta y los tokens viven SOLO en `comun/theme.css`; no introduzcas colores literales en HTML/CSS (usa variables). El contenido/chrome va en negros, grises y blancos neutros: el verde no se usa en bordes ni superficies, solo en la escala semántica de datos (verde/naranja/amarillo/rojo) y en la animación de nodos. Toda página nueva debe enlazar `comun/theme.css` antes de sus CSS y `header/header-nodes.js` después de `header.js`. El ico/logo se referencia desde `comun/ALETHEIA_ico.svg` (los archivos sueltos de la raíz dan 308/404 en Flask).
+
+---
+
+## 8. Registro de Cambios
+
+- **2026-10-02 — Alineación web ↔ ALETHEIA_PREDICT (H1-H6).**
+  - **H1 (clave S1):** `aletheia/aletheia.py` añade `X-API-Key` **server-side**
+    cuando `ALETHEIA_API_KEY` está configurada y expone
+    `GET /api/aletheia/precalcular/estado`; PREPARAR, RE-PRECALCULAR y su polling
+    pasan al proxy (`proxyFetch`); se eliminan `PREDICT_DIRECTO`,
+    `NGROK_HEADER` y `predictFetch` de los dos `script.js`. El navegador ya no
+    llama a ngrok.
+  - **H2:** `/api/serie` documentado como **cache-aware** (reutiliza la caché y
+    calcula/persiste lo que falte), en docstring, nota de la UI y esta doc.
+  - **H3:** la web muestra `prob_intervalo` (IC95% aditivo, A6) en la tarjeta de
+    mapa y en el informe `.md`; Predict lo **recalcula en la lectura de caché**
+    (`api/app.py`, aditivo: no cambia la P puntual ni `modelo_version`).
+  - **H4:** la web avisa cuando `GET /api/modelo_version` trae
+    `desactualizado:true` ("reinicia ALETHEIA_PREDICT") en EN VIVO y en PREPARAR.
+  - **H5:** §4.4/§5/§6 y los comentarios/docstrings alineados con el contrato
+    vigente.
+  - **H6:** `render.yaml` sin el valor de `TURSO_AUTH_TOKEN` (`sync: false`) y
+    con `ALETHEIA_API_KEY`; `backend/conexion.py` deja de llevar el JWT como
+    valor por defecto (lo lee del entorno/`.env`) y `wsgi.py` carga `.env`
+    antes de importar la app. La **rotación del token** en Turso y su carga en
+    el panel de Render es una operación manual pendiente de confirmar.

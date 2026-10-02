@@ -13,15 +13,14 @@ try:
 except ImportError:
     libsql = None
 
-# Credenciales de Turso (por defecto la DB en la nube proporcionada)
+# Credenciales de Turso. El token es un secreto: se lee del entorno o del `.env`
+# local (gitignored); NUNCA se versiona un valor por defecto. En Render se fija
+# en el panel (`sync: false` en `render.yaml`).
 TURSO_DATABASE_URL = os.environ.get(
     'TURSO_DATABASE_URL',
     'libsql://aletheia-laperradeadrelees.aws-us-east-1.turso.io'
 )
-TURSO_AUTH_TOKEN = os.environ.get(
-    'TURSO_AUTH_TOKEN',
-    'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTAzNzA4MTgsImlkIjoiMDFhMGRhNjctMzUwMS03Y2Q4LWIzZmMtZDdjZGNkOTA1YjU4Iiwia2lkIjoiZUl5NHJsYll5Qk9CNHpUbDRpekNNbWRiRkI2a09Uc2dhTmFMQ1lrRDB5ZyIsInJpZCI6IjU5NDJlMmExLWY2YWMtNDYyMy1hNmJiLTg0OTUwNTRiMTczNiJ9.UZ0qDE1MQi2qbQHHMhqMl33r0mx0VRZJ26sBObcI0iF-6g7sbcy4UubNUtgOmHsBoTGgJO7D5mFBB619htWmAw'
-)
+TURSO_AUTH_TOKEN = os.environ.get('TURSO_AUTH_TOKEN', '')
 
 # Ruta local de reserva (fallback)
 LOCAL_DB_PATH = os.environ.get(

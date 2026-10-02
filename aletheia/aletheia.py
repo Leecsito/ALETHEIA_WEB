@@ -11,6 +11,7 @@ Endpoints expuestos (proxy):
     POST /api/aletheia/predecir        -> POST {BASE}/api/predecir
     GET  /api/aletheia/modelo_version  -> GET  {BASE}/api/modelo_version
     POST /api/aletheia/precalcular     -> POST {BASE}/api/precalcular
+    GET  /api/aletheia/precalcular/estado -> GET {BASE}/api/precalcular/estado
     POST /api/aletheia/asociar         -> POST {BASE}/api/asociar
     GET  /api/aletheia/prediccion      -> GET  {BASE}/api/prediccion
     GET  /api/aletheia/predicciones    -> GET  {BASE}/api/predicciones
@@ -33,9 +34,11 @@ Decisiones de diseño:
     · Si el servicio no responde se devuelve 502 {"ok": false, "error": ...};
       si tarda más de TIMEOUT segundos, 504.
 
-NOTA: las corridas largas (precalcular / predecir con 25K-50K) se piden
-DIRECTO desde el frontend a PREDICT_DIRECTO (ngrok), no por este proxy, para
-no chocar con el timeout de gunicorn.
+Clave API: si `ALETHEIA_API_KEY` está configurada en el entorno, este proxy
+añade **server-side** el header `X-API-Key` a todas las llamadas al servicio
+(los endpoints públicos la ignoran). La clave NUNCA viaja al navegador.
+`POST /api/precalcular` responde 202 al instante (async con `job_id`), así que
+también puede pedirse por el proxy sin chocar con su timeout.
 """
 
 import os
@@ -87,8 +90,14 @@ def _request_service(method, path, payload=None, params=None):
     """
     url = f"{BASE_URL}{path}"
     # El header de ngrok es inocuo para URLs locales y evita la página de aviso
-    # si ALETHEIA_PREDICT_URL apunta al túnel de ngrok en producción.
-    kwargs = {'timeout': TIMEOUT, 'headers': {'ngrok-skip-browser-warning': '1'}}
+    # si ALETHEIA_PREDICT_URL apunta al túnel de ngrok en producción. La clave
+    # API se añade server-side (nunca sale al navegador); los endpoints
+    # públicos del servicio la ignoran.
+    headers = {'ngrok-skip-browser-warning': '1'}
+    api_key = os.environ.get('ALETHEIA_API_KEY', '').strip()
+    if api_key:
+        headers['X-API-Key'] = api_key
+    kwargs = {'timeout': TIMEOUT, 'headers': headers}
     if payload is not None:
         kwargs['json'] = payload
     if params:
@@ -194,6 +203,16 @@ def precalcular():
     return _passthrough_post('/api/precalcular')
 
 
+@aletheia_bp.route('/api/aletheia/precalcular/estado', methods=['GET'])
+def precalcular_estado():
+    """Proxy GET /api/precalcular/estado (progreso de un job de precálculo).
+
+    El polling de PREPARAR y RE-PRECALCULAR vuelve por el proxy: el POST ya
+    responde 202 al instante y cada sondeo es rápido.
+    """
+    return _passthrough_get('/api/precalcular/estado')
+
+
 @aletheia_bp.route('/api/aletheia/asociar', methods=['POST'])
 def asociar():
     """Proxy POST /api/asociar (reasigna el match_id de las predicciones)."""
@@ -244,7 +263,13 @@ def simulaciones():
 
 @aletheia_bp.route('/api/aletheia/serie', methods=['POST'])
 def serie():
-    """Proxy POST /api/serie (probabilidad de serie desde caché, sin Monte Carlo)."""
+    """Proxy POST /api/serie (probabilidad de serie cache-aware).
+
+    Reutiliza las filas de caché vigentes y **calcula y persiste** en la DB lo
+    que falte (mapa y serie); una segunda llamada idéntica sale de caché
+    (`fuente` por mapa). Devuelve además `confianza_serie`, `modelo_version`,
+    `n_sim`, `resultados_serie`, `caminos_serie` y `prob_intervalo` por mapa.
+    """
     return _passthrough_post('/api/serie')
 
 

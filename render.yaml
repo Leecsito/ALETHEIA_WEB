@@ -10,4 +10,6 @@ services:
       - key: TURSO_DATABASE_URL
         value: libsql://aletheia-laperradeadrelees.aws-us-east-1.turso.io
       - key: TURSO_AUTH_TOKEN
-        value: eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3OTAzNzA4MTgsImlkIjoiMDFhMGRhNjctMzUwMS03Y2Q4LWIzZmMtZDdjZGNkOTA1YjU4Iiwia2lkIjoiZUl5NHJsYll5Qk9CNHpUbDRpekNNbWRiRkI2a09Uc2dhTmFMQ1lrRDB5ZyIsInJpZCI6IjU5NDJlMmExLWY2YWMtNDYyMy1hNmJiLTg0OTUwNTRiMTczNiJ9.UZ0qDE1MQi2qbQHHMhqMl33r0mx0VRZJ26sBObcI0iF-6g7sbcy4UubNUtgOmHsBoTGgJO7D5mFBB619htWmAw
+        sync: false          # rotar el token en Turso y fijarlo en el panel (secreto)
+      - key: ALETHEIA_API_KEY
+        sync: false          # misma clave que ALETHEIA_PREDICT (secreto)

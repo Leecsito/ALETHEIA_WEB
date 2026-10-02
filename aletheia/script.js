@@ -1,16 +1,9 @@
 const API = `${window.location.origin}/api`;
 
-// EN VIVO lee de la caché por el proxy (/api/aletheia/...). La única corrida
-// larga que puede lanzar es RE-PRECALCULAR (forzar:true), que va DIRECTO a
-// ngrok para no chocar con el timeout de gunicorn/Render.
-const PREDICT_DIRECTO = 'https://snugly-encore-sweep.ngrok-free.dev';
-const NGROK_HEADER = { 'ngrok-skip-browser-warning': '1' };
-
-function predictFetch(path, options = {}) {
-    const headers = Object.assign({}, NGROK_HEADER, options.headers || {});
-    return fetch(`${PREDICT_DIRECTO}${path}`, Object.assign({}, options, { headers }));
-}
-
+// EN VIVO lee de la caché por el proxy (/api/aletheia/...). RE-PRECALCULAR
+// (forzar:true) también va por el proxy: el POST async responde 202 al
+// instante y su polling es rápido. La clave API la añade el proxy
+// server-side; nunca llega al navegador.
 let availableMaps = [];    // 13 mapas del servicio (proxy /api/aletheia/mapas)
 let mapsLoading = false;
 let sims = [];             // enfrentamientos ya preparados (/api/simulaciones)
@@ -29,6 +22,7 @@ let simSerie = {};               // match_id -> {p_a,p_b,p_real} | {error:true} 
 let serieQueueRunning = false;   // evita doble cola de POST /serie para la lista
 let resultadosError = null;      // error al leer /api/partidos/resultados (null = ok)
 let serviceModelVersion = null;  // modelo vigente (GET /modelo_version)
+let serviceModeloDesactualizado = false;  // true = reentreno/cambio sin reiniciar
 let recalculating = false;       // evita doble RE-PRECALCULAR
 let recalcStopped = false;       // cancelar la espera del job de re-precalculo
 let liveBulkError = null;        // error al leer /predicciones (null = ok)
@@ -243,6 +237,9 @@ async function loadSimulaciones() {
         simListStatus.textContent = `${vigentes} vigentes · ${sims.length} totales`
             + (pendientes != null ? ` · ${pendientes} sin resultado` : '')
             + ` · modelo ${data.modelo_version || '—'}`
+            + (serviceModeloDesactualizado
+                ? ' · ⚠ servicio desactualizado: reinicia ALETHEIA_PREDICT; las filas nuevas quedarán viejas al reiniciar'
+                : '')
             + (modelVersionError
                 ? ` · ⚠ no se pudo leer /modelo_version (${modelVersionError}); vigencia según el servicio`
                 : '')
@@ -530,7 +527,8 @@ async function borrarSim(sim) {
     }
 }
 
-// Modelo vigente del servicio (GET /modelo_version, vía proxy).
+// Modelo vigente del servicio (GET /modelo_version, vía proxy). `desactualizado`
+// avisa de un reentreno/cambio de core/ pendiente de reiniciar el servicio.
 async function loadModeloVersion() {
     modelVersionError = null;
     try {
@@ -538,8 +536,22 @@ async function loadModeloVersion() {
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
         serviceModelVersion = data.modelo_version;
+        serviceModeloDesactualizado = data.desactualizado === true;
     } catch (e) {
         modelVersionError = e.message || 'servicio no disponible';
+    }
+    refrescarAvisoModelo();
+}
+
+// Refleja el aviso de servicio desactualizado sin repetirlo si ya está pintado.
+function refrescarAvisoModelo() {
+    if (!serviceModeloDesactualizado || !simListStatus) return;
+    const aviso = '⚠ servicio desactualizado: reinicia ALETHEIA_PREDICT; las filas nuevas quedarán viejas al reiniciar';
+    if (!simListStatus.textContent.includes('servicio desactualizado')) {
+        simListStatus.className = 'live-status warn';
+        simListStatus.textContent = simListStatus.textContent
+            ? `${simListStatus.textContent} · ${aviso}`
+            : aviso;
     }
 }
 
@@ -620,8 +632,8 @@ async function selectSim(s) {
     renderSimList();
 }
 
-// Re-precalcula el enfrentamiento actual con forzar:true (directo a ngrok) y
-// refresca la lista. Es la única corrida larga que lanza EN VIVO.
+// Re-precalcula el enfrentamiento actual con forzar:true (por el proxy; el POST
+// responde 202 al instante) y refresca la lista.
 async function reprecalcular(s) {
     if (!s || recalculating) return;
     recalculating = true;
@@ -632,7 +644,7 @@ async function reprecalcular(s) {
     simListStatus.textContent = `Re-precalculando ${s.equipo_a} vs ${s.equipo_b}… no cierres la pestaña.`;
     const t0 = Date.now();
     try {
-        const res = await predictFetch('/api/precalcular', {
+        const res = await proxyFetch('/precalcular', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -684,7 +696,7 @@ async function pollPrecalcular(jobId, t0) {
         }
         let r, jd;
         try {
-            r = await predictFetch(`/api/precalcular/estado?job_id=${encodeURIComponent(jobId)}`);
+            r = await proxyFetch(`/precalcular/estado?job_id=${encodeURIComponent(jobId)}`);
             if (r.status === 404) {
                 simListStatus.className = 'live-status err';
                 simListStatus.textContent = 'El servicio perdió el job. Reintenta RE-PRECALCULAR.';
@@ -1005,6 +1017,9 @@ function paintLiveDetail(p, modelVersion, vigente) {
     const histP = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
     const wrA = (am && am.equipo_a) ? am.equipo_a : null;
     const wrB = (am && am.equipo_b) ? am.equipo_b : null;
+    // IC95% aditivo del motor (A6); filas viejas sin el dato lo ocultan.
+    const ic = (p && Array.isArray(p.prob_intervalo) && p.prob_intervalo.length === 2
+        && p.prob_intervalo[0] != null && p.prob_intervalo[1] != null) ? p.prob_intervalo : null;
     renderScoreboard(p);
     renderEconomia(p);
     liveCards.innerHTML = `
@@ -1028,6 +1043,10 @@ function paintLiveDetail(p, modelVersion, vigente) {
       <div class="live-card-label">MUESTRAS</div>
       <div class="live-card-val">${p.n_sim ? Number(p.n_sim).toLocaleString() : '—'}</div>
     </div>
+    ${ic ? `<div class="live-card" title="Intervalo de confianza 95% de la P(mapa) por varianza del rating (aditivo, no cambia la puntual)">
+      <div class="live-card-label">IC95% (MOTOR)</div>
+      <div class="live-card-val">${pct(ic[0])}–${pct(ic[1])}</div>
+    </div>` : ''}
     <div class="analisis-nota analisis-nota-hist">
       <b>ANÁLISIS HISTÓRICO</b> (no es la predicción del motor) ·
       ${histP != null && !isNaN(histP) ? `p_mapa_a: <b>${pct(histP)}</b>` : 'p_mapa_a: —'} ·
@@ -1311,7 +1330,10 @@ function renderSerieBanner(data) {
     ${caminosBlock}
     ${mapRows ? `<div class="serie-maps"><div class="sd-title">MAPAS · PREDICCIÓN DEL MOTOR <span class="eco-note">P calibrada · misma en todos los mapas y lados · hist no incluido aquí</span></div>${mapRows}</div>` : ''}`;
 
-    serieNote.innerHTML = `<strong>Serie desde caché</strong> (sin Monte Carlo). Formato <strong>${(data.formato || '').toUpperCase()}</strong> — necesario ganar <strong>${data.mapas_para_ganar}</strong> mapa(s).`;
+    const fuentes = [...new Set((data.mapas || []).map(m => m.fuente).filter(Boolean))];
+    serieNote.innerHTML = `<strong>Serie cache-aware</strong> (reutiliza la caché y calcula/persiste lo que falte` +
+        `${fuentes.length ? `; fuente por mapa: <strong>${escapeHtml(fuentes.join('/'))}</strong>` : ''}). ` +
+        `Formato <strong>${(data.formato || '').toUpperCase()}</strong> — necesario ganar <strong>${data.mapas_para_ganar}</strong> mapa(s).`;
 }
 
 // ─── INFORME PARA EL LLM (prompt + todos los datos + notas) ─────────────────
@@ -1405,9 +1427,12 @@ function _mercadosTexto(payload) {
     out.push('Total de rondas y pistol por mapa:');
     for (const mp of (m.por_mapa || [])) {
         const tr = mp.total_rondas || {}, pis = mp.pistol || {};
+        const ic = (Array.isArray(mp.ic95) && mp.ic95.length === 2 && mp.ic95[0] != null)
+            ? ` · IC95% ${f(mp.ic95[0])}–${f(mp.ic95[1])}` : '';
         out.push(`  - ${mp.map} (${mp.lado}): rondas≈${tr.esperado != null ? tr.esperado : '—'}`
             + ` · >21.5 ${f(tr.mas_21_5)} · rondas>24.5 ${f(tr.mas_24_5)}`
-            + ` · pistol ${payload.equipo_a} ${f(pis.p_a)} (n=${pis.n != null ? pis.n : '—'})`);
+            + ` · pistol ${payload.equipo_a} ${f(pis.p_a)} (n=${pis.n != null ? pis.n : '—'})`
+            + ic);
     }
     return out.join('\n');
 }
@@ -1425,6 +1450,7 @@ function descargarAnalisis() {
         model_p_b: p.prob_victoria_b,
         confianza: confBand(p),
         ot: p.prob_overtime,
+        ic95: p.prob_intervalo || null,
         analisis_mapa: p.analisis_mapa || null,
         total_rondas: _totalRondas(p.marcadores),
         pistol: (p.economia && p.economia.pistol)
@@ -1442,7 +1468,8 @@ function descargarAnalisis() {
         marcador_exacto_serie: ultimaSerie ? ultimaSerie.resultados_serie : null,
         por_mapa: mapas.map(m => ({
             map: m.map, lado: m.lado,
-            total_rondas: m.total_rondas, pistol: m.pistol, marcador_top5: m.marcador_top5,
+            total_rondas: m.total_rondas, pistol: m.pistol,
+            marcador_top5: m.marcador_top5, ic95: m.ic95,
         })),
     };
 
