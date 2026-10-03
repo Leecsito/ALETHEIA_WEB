@@ -1,9 +1,11 @@
 const API = `${window.location.origin}/api`;
 
 // Todas las llamadas al servicio de predicción van por el proxy de la web
-// (/api/aletheia/...): el poll de equipos/mapa/modelo_version/asociar y también
-// precalcular + su polling de estado (el POST async responde 202 al instante).
-// La clave API la añade el proxy server-side; nunca llega al navegador.
+// (/api/aletheia/...): las lecturas (equipos/modelo_version/predicciones) al
+// servicio de Render (siempre disponible) y el cómputo/mutaciones (precalcular
+// + su polling de estado, asociar) al PC/ngrok. El POST de precalcular es
+// async (202 al instante). La clave API la añade el proxy server-side; nunca
+// llega al navegador.
 function proxyFetch(path, options = {}) {
     return fetch(`${API}/aletheia/${String(path).replace(/^\/+/, '')}`, options);
 }

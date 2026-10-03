@@ -1,9 +1,10 @@
 const API = `${window.location.origin}/api`;
 
-// EN VIVO lee de la caché por el proxy (/api/aletheia/...). RE-PRECALCULAR
-// (forzar:true) también va por el proxy: el POST async responde 202 al
-// instante y su polling es rápido. La clave API la añade el proxy
-// server-side; nunca llega al navegador.
+// EN VIVO lee de la caché por el proxy (/api/aletheia/...). Las lecturas van
+// al servicio de Render (siempre disponible, cache-first) y caen a ngrok/PC
+// si aquel no responde; RE-PRECALCULAR (forzar:true) va directo al PC (async:
+// el POST responde 202 y su polling es rápido). La clave API la añade el
+// proxy server-side; nunca llega al navegador.
 let availableMaps = [];    // 13 mapas del servicio (proxy /api/aletheia/mapas)
 let mapsLoading = false;
 let sims = [];             // enfrentamientos ya preparados (/api/simulaciones)
@@ -34,9 +35,10 @@ const RECALC_POLL_MS = 2000;
 const RECALC_TIMEOUT_MS = 30 * 60 * 1000;
 
 // Cola de POST /serie de la lista: máximo de pedidos por carga y corte de
-// espera por request (el servicio vive detrás de ngrok y puede tardar).
+// espera por request. 60 s cubre el cold start del servicio de lectura en
+// Render (en caliente responde en segundos); el proxy reintenta y cae a ngrok.
 const SERIE_QUEUE_MAX = 12;
-const SERIE_TIMEOUT_MS = 20000;
+const SERIE_TIMEOUT_MS = 60000;
 
 // Filtro de resultado persistido (si el navegador lo permite).
 const FILTRO_SIMS_KEY = 'ae_sim_filtro';

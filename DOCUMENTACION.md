@@ -51,7 +51,8 @@ ALETHEIA/
 │   └── script.js
 ├── aletheia/                 # Componente EN VIVO (predictor; proxy hacia ALETHEIA_PREDICT)
 │   ├── __init__.py
-│   ├── aletheia.py           # Blueprint Flask — proxy HTTP a ALETHEIA_PREDICT_URL
+│   ├── aletheia.py           # Blueprint Flask — proxy HTTP: lecturas al servicio
+│   │                         #   READ_URL (Render) y cómputo/mutaciones a ALETHEIA_PREDICT_URL
 │   ├── index.html            # Página EN VIVO: lista de simulaciones + mapa/bando + armador de serie
 │   ├── style.css
 │   └── script.js
@@ -215,6 +216,18 @@ Este módulo **no simula partidos**: es un **proxy HTTP** hacia el servicio exte
 logística sobre `rating_diff` (P(mapa)) + Monte Carlo re-escalado** (marcador/economía)
 para estimar overtime. La URL base se lee de la variable de entorno
 `ALETHEIA_PREDICT_URL` (por defecto `http://localhost:8000`).
+
+Hay **dos servicios** (`aletheia/aletheia.py`): las **lecturas** (`equipos`,
+`mapas`, `modelo_version`, `simulaciones`, `prediccion`/`predicciones`,
+`comparacion`, `scorecard(_agregado)`, `dataset` sin guardar, y
+`predecir`/`serie` sin `forzar`) van a **`ALETHEIA_PREDICT_READ_URL`** —el
+servicio **cache-first en Render, siempre disponible**: responde de Turso sin
+cargar el motor—, con un **reintento por cold start** y **caída a
+`ALETHEIA_PREDICT_URL`** si no responde. El **cómputo pesado y las mutaciones**
+(`precalcular`, `precalcular/estado`, `asociar`, `borrar`, `dataset?guardar=1`
+y `predecir`/`serie` con `forzar:true`) siguen yendo a `ALETHEIA_PREDICT_URL`
+(PC/ngrok). Si `ALETHEIA_PREDICT_READ_URL` no está definida, todo va a
+`ALETHEIA_PREDICT_URL` (comportamiento anterior).
 
 La clave `ALETHEIA_API_KEY` (si está configurada en el entorno de la web) viaja
 **solo server-side**: `_request_service` la añade como header `X-API-Key` a
@@ -505,6 +518,12 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      header `ngrok-skip-browser-warning` y la clave `X-API-Key` los añade
      `aletheia/aletheia.py` **server-side** (`_request_service`); la clave nunca
      llega al HTML/JS.
+   - **Lecturas sin PC:** `ALETHEIA_PREDICT_READ_URL` apunta al servicio
+     cache-first en Render (Fase 2 de `PLAN_WEB_SIN_SERVIDOR.md`); así EN VIVO
+     lista y abre las predicciones ya preparadas **con el PC apagado** (las
+     filas salen de `predicciones_mapa`/`predicciones_serie` en Turso). El proxy
+     reintenta una vez por cold start y cae a ngrok si el servicio de lectura no
+     responde; `forzar`/`precalcular` siguen pidiendo el PC.
    - `POST /api/aletheia/precalcular` (async: responde `202` al instante) y su
      polling `GET /api/aletheia/precalcular/estado` van por el proxy igual que
      `equipos`, `mapas`, `modelo_version`, `predicciones`, `prediccion`, `serie`,
@@ -801,9 +820,14 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
     local `wsgi.py` carga `.env`, que está gitignored). Si se filtró alguna vez,
     hay que **rotarlo** en Turso y actualizar el panel.
   - `ALETHEIA_PREDICT_URL`: URL base del servicio externo **ALETHEIA_PREDICT**
-    (motor de predicción). En local se define en el archivo `.env`
-    (`http://localhost:8000`); en Render se declara en `render.yaml`.
+    (PC/ngrok: cómputo pesado y mutaciones). En local se define en el archivo
+    `.env` (`http://localhost:8000`); en Render se declara en `render.yaml`.
     El módulo `aletheia/aletheia.py` actúa como proxy hacia esta URL.
+  - `ALETHEIA_PREDICT_READ_URL`: URL del **servicio de lectura** cache-first en
+    Render (siempre disponible). El proxy manda ahí las lecturas y solo cae a
+    `ALETHEIA_PREDICT_URL` si no responde. Si no se define, todas las llamadas
+    van a `ALETHEIA_PREDICT_URL` (comportamiento anterior); en Render se fija
+    como secreto en el panel (`sync: false` en `render.yaml`).
   - `ALETHEIA_API_KEY`: clave compartida con ALETHEIA_PREDICT para los endpoints
     admin/mutantes. Se define en el `.env` local (web y Predict con la **misma**
     clave) y en el panel de Render (secreto, `sync: false`). El proxy la añade
@@ -830,6 +854,18 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-02 — Fase 2 web sin servidor local (lecturas en Render).**
+  - `aletheia/aletheia.py` enruta las **lecturas** a
+    `ALETHEIA_PREDICT_READ_URL` (servicio cache-first en Render, siempre
+    disponible) con un reintento por cold start y caída a
+    `ALETHEIA_PREDICT_URL`; el cómputo/mutaciones (`precalcular`,
+    `precalcular/estado`, `asociar`, `borrar`, `dataset?guardar=1`,
+    `predecir`/`serie` con `forzar:true`) siguen en ngrok/PC. Sin
+    `ALETHEIA_PREDICT_READ_URL`, todo va a `ALETHEIA_PREDICT_URL`.
+  - `render.yaml` declara `ALETHEIA_PREDICT_READ_URL` (`sync: false`).
+  - EN VIVO sube el corte de espera de la cola `POST /serie` a 60 s (cold
+    start de Render); los comentarios de enrutado de los dos `script.js`
+    quedan al día.
 - **2026-10-02 — Alineación web ↔ ALETHEIA_PREDICT (H1-H6).**
   - **H1 (clave S1):** `aletheia/aletheia.py` añade `X-API-Key` **server-side**
     cuando `ALETHEIA_API_KEY` está configurada y expone
