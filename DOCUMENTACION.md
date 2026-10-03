@@ -217,17 +217,23 @@ logística sobre `rating_diff` (P(mapa)) + Monte Carlo re-escalado** (marcador/e
 para estimar overtime. La URL base se lee de la variable de entorno
 `ALETHEIA_PREDICT_URL` (por defecto `http://localhost:8000`).
 
-Hay **dos servicios** (`aletheia/aletheia.py`): las **lecturas** (`equipos`,
-`mapas`, `modelo_version`, `simulaciones`, `prediccion`/`predicciones`,
-`comparacion`, `scorecard(_agregado)`, `dataset` sin guardar, y
-`predecir`/`serie` sin `forzar`) van a **`ALETHEIA_PREDICT_READ_URL`** —el
-servicio **cache-first en Render, siempre disponible**: responde de Turso sin
-cargar el motor—, con un **reintento por cold start** y **caída a
-`ALETHEIA_PREDICT_URL`** si no responde. El **cómputo pesado y las mutaciones**
+**Lectura directa de Turso (sin servidor):** las lecturas de caché (`mapas`,
+`modelo_version`, `simulaciones`, `prediccion`/`predicciones` y `serie` si hay
+una fila en `predicciones_serie` con los mismos mapas/lados) se sirven **primero
+desde Turso** (`backend.conexion.fetch_all`): la web lista y abre las
+predicciones preparadas con el PC y el servicio apagados. Se recalculan aquí
+`confianza` y `analisis_mapa` (misma regla/réplica que `core/`); el IC95%
+(`prob_intervalo`) queda `null` (usa los RD locales del servicio) y la UI lo
+oculta.
+
+Solo lo que el servicio deriva va a **`ALETHEIA_PREDICT_READ_URL`** (Render,
+cache-first, con reintento por cold start y caída a `ALETHEIA_PREDICT_URL`):
+`equipos`, `comparacion`, `scorecard(_agregado)`, `dataset` sin guardar,
+`predecir` y `serie` no cacheada. El **cómputo pesado y las mutaciones**
 (`precalcular`, `precalcular/estado`, `asociar`, `borrar`, `dataset?guardar=1`
-y `predecir`/`serie` con `forzar:true`) siguen yendo a `ALETHEIA_PREDICT_URL`
-(PC/ngrok). Si `ALETHEIA_PREDICT_READ_URL` no está definida, todo va a
-`ALETHEIA_PREDICT_URL` (comportamiento anterior).
+y `predecir`/`serie` con `forzar:true`) van a `ALETHEIA_PREDICT_URL`
+(PC/ngrok). Si `ALETHEIA_PREDICT_READ_URL` no está definida, las lecturas no
+cacheadas van a `ALETHEIA_PREDICT_URL` (comportamiento anterior).
 
 La clave `ALETHEIA_API_KEY` (si está configurada en el entorno de la web) viaja
 **solo server-side**: `_request_service` la añade como header `X-API-Key` a
@@ -319,8 +325,9 @@ se calcula sobre `max(p, 1-p)` → `>=0.62` **alta**, `>=0.55` **media**, si no
 el dato no viene, lo **oculta o deriva** con la misma regla (no rompe).
 
 Manejo de errores: timeout de 120 s (504 si expira) y 502 `{"ok": false, "error": "..."}`
-si el servicio no responde. Este módulo **no importa** `numpy`, `pandas` ni
-`backend.conexion`.
+si el servicio no responde. Este módulo **no importa** `numpy` ni `pandas`;
+usa `backend.conexion.fetch_all` solo para la lectura directa de Turso
+(cache-first), de modo que ver las predicciones no depende de ningún servicio.
 
 #### Ciclo precomputar → asociar → leer → comparar
 
@@ -518,18 +525,19 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      header `ngrok-skip-browser-warning` y la clave `X-API-Key` los añade
      `aletheia/aletheia.py` **server-side** (`_request_service`); la clave nunca
      llega al HTML/JS.
-   - **Lecturas sin PC:** `ALETHEIA_PREDICT_READ_URL` apunta al servicio
-     cache-first en Render (Fase 2 de `PLAN_WEB_SIN_SERVIDOR.md`); así EN VIVO
-     lista y abre las predicciones ya preparadas **con el PC apagado** (las
-     filas salen de `predicciones_mapa`/`predicciones_serie` en Turso). El proxy
-     reintenta una vez por cold start y cae a ngrok si el servicio de lectura no
-     responde; `forzar`/`precalcular` siguen pidiendo el PC.
+   - **Lecturas sin PC ni servicio:** el proxy sirve `mapas`, `modelo_version`,
+     `simulaciones`, `prediccion`/`predicciones` y `serie` (si la fila cacheada
+     coincide) **directo de Turso** (`fetch_all`); EN VIVO lista y abre las
+     predicciones preparadas con el PC apagado. Solo lo no cacheado/derivado
+     (`equipos`, `comparacion`, `scorecard`, `dataset`, `predecir`, serie con
+     otros mapas) va a `ALETHEIA_PREDICT_READ_URL` (Render, con reintento por
+     cold start y caída a ngrok); `forzar`/`precalcular` siguen pidiendo el PC.
    - `POST /api/aletheia/precalcular` (async: responde `202` al instante) y su
      polling `GET /api/aletheia/precalcular/estado` van por el proxy igual que
-     `equipos`, `mapas`, `modelo_version`, `predicciones`, `prediccion`, `serie`,
-     `comparacion`, `simulaciones`, `asociar` y `borrar`; así no chocan con el
-     timeout de gunicorn/Render.
-   - **EN VIVO** (`/aletheia/`) lee todo de la caché a través del proxy.
+     `equipos`, `comparacion`, `scorecard`, `simulaciones`, `asociar` y
+     `borrar`; así no chocan con el timeout de gunicorn/Render.
+   - **EN VIVO** (`/aletheia/`) lee todo de la caché a través del proxy (Turso
+     directo; el servicio solo si falta el dato).
    - **`/aletheia_preparar/` — PREPARAR:** selección de equipos (search+grids),
      selector de simulaciones (1K/5K/10K; **sin 25K/50K en hosting free**), campo de ID vlr.gg (parsea URL o
      número), **PREPARAR PARTIDO** (async: `POST /api/aletheia/precalcular` → `job_id`
@@ -824,10 +832,12 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
     `.env` (`http://localhost:8000`); en Render se declara en `render.yaml`.
     El módulo `aletheia/aletheia.py` actúa como proxy hacia esta URL.
   - `ALETHEIA_PREDICT_READ_URL`: URL del **servicio de lectura** cache-first en
-    Render (siempre disponible). El proxy manda ahí las lecturas y solo cae a
-    `ALETHEIA_PREDICT_URL` si no responde. Si no se define, todas las llamadas
-    van a `ALETHEIA_PREDICT_URL` (comportamiento anterior). En `render.yaml` de
-    la web apunta a `https://aletheia-predict.onrender.com`.
+    Render (siempre disponible). El proxy manda ahí lo que **no** puede servir
+    de Turso (`equipos`, `comparacion`, `scorecard`, `dataset`, `predecir` y
+    serie no cacheada) y solo cae a `ALETHEIA_PREDICT_URL` si no responde. Si
+    no se define, esas llamadas van a `ALETHEIA_PREDICT_URL` (comportamiento
+    anterior). En `render.yaml` de la web apunta a
+    `https://aletheia-predict.onrender.com`.
   - `ALETHEIA_API_KEY`: clave compartida con ALETHEIA_PREDICT para los endpoints
     admin/mutantes. Se define en el `.env` local (web y Predict con la **misma**
     clave) y en el panel de Render (secreto, `sync: false`). El proxy la añade
@@ -854,6 +864,21 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-02 — Lectura directa de Turso: ver predicciones sin servidor.**
+  - `aletheia/aletheia.py` sirve **cache-first desde Turso** (`fetch_all`):
+    `mapas`, `modelo_version`, `simulaciones`, `prediccion`, `predicciones` y
+    `serie` si hay una fila de `predicciones_serie` con los mismos mapas/lados.
+    Recalcula `confianza` y `analisis_mapa` con las mismas reglas que `core/`
+    (réplica de `tabla_mapas_equipo` + `probabilidad_mapa_analitica`, caché
+    5 min); `prob_intervalo` queda `null` (usa los RD locales del servicio).
+    Si no hay fila o la DB falla, cae al servicio.
+  - Con esto, ver las predicciones preparadas **no necesita el PC ni Render**:
+    el servidor solo se usa para preparar/forzar (`precalcular`,
+    `precalcular/estado`, `asociar`, `borrar`, `dataset?guardar=1`,
+    `forzar:true`) y para lo derivado no persistido (`equipos`, `comparacion`,
+    `scorecard(_agregado)`, `dataset` sin guardar, `predecir`, serie con otros
+    mapas). El módulo pasa a importar `backend.conexion.fetch_all` (sigue sin
+    `numpy`/`pandas`).
 - **2026-10-02 — Fase 2 web sin servidor local (lecturas en Render).**
   - `aletheia/aletheia.py` enruta las **lecturas** a
     `ALETHEIA_PREDICT_READ_URL` (servicio cache-first en Render, siempre

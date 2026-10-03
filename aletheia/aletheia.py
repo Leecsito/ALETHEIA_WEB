@@ -11,19 +11,22 @@ Monte Carlo). Hay DOS servicios:
     · BASE_URL  = ALETHEIA_PREDICT_URL (PC/ngrok). Cómputo pesado y mutaciones.
 
 Enrutado:
-    Lecturas (READ_URL, con reintento por cold start y caída a BASE_URL):
+    Lecturas cache-first: 1º Turso (`predicciones_mapa`/`predicciones_serie`); si
+    no hay fila, READ_URL con reintento por cold start y caída a BASE_URL:
+    GET  /api/aletheia/mapas           -> Turso | GET {READ}/api/mapas
+    GET  /api/aletheia/modelo_version  -> Turso | GET {READ}/api/modelo_version
+    GET  /api/aletheia/prediccion      -> Turso | GET {READ}/api/prediccion
+    GET  /api/aletheia/predicciones    -> Turso | GET {READ}/api/predicciones
+    GET  /api/aletheia/simulaciones    -> Turso | GET {READ}/api/simulaciones
+    POST /api/aletheia/serie           -> Turso (si la fila coincide) | {READ}/api/serie
+
+    Lecturas que el servicio deriva (siempre servicio, READ_URL → BASE_URL):
     GET  /api/aletheia/equipos         -> GET  {READ}/api/equipos
-    GET  /api/aletheia/mapas           -> GET  {READ}/api/mapas
-    GET  /api/aletheia/modelo_version  -> GET  {READ}/api/modelo_version
-    GET  /api/aletheia/prediccion      -> GET  {READ}/api/prediccion
-    GET  /api/aletheia/predicciones    -> GET  {READ}/api/predicciones
     GET  /api/aletheia/comparacion     -> GET  {READ}/api/comparacion
     GET  /api/aletheia/scorecard       -> GET  {READ}/api/scorecard
     GET  /api/aletheia/scorecard_agregado -> GET {READ}/api/scorecard_agregado
-    GET  /api/aletheia/simulaciones    -> GET  {READ}/api/simulaciones
     GET  /api/aletheia/dataset         -> GET  {READ}/api/dataset (sin guardar)
     POST /api/aletheia/predecir        -> POST {READ}/api/predecir (sin forzar)
-    POST /api/aletheia/serie           -> POST {READ}/api/serie (sin forzar)
 
     Cómputo/mutaciones (BASE_URL/ngrok, sin fallback):
     POST /api/aletheia/precalcular     -> POST {BASE}/api/precalcular
@@ -44,6 +47,14 @@ Decisiones de diseño:
     · Si el servicio no responde se devuelve 502 {"ok": false, "error": ...};
       si se agota el timeout del intento, 504.
 
+Lectura directa de Turso (sin servidor): las predicciones ya preparadas se
+sirven **cache-first** desde `predicciones_mapa`/`predicciones_serie` con
+`backend.conexion.fetch_all`. Aplica a `mapas`, `modelo_version`,
+`simulaciones`, `prediccion`, `predicciones` y `serie` (si hay una fila
+cacheada con los mismos mapas/lados). El servicio solo aporta lo no persistido
+(`prob_intervalo`, `comparacion`/`scorecard`) y el cómputo
+(`precalcular`/`forzar`/`equipos`).
+
 Clave API: si `ALETHEIA_API_KEY` está configurada en el entorno, este proxy
 añade **server-side** el header `X-API-Key` a todas las llamadas al servicio
 (los endpoints públicos la ignoran). La clave NUNCA viaja al navegador.
@@ -51,9 +62,15 @@ añade **server-side** el header `X-API-Key` a todas las llamadas al servicio
 también puede pedirse por el proxy sin chocar con su timeout.
 """
 
+import json
+import math
 import os
+import time
+
 from flask import Blueprint, jsonify, request
 import requests
+
+from backend.conexion import fetch_all
 
 aletheia_bp = Blueprint('aletheia', __name__)
 
@@ -203,6 +220,254 @@ def _error_response(err):
     return jsonify({'ok': False, 'error': err['error']}), err['status']
 
 
+# ─── LECTURA DIRECTA DE LA CACHÉ (TURSO, SIN SERVIDOR) ───────────────────────
+# Réplica de la parte de lectura del servicio sobre las tablas compartidas. La
+# P(mapa) y todo lo persistido salen tal cual; lo derivado (`confianza`,
+# `analisis_mapa`) se recalcula aquí con las mismas reglas. El IC95%
+# (`prob_intervalo`) usa los RD locales del servicio: en modo DB va `None`.
+_BANDA_ALTA = 0.62
+_BANDA_MEDIA = 0.55
+_TABLA_MAPAS_TTL = 300
+_tabla_mapas = {'ts': 0.0, 'data': {}}
+
+
+def _banda_confianza(prob):
+    """Misma banda que `core.calibracion.banda_confianza` (sin n/rd)."""
+    p = max(float(prob), 1.0 - float(prob))
+    if p >= _BANDA_ALTA:
+        return 'alta'
+    if p >= _BANDA_MEDIA:
+        return 'media'
+    return 'baja'
+
+
+def _formato_de_serie(n_mapas):
+    """Bo1/Bo3/Bo5 inferido por cantidad (el último mapa es decider)."""
+    if n_mapas <= 1:
+        return 'bo1', 1
+    if n_mapas <= 3:
+        return 'bo3', 2
+    return 'bo5', 3
+
+
+def _parse_json(txt):
+    if txt is None:
+        return None
+    try:
+        return json.loads(txt)
+    except (TypeError, ValueError):
+        return None
+
+
+def _logit_recortado(p, eps=1e-4):
+    p = min(max(float(p), eps), 1.0 - eps)
+    return math.log(p / (1.0 - p))
+
+
+def _p_mapa_analitica(p_modelo, wr_a, wr_b, peso=0.5):
+    """Réplica de `core.analisis.probabilidad_mapa_analitica` (análisis)."""
+    edge = max(-2.0, min(2.0, _logit_recortado(wr_a) - _logit_recortado(wr_b)))
+    z = _logit_recortado(p_modelo) + peso * edge
+    return 1.0 / (1.0 + math.exp(-z))
+
+
+def _tabla_mapas_equipo():
+    """{equipo: {mapa: {n, winrate}}} desde `maps`+`matches`+`teams` (Turso).
+
+    Réplica de `core.analisis.tabla_mapas_equipo` (shrinkage k=10) para el
+    `analisis_mapa`; se cachea en memoria 5 min. Ante un fallo devuelve la
+    copia previa (o `{}`): el análisis es decorativo, no tumba la lectura.
+    """
+    ahora = time.time()
+    if _tabla_mapas['data'] and (ahora - _tabla_mapas['ts']) < _TABLA_MAPAS_TTL:
+        return _tabla_mapas['data']
+    try:
+        filas = fetch_all(
+            """
+            SELECT ta.team_name AS team_a, tb.team_name AS team_b, m.map_name,
+                   (m.score_a_attack + m.score_a_defense) AS sa,
+                   (m.score_b_attack + m.score_b_defense) AS sb
+            FROM maps m
+            JOIN matches ma ON m.match_id = ma.match_id
+            JOIN teams ta ON ma.team_a_id = ta.team_id
+            JOIN teams tb ON ma.team_b_id = tb.team_id
+            """
+        )
+    except Exception:  # noqa: BLE001 - la lectura cache-first no depende de esto
+        return _tabla_mapas['data']
+    k = 10.0
+    acumulado = {}
+    for fila in filas:
+        sa = fila.get('sa') or 0
+        sb = fila.get('sb') or 0
+        if sa == sb:
+            continue
+        for equipo, gano in ((fila.get('team_a'), sa > sb),
+                             (fila.get('team_b'), sb > sa)):
+            if not equipo:
+                continue
+            clave = (equipo, fila.get('map_name'))
+            wins, n = acumulado.get(clave, (0, 0))
+            acumulado[clave] = (wins + (1 if gano else 0), n + 1)
+    tabla = {}
+    for (equipo, mapa), (wins, n) in acumulado.items():
+        tabla.setdefault(equipo, {})[mapa] = {
+            'n': n,
+            'winrate': (wins + k * 0.5) / (n + k),
+        }
+    _tabla_mapas['data'] = tabla
+    _tabla_mapas['ts'] = ahora
+    return tabla
+
+
+def _analisis_mapa_local(tabla, equipo_a, equipo_b, map_name, p_modelo):
+    da = (tabla.get(equipo_a) or {}).get(map_name) or {'n': 0, 'winrate': 0.5}
+    db = (tabla.get(equipo_b) or {}).get(map_name) or {'n': 0, 'winrate': 0.5}
+    p = p_modelo if p_modelo is not None else 0.5
+    return {
+        'equipo_a': {'n': da['n'], 'winrate': round(da['winrate'], 4)},
+        'equipo_b': {'n': db['n'], 'winrate': round(db['winrate'], 4)},
+        'p_mapa_a': round(_p_mapa_analitica(p, da['winrate'], db['winrate']), 4),
+        'nota': 'análisis histórico por mapa · no es la predicción del motor',
+    }
+
+
+def _derivar_fila(fila, tabla):
+    """Completa una fila de `predicciones_mapa` como lo hace el servicio."""
+    fila = dict(fila)
+    fila['marcadores'] = _parse_json(fila.get('marcadores_json'))
+    fila['economia'] = _parse_json(fila.get('economia_json'))
+    p = fila.get('prob_victoria_a')
+    fila['confianza'] = _banda_confianza(p) if p is not None else None
+    fila['prob_intervalo'] = None  # el IC95% usa los RD locales del servicio
+    fila['analisis_mapa'] = _analisis_mapa_local(
+        tabla, fila.get('equipo_a'), fila.get('equipo_b'), fila.get('map_name'), p)
+    return fila
+
+
+def _version_vigente_db():
+    """(modelo_version, fecha) más reciente de la caché, o (None, None)."""
+    filas = fetch_all(
+        'SELECT modelo_version, MAX(updated_at) AS fecha FROM predicciones_mapa '
+        'GROUP BY modelo_version ORDER BY fecha DESC LIMIT 1'
+    )
+    if filas:
+        return filas[0].get('modelo_version'), filas[0].get('fecha')
+    filas = fetch_all(
+        'SELECT modelo_version, MAX(created_at) AS fecha FROM predicciones_serie '
+        'GROUP BY modelo_version ORDER BY fecha DESC LIMIT 1'
+    )
+    if filas:
+        return filas[0].get('modelo_version'), filas[0].get('fecha')
+    return None, None
+
+
+def _predicciones_db(match_id=None, equipo_a=None, equipo_b=None,
+                     map_name=None, lado=None):
+    """Filas de `predicciones_mapa` con los mismos filtros que el servicio."""
+    condiciones, params = [], []
+    if match_id is not None:
+        condiciones.append('match_id = ?')
+        params.append(int(match_id))
+    if equipo_a:
+        condiciones.append('equipo_a = ?')
+        params.append(equipo_a)
+    if equipo_b:
+        condiciones.append('equipo_b = ?')
+        params.append(equipo_b)
+    if map_name:
+        condiciones.append('lower(map_name) = lower(?)')
+        params.append(map_name)
+    if lado:
+        condiciones.append('lado_inicial_a = ?')
+        params.append(lado)
+    where = ('WHERE ' + ' AND '.join(condiciones)) if condiciones else ''
+    return fetch_all(
+        f'SELECT * FROM predicciones_mapa {where} '
+        'ORDER BY map_name, lado_inicial_a',
+        params,
+    )
+
+
+def _serie_desde_db(data):
+    """Respuesta de `/api/serie` desde `predicciones_serie`, o None si no hay.
+
+    Solo sirve si existe una fila vigente cuyo `mapas_json` coincide (mapas y
+    lados, en orden) con lo pedido: la P de serie depende de esa lista. Si no
+    coincide (p. ej. lados elegidos a mano en ARMAR SERIE), la calcula el
+    servicio. `forzar:true` nunca sale de aquí.
+    """
+    if _es_forzar(data):
+        return None
+    mapas = data.get('mapas')
+    if not isinstance(mapas, list) or not mapas:
+        return None
+    equipo_a = str(data.get('equipo_a') or '').strip()
+    equipo_b = str(data.get('equipo_b') or '').strip()
+    if not (equipo_a and equipo_b):
+        return None
+    try:
+        match_id = int(data.get('match_id') or 0)
+    except (TypeError, ValueError):
+        match_id = 0
+    pedido = []
+    for item in mapas:
+        if isinstance(item, dict):
+            nombre = str(item.get('map_name') or '').strip().lower()
+            lado = str(item.get('lado_inicial_a') or 'attack').strip().lower()
+        else:
+            nombre, lado = str(item or '').strip().lower(), 'attack'
+        if not nombre:
+            return None
+        pedido.append((nombre, lado))
+
+    if match_id:
+        condicion, params = 'match_id = ?', [match_id]
+    else:
+        condicion, params = 'equipo_a = ? AND equipo_b = ?', [equipo_a, equipo_b]
+    filas = fetch_all(
+        'SELECT match_id, equipo_a, equipo_b, formato, mapas_json, prob_serie_a, '
+        'prob_serie_b, n_sim, modelo_version, created_at FROM predicciones_serie '
+        f'WHERE {condicion} ORDER BY created_at DESC',
+        params,
+    )
+    version, _ = _version_vigente_db()
+    for fila in filas:
+        if version and str(fila.get('modelo_version')) != version:
+            continue
+        if str(fila.get('equipo_a') or '').strip().lower() != equipo_a.lower():
+            continue
+        if str(fila.get('equipo_b') or '').strip().lower() != equipo_b.lower():
+            continue
+        detalle = _parse_json(fila.get('mapas_json'))
+        if not isinstance(detalle, list) or len(detalle) != len(pedido):
+            continue
+        coincide = all(
+            str((d or {}).get('map_name') or '').strip().lower() == nombre
+            and str((d or {}).get('lado_inicial_a') or '').strip().lower() == lado
+            for d, (nombre, lado) in zip(detalle, pedido)
+        )
+        if not coincide:
+            continue
+        formato, objetivo = _formato_de_serie(len(pedido))
+        p_a = float(fila['prob_serie_a'])
+        return {
+            'ok': True,
+            'equipo_a': fila.get('equipo_a') or equipo_a,
+            'equipo_b': fila.get('equipo_b') or equipo_b,
+            'match_id': int(fila.get('match_id') or match_id or 0),
+            'n_sim': fila.get('n_sim'),
+            'modelo_version': fila.get('modelo_version'),
+            'formato': fila.get('formato') or formato,
+            'mapas_para_ganar': objetivo,
+            'mapas': detalle,
+            'prob_serie_a': round(p_a, 4),
+            'prob_serie_b': round(1.0 - p_a, 4),
+            'confianza_serie': _banda_confianza(p_a),
+        }
+    return None
+
+
 def _passthrough_get(service_path, prefer='read'):
     """GET al servicio reenviando los query params; devuelve la respuesta tal cual."""
     resp, err = _request_service('GET', service_path, params=request.args.to_dict(), prefer=prefer)
@@ -253,7 +518,15 @@ def equipos():
 
 @aletheia_bp.route('/api/aletheia/mapas', methods=['GET'])
 def mapas():
-    """Proxy GET /api/mapas (devuelve la lista tal cual, incluido 'Summit')."""
+    """GET /api/mapas: directo de Turso (los mapas con predicción); si no hay, proxy."""
+    try:
+        filas = fetch_all(
+            'SELECT DISTINCT map_name FROM predicciones_mapa ORDER BY map_name')
+        nombres = [f.get('map_name') for f in filas if f.get('map_name')]
+        if nombres:
+            return jsonify({'ok': True, 'mapas': nombres})
+    except Exception:  # noqa: BLE001 - cae al servicio
+        pass
     return _passthrough_get('/api/mapas')
 
 
@@ -267,7 +540,24 @@ def predecir():
 
 @aletheia_bp.route('/api/aletheia/modelo_version', methods=['GET'])
 def modelo_version():
-    """Proxy GET /api/modelo_version (hash + fecha del modelo vigente)."""
+    """GET /api/modelo_version: versión vigente de la caché; si no hay, proxy.
+
+    En modo DB, `desactualizado` siempre es `false`: sin servicio no hay una
+    versión "en disco" con la que comparar; la vigencia se decide por la
+    versión más reciente presente en `predicciones_mapa`.
+    """
+    try:
+        version, fecha = _version_vigente_db()
+        if version:
+            return jsonify({
+                'ok': True,
+                'modelo_version': version,
+                'fecha': fecha,
+                'en_disco': version,
+                'desactualizado': False,
+            })
+    except Exception:  # noqa: BLE001 - cae al servicio
+        pass
     return _passthrough_get('/api/modelo_version')
 
 
@@ -299,13 +589,52 @@ def asociar():
 
 @aletheia_bp.route('/api/aletheia/prediccion', methods=['GET'])
 def prediccion():
-    """Proxy GET /api/prediccion (lee una fila cacheada; instantáneo)."""
+    """GET /api/prediccion: fila cacheada directo de Turso; si no hay, proxy."""
+    match_id = (request.args.get('match_id') or '').strip()
+    match_id = int(match_id) if match_id.isdigit() else None
+    equipo_a = (request.args.get('equipo_a') or '').strip() or None
+    equipo_b = (request.args.get('equipo_b') or '').strip() or None
+    map_name = (request.args.get('map_name') or '').strip()
+    lado = (request.args.get('lado_inicial_a') or '').strip().lower()
+    if map_name and lado in ('attack', 'defense') and (
+            match_id is not None or (equipo_a and equipo_b)):
+        try:
+            filas = _predicciones_db(match_id, equipo_a, equipo_b, map_name, lado)
+            if filas:
+                version, _ = _version_vigente_db()
+                fila = _derivar_fila(filas[0], _tabla_mapas_equipo())
+                return jsonify({
+                    'ok': True,
+                    'prediccion': fila,
+                    'modelo_version': fila.get('modelo_version'),
+                    'vigente': (not version)
+                    or str(fila.get('modelo_version')) == str(version),
+                })
+        except Exception:  # noqa: BLE001 - cae al servicio
+            pass
     return _passthrough_get('/api/prediccion')
 
 
 @aletheia_bp.route('/api/aletheia/predicciones', methods=['GET'])
 def predicciones():
-    """Proxy GET /api/predicciones (todas las filas de un partido/equipos)."""
+    """GET /api/predicciones: filas cacheadas directo de Turso; si no hay, proxy."""
+    match_id = (request.args.get('match_id') or '').strip()
+    match_id = int(match_id) if match_id.isdigit() else None
+    equipo_a = (request.args.get('equipo_a') or '').strip() or None
+    equipo_b = (request.args.get('equipo_b') or '').strip() or None
+    if match_id is not None or (equipo_a and equipo_b):
+        try:
+            filas = _predicciones_db(match_id, equipo_a, equipo_b)
+            if filas:
+                version, _ = _version_vigente_db()
+                tabla = _tabla_mapas_equipo()
+                return jsonify({
+                    'ok': True,
+                    'modelo_version': version,
+                    'predicciones': [_derivar_fila(f, tabla) for f in filas],
+                })
+        except Exception:  # noqa: BLE001 - cae al servicio
+            pass
     return _passthrough_get('/api/predicciones')
 
 
@@ -340,8 +669,64 @@ def dataset():
 
 @aletheia_bp.route('/api/aletheia/simulaciones', methods=['GET'])
 def simulaciones():
-    """Proxy GET /api/simulaciones (enfrentamientos ya preparados)."""
-    return _passthrough_get('/api/simulaciones')
+    """GET /api/simulaciones: enfrentamientos preparados directo de Turso.
+
+    Es una lectura pura de `predicciones_mapa` (la misma que hace el servicio),
+    así que no necesita servidor; si la consulta falla, cae al proxy.
+    """
+    equipo = (request.args.get('equipo') or '').strip() or None
+    match_id = (request.args.get('match_id') or '').strip()
+    match_id = int(match_id) if match_id.isdigit() else None
+    try:
+        limite = max(1, min(int(request.args.get('limite', 200)), 1000))
+    except (TypeError, ValueError):
+        limite = 200
+    try:
+        condiciones, params = [], []
+        if match_id is not None:
+            condiciones.append('match_id = ?')
+            params.append(match_id)
+        if equipo:
+            condiciones.append('(equipo_a = ? OR equipo_b = ?)')
+            params.extend([equipo, equipo])
+        where = ('WHERE ' + ' AND '.join(condiciones)) if condiciones else ''
+        filas = fetch_all(
+            f"""SELECT match_id, equipo_a, equipo_b,
+                       COUNT(*) AS filas,
+                       COUNT(DISTINCT map_name) AS mapas,
+                       MAX(n_sim) AS n_sim,
+                       MAX(modelo_version) AS modelo_version,
+                       MAX(created_at) AS created_at,
+                       MAX(updated_at) AS updated_at
+                FROM predicciones_mapa {where}
+                GROUP BY match_id, equipo_a, equipo_b
+                ORDER BY updated_at DESC
+                LIMIT {int(limite)}""",
+            params,
+        )
+        version, _ = _version_vigente_db()
+        lista = []
+        for f in filas:
+            n_sim = f.get('n_sim')
+            lista.append({
+                'match_id': int(f['match_id']) if f.get('match_id') is not None else 0,
+                'equipo_a': f.get('equipo_a'),
+                'equipo_b': f.get('equipo_b'),
+                'mapas': int(f.get('mapas') or 0),
+                'filas': int(f.get('filas') or 0),
+                'n_sim': int(n_sim) if n_sim is not None else None,
+                'modelo_version': f.get('modelo_version'),
+                'vigente': str(f.get('modelo_version')) == str(version),
+                'created_at': f.get('created_at'),
+                'updated_at': f.get('updated_at'),
+            })
+        return jsonify({
+            'ok': True,
+            'modelo_version': version,
+            'simulaciones': lista,
+        })
+    except Exception:  # noqa: BLE001 - cae al servicio
+        return _passthrough_get('/api/simulaciones')
 
 
 @aletheia_bp.route('/api/aletheia/serie', methods=['POST'])
@@ -353,10 +738,17 @@ def serie():
     (`fuente` por mapa). Devuelve además `confianza_serie`, `modelo_version`,
     `n_sim`, `resultados_serie`, `caminos_serie` y `prob_intervalo` por mapa.
 
-    Sin `forzar` va al servicio de lectura de Render (cache-first); con
-    `forzar:true` va al PC/ngrok para recalcular.
+    Si hay una fila en `predicciones_serie` con los mismos mapas/lados se
+    responde directo de Turso (sin servidor); si no, va al servicio de lectura
+    de Render (cache-first) y, con `forzar:true`, al PC/ngrok.
     """
     body = request.get_json(silent=True) or {}
+    try:
+        respuesta = _serie_desde_db(body)
+        if respuesta is not None:
+            return jsonify(respuesta)
+    except Exception:  # noqa: BLE001 - cae al servicio
+        pass
     prefer = 'ngrok' if _es_forzar(body) else 'read'
     return _passthrough_post('/api/serie', prefer=prefer)
 

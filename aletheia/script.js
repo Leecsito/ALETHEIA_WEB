@@ -1,10 +1,11 @@
 const API = `${window.location.origin}/api`;
 
-// EN VIVO lee de la caché por el proxy (/api/aletheia/...). Las lecturas van
-// al servicio de Render (siempre disponible, cache-first) y caen a ngrok/PC
-// si aquel no responde; RE-PRECALCULAR (forzar:true) va directo al PC (async:
-// el POST responde 202 y su polling es rápido). La clave API la añade el
-// proxy server-side; nunca llega al navegador.
+// EN VIVO lee de la caché por el proxy (/api/aletheia/...). El proxy sirve las
+// lecturas directo de Turso (sin servidor); solo la serie no cacheada y las
+// vistas derivadas van al servicio de Render (y caen a ngrok/PC si no responde).
+// RE-PRECALCULAR (forzar:true) va directo al PC (async: el POST responde 202 y
+// su polling es rápido). La clave API la añade el proxy server-side; nunca
+// llega al navegador.
 let availableMaps = [];    // 13 mapas del servicio (proxy /api/aletheia/mapas)
 let mapsLoading = false;
 let sims = [];             // enfrentamientos ya preparados (/api/simulaciones)
