@@ -826,8 +826,8 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
   - `ALETHEIA_PREDICT_READ_URL`: URL del **servicio de lectura** cache-first en
     Render (siempre disponible). El proxy manda ahí las lecturas y solo cae a
     `ALETHEIA_PREDICT_URL` si no responde. Si no se define, todas las llamadas
-    van a `ALETHEIA_PREDICT_URL` (comportamiento anterior); en Render se fija
-    como secreto en el panel (`sync: false` en `render.yaml`).
+    van a `ALETHEIA_PREDICT_URL` (comportamiento anterior). En `render.yaml` de
+    la web apunta a `https://aletheia-predict.onrender.com`.
   - `ALETHEIA_API_KEY`: clave compartida con ALETHEIA_PREDICT para los endpoints
     admin/mutantes. Se define en el `.env` local (web y Predict con la **misma**
     clave) y en el panel de Render (secreto, `sync: false`). El proxy la añade
@@ -862,10 +862,13 @@ Al recibir una nueva tarea o solicitud de cambio:
     `precalcular/estado`, `asociar`, `borrar`, `dataset?guardar=1`,
     `predecir`/`serie` con `forzar:true`) siguen en ngrok/PC. Sin
     `ALETHEIA_PREDICT_READ_URL`, todo va a `ALETHEIA_PREDICT_URL`.
-  - `render.yaml` declara `ALETHEIA_PREDICT_READ_URL` (`sync: false`).
+  - `render.yaml` fija `ALETHEIA_PREDICT_READ_URL=https://aletheia-predict.onrender.com`.
   - EN VIVO sube el corte de espera de la cola `POST /serie` a 60 s (cold
     start de Render); los comentarios de enrutado de los dos `script.js`
     quedan al día.
+  - Un 5xx no JSON del servicio (túnel/hosting caído) ya no se reporta como
+    "JSON inválido": el proxy responde `El servicio de predicción no está
+    disponible (HTTP 5xx)`, más claro para la UI.
 - **2026-10-02 — Alineación web ↔ ALETHEIA_PREDICT (H1-H6).**
   - **H1 (clave S1):** `aletheia/aletheia.py` añade `X-API-Key` **server-side**
     cuando `ALETHEIA_API_KEY` está configurada y expone

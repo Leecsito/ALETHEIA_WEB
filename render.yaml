@@ -8,7 +8,7 @@ services:
       - key: ALETHEIA_PREDICT_URL
         value: https://snugly-encore-sweep.ngrok-free.dev
       - key: ALETHEIA_PREDICT_READ_URL
-        sync: false          # servicio de lecturas en Render; si falta, usa ALETHEIA_PREDICT_URL
+        value: https://aletheia-predict.onrender.com
       - key: TURSO_DATABASE_URL
         value: libsql://aletheia-laperradeadrelees.aws-us-east-1.turso.io
       - key: TURSO_AUTH_TOKEN

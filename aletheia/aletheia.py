@@ -186,6 +186,13 @@ def _json_or_error(resp):
     try:
         return resp.json(), None
     except ValueError:
+        # Un 5xx no JSON suele ser la página HTML del túnel caído o del proxy
+        # del hosting; se traduce a un mensaje claro para la UI.
+        if resp.status_code >= 500:
+            return None, {
+                'error': f'El servicio de predicción no está disponible (HTTP {resp.status_code}).',
+                'status': 502,
+            }
         return None, {
             'error': 'El servicio de predicción devolvió una respuesta no válida (JSON inválido).',
             'status': 502,
