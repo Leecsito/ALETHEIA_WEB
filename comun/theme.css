@@ -89,7 +89,7 @@
     color-scheme: dark;
 }
 
-/* Canvas de nodos de fondo: sutil, detrás de todo el contenido. */
+/* Canvas de nodos de fondo: visible pero discreto, detrás de todo el contenido. */
 .ae-nodes-bg {
     position: fixed;
     inset: 0;
@@ -98,7 +98,7 @@
     width: 100%;
     height: 100%;
     pointer-events: none;
-    opacity: .6;
+    opacity: .9;
 }
 
 /* ── Base ───────────────────────────────────────────────────────────────── */

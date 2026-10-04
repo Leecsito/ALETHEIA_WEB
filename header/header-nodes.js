@@ -37,17 +37,19 @@
             radius: [0.9, 1.8],
             fixed: false,
         },
-        /* Fondo oscuro: red VERDE detrás del contenido; el cursor la enciende. */
+        /* Fondo oscuro: red VERDE visible detrás del contenido; el cursor la enciende. */
         bg: {
-            vars: { a: '--g1', b: '--g2', hot: '--g3', spark: '--g3' },
+            vars: { a: '--g2', b: '--g3', hot: '--g3', spark: '--g3' },
             count: { div: 20, min: 34, max: 90 },
-            linkDist: 100,
-            linkAlpha: 0.16,
-            linkHeat: 0.12,
-            cursorDist: 170,
-            cursorAlpha: 0.42,
+            linkDist: 115,
+            linkAlpha: 0.26,
+            linkHeat: 0.2,
+            cursorDist: 180,
+            cursorAlpha: 0.6,
             speed: [4, 11],
-            radius: [0.7, 1.7],
+            radius: [0.9, 1.9],
+            nodeAlpha: 0.72,
+            halo: 0.13,
             fixed: true,
         },
     };
@@ -160,6 +162,7 @@
         function step(dt) {
             const repulse = mode.fixed ? 120 : 110;
             const force = mode.fixed ? 34 : 46;
+            const kick = mode.speed[0] * 0.6;
             for (const n of nodes) {
                 /* Repulsión suave cerca del cursor, con easing posterior. */
                 if (mouse.active) {
@@ -181,11 +184,12 @@
                 n.x += n.vx * dt;
                 n.y += n.vy * dt;
 
-                /* Rebote en los bordes. */
-                if (n.x < n.r) { n.x = n.r; n.vx = Math.abs(n.vx); }
-                else if (n.x > W - n.r) { n.x = W - n.r; n.vx = -Math.abs(n.vx); }
-                if (n.y < n.r) { n.y = n.r; n.vy = Math.abs(n.vy); }
-                else if (n.y > H - n.r) { n.y = H - n.r; n.vy = -Math.abs(n.vy); }
+                /* Rebote en los bordes: refleja también la deriva base para
+                   que el nodo vuelva al campo y no quede pegado a la pared. */
+                if (n.x < n.r) { n.x = n.r; n.vx = Math.abs(n.vx); n.bvx = Math.max(Math.abs(n.bvx), kick); }
+                else if (n.x > W - n.r) { n.x = W - n.r; n.vx = -Math.abs(n.vx); n.bvx = -Math.max(Math.abs(n.bvx), kick); }
+                if (n.y < n.r) { n.y = n.r; n.vy = Math.abs(n.vy); n.bvy = Math.max(Math.abs(n.bvy), kick); }
+                else if (n.y > H - n.r) { n.y = H - n.r; n.vy = -Math.abs(n.vy); n.bvy = -Math.max(Math.abs(n.bvy), kick); }
 
                 /* "Calor" por cercanía al cursor (easing). */
                 let targetHeat = 0;
@@ -251,15 +255,22 @@
             }
 
             /* Nodos. */
+            const nodeAlpha = mode.nodeAlpha || 0.55;
             for (const n of nodes) {
                 const c = nodeColor(n);
+                if (mode.halo) {
+                    ctx.fillStyle = rgba(c, mode.halo);
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, n.r + 2.6, 0, Math.PI * 2);
+                    ctx.fill();
+                }
                 if (n.heat > 0.15) {
                     ctx.fillStyle = rgba(c, 0.12 * n.heat);
                     ctx.beginPath();
                     ctx.arc(n.x, n.y, n.r + 3.5 * n.heat, 0, Math.PI * 2);
                     ctx.fill();
                 }
-                ctx.fillStyle = rgba(c, 0.55 + 0.45 * n.heat);
+                ctx.fillStyle = rgba(c, nodeAlpha + (1 - nodeAlpha) * n.heat);
                 ctx.beginPath();
                 ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
                 ctx.fill();

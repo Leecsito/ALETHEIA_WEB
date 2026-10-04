@@ -762,14 +762,15 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      wordmark en segundo plano. Todos los controles del header usan texto
      oscuro sobre el lima.
    - **`header-nodes.js` (efecto de nodos reutilizable):**
-     - Monta un `<canvas>` detrás del contenido del header (nodos verde oscuro
-       que se funden a negro cerca del cursor) y un canvas fijo de fondo en
-       toda la página (`body > .ae-nodes-bg`), sutil (opacidad .6), con nodos
-       verdes `--g1`/`--g2`/`--g3`, líneas tenues y encendido verde al pasar
-       el cursor.
-     - Nodos 40–90 según el ancho; rebotan en los bordes; líneas solo entre
-       nodos cercanos con opacidad decreciente; repulsión suave con easing en
-       el header y en el fondo.
+      - Monta un `<canvas>` detrás del contenido del header (nodos verde oscuro
+        que se funden a negro cerca del cursor) y un canvas fijo de fondo en
+        toda la página (`body > .ae-nodes-bg`), visible (opacidad .9), con nodos
+        verdes `--g2`/`--g3` (halo suave para que se lean sobre el fondo negro),
+        líneas tenues y encendido verde al pasar el cursor.
+      - Nodos 40–90 según el ancho; **rebotan en los bordes reflejando también
+        la deriva base** (nunca se quedan pegados a la pared); líneas solo entre
+        nodos cercanos con opacidad decreciente; repulsión suave con easing en
+        el header y en el fondo.
      - `requestAnimationFrame`, `devicePixelRatio`, `ResizeObserver`, pausa
        con la pestaña oculta y `prefers-reduced-motion` (nodos estáticos).
      - Se puede desactivar el fondo por página con `window.AE_NODES_BG = false;`
@@ -906,6 +907,16 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-03 — Nodos: rebote real y fondo visible.**
+  - `header/header-nodes.js`: el rebote ahora **refleja la deriva base**
+    (`bvx`/`bvy`, con patada mínima hacia dentro) además de la velocidad; antes
+    el easing devolvía el nodo contra la pared y, con el tiempo, **todos los
+    nodos terminaban pegados a los bordes** (sin líneas cercanas, casi
+    invisibles).
+  - Modo fondo (`bg`) más perceptible sobre `--bg`: nodos `--g2`/`--g3`, alpha
+    base 0.72, halo suave, mayor radio, `linkDist` 115 y líneas/cursor más
+    intensos; `.ae-nodes-bg` sube de `opacity: .6` a `.9` (`comun/theme.css`).
+    El header (nodos oscuros sobre lima) conserva su aspecto.
 - **2026-10-03 — ESC en modo DB (capa de escenarios sin servidor).**
   - `aletheia/aletheia.py` replica `escenario_mapa` (B1) en modo DB desde
     `rounds`: tabla `(equipo, mapa, lado) -> (w, n)` con el swap de regulación
