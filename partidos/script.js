@@ -172,9 +172,12 @@ function roundsStrip(m, p) {
 function econBlock(m, p) {
     const econ = m.economy || [];
     if (!econ.length) return '';
-    const fila = (label, won, played, cls) => {
+    const fila = (label, won, played, cls, desdeRounds = true) => {
         const wr = played ? Math.round((won || 0) * 100 / played) : null;
-        return `<div class="v-econ-row">
+        const tt = desdeRounds
+            ? 'Tasa real desde rounds (excluye pistols R1/R13)'
+            : 'economy_summary (benchmark no fiable en eco)';
+        return `<div class="v-econ-row" title="${tt}">
             <span class="label">${label}</span>
             ${VCT.bar(wr ?? 0, cls)}
             <span class="val">${won || 0}/${played || 0}${wr !== null ? ` · ${wr}%` : ''}</span>
@@ -183,6 +186,7 @@ function econBlock(m, p) {
     const bloque = (teamId, name) => {
         const e = econ.find(x => x.team_id === teamId);
         if (!e) return '';
+        const desdeRounds = e.fuente !== 'economy_summary';
         return `<div class="v-econ-team">
             <div class="v-econ-name">${VCT.esc(name)}</div>
             <div class="v-econ-row">
@@ -190,13 +194,19 @@ function econBlock(m, p) {
                 ${VCT.bar((e.pistol_won || 0) * 50, 'purple')}
                 <span class="val">${e.pistol_won || 0}</span>
             </div>
-            ${fila('ECO', e.eco_won, e.eco_played, 'green')}
-            ${fila('SEMI-ECO', e.semi_eco_won, e.semi_eco_played, 'green')}
-            ${fila('SEMI-BUY', e.semi_buy_won, e.semi_buy_played, 'blue')}
-            ${fila('FULL BUY', e.full_buy_won, e.full_buy_played, 'blue')}
+            ${fila('ECO', e.eco_won, e.eco_played, 'green', desdeRounds)}
+            ${fila('SEMI-ECO', e.semi_eco_won, e.semi_eco_played, 'green', desdeRounds)}
+            ${fila('SEMI-BUY', e.semi_buy_won, e.semi_buy_played, 'blue', desdeRounds)}
+            ${fila('FULL BUY', e.full_buy_won, e.full_buy_played, 'blue', desdeRounds)}
         </div>`;
     };
-    return `<div class="v-econ" style="margin-top:2px">${bloque(p.team_a_id, p.team_a)}${bloque(p.team_b_id, p.team_b)}</div>`;
+    // H5: si no hay `rounds`, el panel usa economy_summary y lo etiqueta (su
+    // columna de eco no es fiable: no cuadra con las rondas reales).
+    const fuente = (econ.find(x => x.fuente) || {}).fuente;
+    const nota = fuente === 'economy_summary'
+        ? `<div class="v-econ-note v-hint">fuente economy_summary (benchmark no fiable en eco); el ECO real se calcula desde rounds (excluye R1/R13)</div>`
+        : '';
+    return `<div class="v-econ" style="margin-top:2px">${bloque(p.team_a_id, p.team_a)}${bloque(p.team_b_id, p.team_b)}${nota}</div>`;
 }
 
 function board(teamId, name, tag, score, players) {

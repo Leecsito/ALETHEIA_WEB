@@ -149,6 +149,82 @@ def _total_score(ataque, defensa):
         return None
 
 
+# Categorías de compra del detalle (mismas que `economy_summary`).
+CAT_ECO = ('eco', 'semi_eco', 'semi_buy', 'full_buy')
+
+
+def _categoria(valor):
+    """Normaliza la categoría de compra ('semi-buy' -> 'semi_buy')."""
+    return str(valor or '').strip().lower().replace('-', '_')
+
+
+def _economia_desde_rounds(rounds, mapas, partido, economy_summary):
+    """Economía real por (mapa, equipo) calculada desde `rounds` (H5).
+
+    Misma fuente que el scorecard de ALETHEIA_PREDICT: excluye las rondas
+    pistol (R1/R13) de las categorías, resuelve la categoría propia con
+    `team_top_id`/`team_bot_id` y el ganador con `winner_id`. Devuelve filas
+    con la forma de `economy_summary` (`*_played`/`*_won`) y
+    `fuente='rounds'`. Los mapas sin `rounds` conservan su fila de
+    `economy_summary`, etiquetada `fuente='economy_summary'` (benchmark no
+    fiable en eco: sus columnas no son consistentes con `rounds`).
+    """
+    por_mapa = {}
+    for r in rounds:
+        por_mapa.setdefault(r.get('map_id'), []).append(r)
+    filas = []
+    con_rounds = set()
+    for m in mapas:
+        mid = m.get('map_id')
+        if not mid:
+            continue
+        equipos = [t for t in (partido.get('team_a_id'), partido.get('team_b_id')) if t]
+        if not equipos:
+            for r in por_mapa.get(mid, []):
+                for t in (r.get('team_top_id'), r.get('team_bot_id')):
+                    if t and t not in equipos:
+                        equipos.append(t)
+        for team_id in equipos:
+            datos = {c: [0, 0] for c in CAT_ECO}   # [played, won]
+            pistol_won = 0
+            visto = False
+            for r in por_mapa.get(mid, []):
+                if r.get('team_top_id') == team_id:
+                    cat = _categoria(r.get('category_top'))
+                elif r.get('team_bot_id') == team_id:
+                    cat = _categoria(r.get('category_bot'))
+                else:
+                    continue
+                visto = True
+                try:
+                    rn = int(r.get('round_num'))
+                except (TypeError, ValueError):
+                    continue
+                gano = 1 if r.get('winner_id') == team_id else 0
+                if rn in (1, 13):
+                    pistol_won += gano
+                    continue
+                if cat in datos:
+                    datos[cat][0] += 1
+                    datos[cat][1] += gano
+            if not visto:
+                continue
+            fila = {'map_id': mid, 'team_id': team_id, 'fuente': 'rounds',
+                    'pistol_won': pistol_won}
+            for c in CAT_ECO:
+                fila[f'{c}_played'] = datos[c][0]
+                fila[f'{c}_won'] = datos[c][1]
+            filas.append(fila)
+            con_rounds.add(mid)
+    # Fallback etiquetado para mapas sin `rounds` (no se compara con el motor).
+    for e in economy_summary or []:
+        if e.get('map_id') not in con_rounds:
+            fila = dict(e)
+            fila['fuente'] = 'economy_summary'
+            filas.append(fila)
+    return filas
+
+
 @partidos_bp.route('/api/partidos/resultados', methods=['GET'])
 def resultados_partidos():
     """Dado `match_ids` (lista separada por comas) devuelve cuáles ya tienen
@@ -371,7 +447,7 @@ def detalle_partido(match_id):
             GROUP BY ps.map_id, ps.player_id, ps.team_id
         """, [match_id])
 
-        economy = query("""
+        economy_summary = query("""
             SELECT map_id, team_id, pistol_won,
                    eco_played, eco_won, semi_eco_played, semi_eco_won,
                    semi_buy_played, semi_buy_won, full_buy_played, full_buy_won
@@ -383,12 +459,18 @@ def detalle_partido(match_id):
         if map_ids:
             marks = ",".join(["?"] * len(map_ids))
             rounds = query(f"""
-                SELECT map_id, round_num, winner_id, winning_side, result_type
+                SELECT map_id, round_num, winner_id, winning_side, result_type,
+                       team_top_id, team_bot_id, category_top, category_bot
                 FROM rounds WHERE map_id IN ({marks})
                 ORDER BY map_id, round_num
             """, map_ids)
 
-        # Repartir las piezas por mapa
+        # H5: la economía "real" del panel se calcula desde `rounds`
+        # (excluyendo R1/R13); `economy_summary` queda solo como fallback
+        # etiquetado (benchmark no fiable en eco).
+        economy = _economia_desde_rounds(rounds, mapas, partido, economy_summary)
+
+        # Repartir las piezas por mapa (el timeline solo conserva sus campos).
         by_map = {}
         for m in mapas:
             m['rounds'] = []
@@ -397,7 +479,11 @@ def detalle_partido(match_id):
             by_map[m['map_id']] = m
         for r in rounds:
             if r['map_id'] in by_map:
-                by_map[r['map_id']]['rounds'].append(r)
+                by_map[r['map_id']]['rounds'].append({
+                    'map_id': r['map_id'], 'round_num': r['round_num'],
+                    'winner_id': r['winner_id'], 'winning_side': r['winning_side'],
+                    'result_type': r['result_type'],
+                })
         for s in stats:
             if s['map_id'] in by_map:
                 by_map[s['map_id']]['players'].append(s)
