@@ -34,6 +34,58 @@ let modelVersionError = null;    // error al leer /modelo_version (null = ok)
 // Cota del job de RE-PRECALCULAR en EN VIVO (evita poll infinito si se cuelga).
 const RECALC_POLL_MS = 2000;
 const RECALC_TIMEOUT_MS = 30 * 60 * 1000;
+const RECALC_POST_TIMEOUT_MS = 190000;  // el POST puede tardar (motor en frío)
+
+// Job de precálculo persistido por enfrentamiento (mismo esquema que PREPARAR):
+// permite reanudar el polling tras recargar/otra pestaña y adoptar el job
+// activo cuando el POST responde 429 ("ya hay un precálculo en curso").
+const JOBS_KEY = 'ae_precalcular_jobs';
+const JOB_TTL_MS = 24 * 60 * 60 * 1000;
+
+function claveEnfrentamiento(a, b, mid) {
+    const id = parseInt(mid, 10) || 0;
+    if (id > 0) return `match:${id}`;
+    return `eq:${String(a || '').trim().toLowerCase()}|${String(b || '').trim().toLowerCase()}`;
+}
+
+function jobVigente(job) {
+    return !!(job && job.job_id && (Date.now() - (job.started_at || 0)) < JOB_TTL_MS);
+}
+
+function leerJobs() {
+    try {
+        const raw = localStorage.getItem(JOBS_KEY);
+        const obj = raw ? JSON.parse(raw) : {};
+        return obj && typeof obj === 'object' ? obj : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function escribirJobs(jobs) {
+    Object.keys(jobs).forEach(k => { if (!jobVigente(jobs[k])) delete jobs[k]; });
+    try { localStorage.setItem(JOBS_KEY, JSON.stringify(jobs)); } catch (e) { /* sin localStorage */ }
+}
+
+function guardarJob(job) {
+    const jobs = leerJobs();
+    jobs[job.clave] = job;
+    escribirJobs(jobs);
+}
+
+function quitarJob(clave) {
+    const jobs = leerJobs();
+    if (jobs[clave]) { delete jobs[clave]; escribirJobs(jobs); }
+}
+
+function jobGuardado(a, b, mid) {
+    const jobs = leerJobs();
+    const id = parseInt(mid, 10) || 0;
+    let job = jobs[claveEnfrentamiento(a, b, id)];
+    if (!job && id > 0) job = jobs[claveEnfrentamiento(a, b, 0)];
+    if (!job) job = Object.values(jobs).find(j => j.equipo_a === a && j.equipo_b === b && jobVigente(j));
+    return jobVigente(job) ? job : null;
+}
 
 // Cola de POST /serie de la lista: máximo de pedidos por carga y corte de
 // espera por request. 60 s cubre el cold start del servicio de lectura en
@@ -648,9 +700,17 @@ async function selectSim(s) {
 }
 
 // Re-precalcula el enfrentamiento actual con forzar:true (por el proxy; el POST
-// responde 202 al instante) y refresca la lista.
+// responde 202 al instante) y refresca la lista. Un 429 ("ya hay un precálculo
+// en curso") se adopta como job activo, nunca como error fatal.
 async function reprecalcular(s) {
     if (!s || recalculating) return;
+    const clave = claveEnfrentamiento(s.equipo_a, s.equipo_b, s.match_id);
+
+    // Job persistido de ese enfrentamiento: reanudar el polling en vez de
+    // volver a POSTear (sobrevive a recargas y se comparte entre pestañas).
+    const guardado = jobGuardado(s.equipo_a, s.equipo_b, s.match_id);
+    if (guardado) { await atenderRecalcGuardado(guardado, s); return; }
+
     recalculating = true;
     recalcStopped = false;
     const btn = document.getElementById('btnReprecalcular');
@@ -658,6 +718,8 @@ async function reprecalcular(s) {
     simListStatus.className = 'live-status warn';
     simListStatus.textContent = `Re-precalculando ${s.equipo_a} vs ${s.equipo_b}… no cierres la pestaña.`;
     const t0 = Date.now();
+    const ctrl = new AbortController();
+    const corte = setTimeout(() => ctrl.abort(), RECALC_POST_TIMEOUT_MS);
     try {
         const res = await proxyFetch('/precalcular', {
             method: 'POST',
@@ -669,8 +731,41 @@ async function reprecalcular(s) {
                 n_sim: s.n_sim || 10000,
                 forzar: true,
             }),
+            signal: ctrl.signal,
         });
-        const data = await res.json();
+        let data = null;
+        try { data = await res.json(); } catch (e) { data = null; }
+
+        // 429 = ya hay un precálculo en curso: no es error fatal. Si trae
+        // `job_id` (API nueva) se adopta; si no, se reanuda el job guardado.
+        const enCurso = res.status === 429
+            || (data && data.ok === false && /en curso/i.test(String(data.error || '')));
+        if (enCurso) {
+            let job = jobGuardado(s.equipo_a, s.equipo_b, s.match_id);
+            if (!job && data && data.job_id) {
+                job = {
+                    clave, job_id: data.job_id, equipo_a: s.equipo_a, equipo_b: s.equipo_b,
+                    match_id: s.match_id || 0, n_sim: s.n_sim || 10000,
+                    total: data.total || 26, modelo_version: data.modelo_version || null,
+                    estado: data.estado || 'en_proceso', started_at: Date.now(),
+                };
+                guardarJob(job);
+            }
+            if (job) {
+                recalculating = false;
+                await atenderRecalcGuardado(job, s);
+                return;
+            }
+            simListStatus.className = 'live-status warn';
+            simListStatus.textContent = '⚠ Ya hay un precálculo en curso (otra pestaña o usuario). Espera a que termine y pulsa RE-PRECALCULAR para reintentar.';
+            return;
+        }
+
+        if (res.status >= 500 || !data) {
+            simListStatus.className = 'live-status err';
+            simListStatus.textContent = 'El servicio de predicción no respondió; el job puede seguir en curso. Pulsa RE-PRECALCULAR para reintentar.';
+            return;
+        }
         if (!data.ok) {
             simListStatus.className = 'live-status err';
             simListStatus.textContent = `Error: ${data.error || 'no se pudo re-precalcular'}`;
@@ -678,28 +773,67 @@ async function reprecalcular(s) {
         }
         // Async (202): poll del job; sync: ya terminó.
         if (data.job_id) {
+            guardarJob({
+                clave, job_id: data.job_id, equipo_a: s.equipo_a, equipo_b: s.equipo_b,
+                match_id: s.match_id || 0, n_sim: s.n_sim || 10000,
+                total: data.total || 26, modelo_version: data.modelo_version || null,
+                estado: 'en_proceso', started_at: t0,
+            });
             const ok = await pollPrecalcular(data.job_id, t0);
+            quitarJob(clave);
             if (!ok) {
                 // Restaura el botón para poder reintentar sin recargar la página.
                 renderSimHead(s, simIsStale(s) || detalleFaltante().marcadores || detalleFaltante().economia);
                 return;
             }
         }
-        simListStatus.className = 'live-status ok';
-        simListStatus.textContent = '✓ Re-precalculo listo.';
-        await loadModeloVersion();
-        await loadSimulaciones();
-        if (current && sameSim(current, s)) await selectSim(current);
+        await finalizarRecalc(s);
     } catch (e) {
-        simListStatus.className = 'live-status err';
-        simListStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
+        if (e && e.name === 'AbortError') {
+            simListStatus.className = 'live-status warn';
+            simListStatus.textContent = 'El POST tardó más de lo esperado; el job puede seguir en curso. Pulsa RE-PRECALCULAR para reintentar.';
+        } else {
+            simListStatus.className = 'live-status err';
+            simListStatus.textContent = `Servicio de predicción no disponible: ${e.message}`;
+        }
+    } finally {
+        clearTimeout(corte);
+        recalculating = false;
+    }
+}
+
+// Atiende un job ya persistido/adoptado (resume tras recarga, 429 con job_id…).
+async function atenderRecalcGuardado(job, s) {
+    recalculating = true;
+    recalcStopped = false;
+    const btn = document.getElementById('btnReprecalcular');
+    if (btn) { btn.disabled = true; btn.textContent = '↻ RECALCULANDO…'; }
+    simListStatus.className = 'live-status warn';
+    simListStatus.textContent = `Re-precalculando ${s.equipo_a} vs ${s.equipo_b}… no cierres la pestaña.`;
+    try {
+        const ok = await pollPrecalcular(job.job_id, job.started_at || Date.now());
+        quitarJob(job.clave);
+        if (!ok) {
+            renderSimHead(s, simIsStale(s) || detalleFaltante().marcadores || detalleFaltante().economia);
+            return;
+        }
+        await finalizarRecalc(s);
     } finally {
         recalculating = false;
     }
 }
 
+async function finalizarRecalc(s) {
+    simListStatus.className = 'live-status ok';
+    simListStatus.textContent = '✓ Re-precalculo listo.';
+    await loadModeloVersion();
+    await loadSimulaciones();
+    if (current && sameSim(current, s)) await selectSim(current);
+}
+
 // Poll del job de precalculo con cota de tiempo y cancelación (mismo contrato
 // que PREPARAR). t0 marca el inicio del POST para medir el total transcurrido.
+// Un 5xx del proxy/túnel se reintenta (no aborta el poll).
 async function pollPrecalcular(jobId, t0) {
     let fails = 0;
     while (!recalcStopped) {
@@ -718,6 +852,13 @@ async function pollPrecalcular(jobId, t0) {
                 return false;
             }
             jd = await r.json();
+            if (r.status >= 500) {
+                fails++;
+                simListStatus.className = 'live-status warn';
+                simListStatus.innerHTML = `⚠ El servicio no responde (HTTP ${r.status}). Reintento #${fails} · ${elapsed}s · <button class="link-cancel" id="btnCancelRecalc">cancelar espera</button>`;
+                await new Promise(r2 => setTimeout(r2, Math.min(RECALC_POLL_MS + fails * 500, 10000)));
+                continue;
+            }
             fails = 0;
         } catch {
             fails++;

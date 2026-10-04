@@ -64,7 +64,9 @@ Clave API: si `ALETHEIA_API_KEY` está configurada en el entorno, este proxy
 añade **server-side** el header `X-API-Key` a todas las llamadas al servicio
 (los endpoints públicos la ignoran). La clave NUNCA viaja al navegador.
 `POST /api/precalcular` responde 202 al instante (async con `job_id`), así que
-también puede pedirse por el proxy sin chocar con su timeout.
+también puede pedirse por el proxy sin chocar con su timeout; si el motor está
+en frío, el proxy espera hasta 180 s (`TIMEOUT_PRECALCULAR`) para no cortar el
+arranque. El 429 "ya hay un precálculo en curso" se reenvía con su cuerpo.
 """
 
 import json
@@ -115,6 +117,7 @@ BASE_URL = os.environ.get('ALETHEIA_PREDICT_URL', 'http://localhost:8000').strip
 READ_URL = os.environ.get('ALETHEIA_PREDICT_READ_URL', '').strip().rstrip('/') or BASE_URL
 
 TIMEOUT = 120             # segundos: ngrok/PC y operaciones de cómputo
+TIMEOUT_PRECALCULAR = 180  # el POST de precalcular puede tardar (motor en frío)
 READ_TIMEOUT = 60         # primer intento de lectura (en caliente responde <5 s)
 READ_RETRY_TIMEOUT = 180  # reintento único: cubre el cold start de Render free
 
@@ -136,15 +139,17 @@ def _guardar_dataset():
     return str(valor).strip().lower() in ('1', 'true', 'si', 'sí', 'yes', 'on')
 
 
-def _intentos_servicio(prefer):
+def _intentos_servicio(prefer, timeout=None):
     """Parejas (url, timeout) a probar, en orden, según el tipo de llamada.
 
     'read'  -> READ_URL (Render); reintenta una vez por cold start y, como
                último recurso, cae a BASE_URL (PC/ngrok) si está definido.
     'ngrok' -> BASE_URL (cómputo pesado y mutaciones); sin fallback.
+    `timeout` sustituye al TIMEOUT por defecto en las llamadas a BASE_URL
+    (p. ej. el POST de precalcular, que puede tardar en cargar el motor).
     """
     if prefer != 'read' or READ_URL == BASE_URL:
-        return [(BASE_URL, TIMEOUT)]
+        return [(BASE_URL, timeout or TIMEOUT)]
     return [
         (READ_URL, READ_TIMEOUT),
         (READ_URL, READ_RETRY_TIMEOUT),
@@ -152,12 +157,15 @@ def _intentos_servicio(prefer):
     ]
 
 
-def _request_service(method, path, payload=None, params=None, prefer='read'):
+def _request_service(method, path, payload=None, params=None, prefer='read',
+                     timeout=None):
     """Llama al servicio externo y devuelve (respuesta, None) o (None, error).
 
     `prefer` decide el servicio: 'read' usa el servicio de lectura (Render,
     cache-first) con reintento por cold start y caída a ngrok/PC; 'ngrok' va
-    directo al PC (cómputo pesado y mutaciones).
+    directo al PC (cómputo pesado y mutaciones). `timeout` solo aplica a las
+    llamadas directas a BASE_URL (precalcular usa 180 s por el arranque del
+    motor; sobre el servicio de lectura se conservan los tiempos estándar).
 
     `error` es un dict {'error': mensaje, 'status': código}. El llamador lo
     convierte en respuesta JSON con `_error_response`.
@@ -170,7 +178,7 @@ def _request_service(method, path, payload=None, params=None, prefer='read'):
     if api_key:
         headers['X-API-Key'] = api_key
 
-    intentos = _intentos_servicio(prefer)
+    intentos = _intentos_servicio(prefer, timeout)
     ultimo_error = {'error': 'Servicio de predicción no disponible.', 'status': 502}
     for indice, (url, timeout) in enumerate(intentos):
         kwargs = {'timeout': timeout, 'headers': headers}
@@ -684,12 +692,13 @@ def _passthrough_get(service_path, prefer='read'):
     return jsonify(data), resp.status_code
 
 
-def _passthrough_post(service_path, prefer='read'):
+def _passthrough_post(service_path, prefer='read', timeout=None):
     """POST al servicio reenviando el body JSON; devuelve la respuesta tal cual."""
     body = request.get_json(silent=True)
     if body is None:
         return jsonify({'ok': False, 'error': 'Body JSON inválido o vacío.'}), 400
-    resp, err = _request_service('POST', service_path, payload=body, prefer=prefer)
+    resp, err = _request_service('POST', service_path, payload=body,
+                                 prefer=prefer, timeout=timeout)
     if err:
         return _error_response(err)
     data, err = _json_or_error(resp)
@@ -771,9 +780,14 @@ def precalcular():
     """Proxy POST /api/precalcular (precomputa 13 mapas x 2 lados = 26 filas).
 
     Cómputo pesado: va siempre al PC/ngrok (BASE_URL), no al servicio de
-    lectura de Render.
+    lectura de Render. El timeout es largo (180 s) porque en frío el servicio
+    puede tardar en cargar el motor antes de responder el 202; el cómputo en
+    sí es asíncrono (`job_id` + polling de `/precalcular/estado`). Un 429 ("ya
+    hay un precálculo en curso") se reenvía tal cual, con su `job_id`/`estado`
+    si la API los incluye.
     """
-    return _passthrough_post('/api/precalcular', prefer='ngrok')
+    return _passthrough_post('/api/precalcular', prefer='ngrok',
+                             timeout=TIMEOUT_PRECALCULAR)
 
 
 @aletheia_bp.route('/api/aletheia/precalcular/estado', methods=['GET'])

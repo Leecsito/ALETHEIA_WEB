@@ -2717,6 +2717,25 @@ main {
     color: var(--red);
 }
 
+.prepare-status.warn {
+    color: var(--orange);
+}
+
+/* Barra de progreso del job de precálculo (usa job.progreso, 0..1). */
+.prep-bar {
+    height: 4px;
+    background: var(--border);
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+
+.prep-bar-fill {
+    height: 100%;
+    width: 0;
+    background: var(--accent);
+    transition: width .4s ease;
+}
+
 /* ── LIVE SECTION ── */
 .live-section {
     border: 1px solid var(--border);

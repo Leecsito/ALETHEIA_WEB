@@ -371,6 +371,11 @@ estas tablas). Endpoints adicionales del proxy:
   proxy).
   **Por defecto ASÍNCRONO:** responde `202` al instante con
   `{"ok", "job_id", "total": 26, "modelo_version", "progreso", "mapas_hechos"}`.
+  El proxy espera hasta **180 s** (`TIMEOUT_PRECALCULAR`) a que el servicio
+  responda, porque en frío el motor puede tardar 1-2 min en arrancar antes del
+  `202`; el cómputo en sí no bloquea. Un **429** ("Ya hay un precálculo en
+  curso") se reenvía tal cual (puede traer el `job_id` y `estado` del job
+  activo).
   Progreso: `GET /api/aletheia/precalcular/estado?job_id=...` → proxy de
   `GET {BASE}/api/precalcular/estado` →
   `{"ok", "job": {"estado", "progreso", "mapas_hechos", "computados", "desde_cache", "error"}}`.
@@ -562,17 +567,37 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      `borrar`; así no chocan con el timeout de gunicorn/Render.
    - **EN VIVO** (`/aletheia/`) lee todo de la caché a través del proxy (Turso
      directo; el servicio solo si falta el dato).
-   - **`/aletheia_preparar/` — PREPARAR:** selección de equipos (search+grids),
-     selector de simulaciones (1K/5K/10K; **sin 25K/50K en hosting free**), campo de ID vlr.gg (parsea URL o
-     número), **PREPARAR PARTIDO** (async: `POST /api/aletheia/precalcular` → `job_id`
-     → poll `/api/aletheia/precalcular/estado`, con % y tiempo transcurrido),
-     **ASOCIAR ID** y badges de caché ("ya predicho") y de `modelo_version` ("si
-     cambia el modelo" marca RE-PREPARAR; si el servicio trae `desactualizado:true`
-     avisa de reiniciarlo). Botón **"IR A EN VIVO →"**.
-     - El **poll es resiliente**: ante cortes del túnel/PC (p. ej.
-       `ERR_PROXY_CONNECTION_FAILED`) reintenta con backoff en vez de abortar, y
-       ofrece **"cancelar espera"**. Se usa un favicon inline para evitar el 404 de
-       `/favicon.ico`.
+    - **`/aletheia_preparar/` — PREPARAR:** selección de equipos (search+grids),
+      selector de simulaciones (1K/5K/10K; **sin 25K/50K en hosting free**), campo de ID vlr.gg (parsea URL o
+      número), **PREPARAR PARTIDO** (async: `POST /api/aletheia/precalcular` → `job_id`
+      → poll `/api/aletheia/precalcular/estado`, con % y tiempo transcurrido),
+      **ASOCIAR ID** y badges de caché ("ya predicho") y de `modelo_version` ("si
+      cambia el modelo" marca RE-PREPARAR; si el servicio trae `desactualizado:true`
+      avisa de reiniciarlo). Botón **"IR A EN VIVO →"**.
+      - El **poll es resiliente**: ante cortes del túnel/PC (p. ej.
+        `ERR_PROXY_CONNECTION_FAILED`) reintenta con backoff en vez de abortar, y
+        ofrece **"cancelar espera"**. Se usa un favicon inline para evitar el 404 de
+        `/favicon.ico`. Sondea cada **2-3 s** y la **barra de progreso usa
+        `job.progreso` (0..1)**; NO `mapas_hechos/total` (las filas son mapas × 2).
+      - **Anti-doble-envío y reanudación:** el botón se deshabilita mientras el
+        POST está en vuelo (timeout de 190 s; el motor en frío tarda 1-2 min) y el
+        job se **persiste por enfrentamiento** (`match_id`+equipos) en
+        `localStorage` (`ae_precalcular_jobs`, TTL 24 h). Al **recargar** la
+        página se restaura el enfrentamiento y se **reanuda el polling** de ese
+        `job_id` sin volver a POSTear; una segunda pestaña hace lo mismo. Si un
+        timeout deja dudas, se hace **un único reintento** (solo si no hay job
+        conocido) para descubrir/adoptar el job activo.
+      - **429 "ya hay un precálculo en curso" nunca es error fatal:** si la
+        respuesta trae `job_id` se adopta y se pollea; si no, se sigue el job
+        guardado; si no hay ninguno, se informa y se ofrece **reintentar** sin
+        perder la selección de la UI.
+      - **Caché y `forzar`:** por defecto se envía `forzar:false` para reutilizar
+        caché válida (solo `RE-PREPARAR` fuerza). El contador "en caché" cuenta
+        **solo filas vigentes** (`modelo_version` actual y `n_sim` >= el
+        solicitado), para que coincida con lo que el job reutiliza.
+      - Al terminar (`listo`) se recargan las predicciones y se habilita el
+        botón; si `estado=error` se muestra el campo `error` y se permite
+        reintentar.
    - **`/aletheia/` — EN VIVO (nunca simula):**
       - Al cargar, `GET /api/aletheia/simulaciones` pinta la lista de preparadas
         (`EQUIPO_A vs EQUIPO_B · #match_id · N mapas · n_sim · [vigente]`); por
@@ -676,14 +701,18 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         `resultados_serie`, `caminos_serie`) y **(4) un apartado de notas** para contexto de los
         equipos. Se arma con el `liveBulk` + la última serie (conviene pulsar
         ARMAR SERIE antes).
-     - **VIGENCIA Y RE-PRECALCULAR:** la web compara `modelo_version` de cada
-       enfrentamiento con `GET /api/aletheia/modelo_version` (y usa `vigente` de
-       `/api/simulaciones`); si el servicio trae `desactualizado:true` muestra el
-       aviso de reinicio. Si el modelo difiere, o si las filas no traen
-       `marcadores`/`economia`, marca el enfrentamiento como **RE-PRECALCULAR** y
-       ofrece **↻ RE-PRECALCULAR**, que hace `POST /api/aletheia/precalcular` con
-       `forzar:true` **por el proxy** (async: `job_id` + polling de
-       `/api/aletheia/precalcular/estado`), refresca la lista y vuelve a leer la caché.
+       - **VIGENCIA Y RE-PRECALCULAR:** la web compara `modelo_version` de cada
+         enfrentamiento con `GET /api/aletheia/modelo_version` (y usa `vigente` de
+         `/api/simulaciones`); si el servicio trae `desactualizado:true` muestra el
+         aviso de reinicio. Si el modelo difiere, o si las filas no traen
+         `marcadores`/`economia`, marca el enfrentamiento como **RE-PRECALCULAR** y
+         ofrece **↻ RE-PRECALCULAR**, que hace `POST /api/aletheia/precalcular` con
+         `forzar:true` **por el proxy** (async: `job_id` + polling de
+         `/api/aletheia/precalcular/estado`), refresca la lista y vuelve a leer la caché.
+         Comparte el job persistido por enfrentamiento con PREPARAR: un **429**
+         ("ya hay un precálculo en curso") se adopta como job activo (o se
+         reanuda el guardado) en vez de mostrarse como error fatal, y el POST
+         tiene timeout largo (190 s) para no duplicar peticiones.
       - **COMPARACIÓN:** `GET /api/aletheia/comparacion?match_id=..` muestra
         tarjetas resumen (accuracy, brier, log-loss, favoritos_ok, upsets,
         inciertos) — `ACCURACY` con la escala verde/naranja/rojo (≥67/≥50/<50) —
@@ -908,6 +937,33 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-04 — POST /api/precalcular: anti-doble-envío, 429 y reanudación del job.**
+  - **PREPARAR (`aletheia_preparar/script.js`):** el job se persiste por
+    enfrentamiento (`match_id`+equipos) en `localStorage`
+    (`ae_precalcular_jobs`, TTL 24 h). Al recargar se restaura el
+    enfrentamiento y se **reanuda el polling** sin re-POSTear; una segunda
+    pestaña muestra el progreso. El **429** ("ya hay un precálculo en curso")
+    deja de ser error fatal: se adopta el `job_id` si viene en la respuesta, se
+    reanuda el job guardado o se informa con botón **reintentar** sin perder la
+    UI. El POST se lanza con `AbortController` (190 s) y, si expira/no responde,
+    se hace **un único reintento** (solo sin job conocido) para descubrir el job
+    que pudo crearse; el botón queda deshabilitado durante todo el vuelo. La
+    **barra de progreso** usa `job.progreso` (0..1), no `mapas_hechos/total`.
+    Se envía `forzar:false` salvo RE-PREPARAR. El contador "en caché" cuenta
+    **solo filas vigentes** (`modelo_version` actual y `n_sim` >= solicitado).
+    Al terminar se recarga `/predicciones`; si `estado=error` se muestra el
+    error y se permite reintentar.
+  - **EN VIVO (`aletheia/script.js`):** RE-PRECALCULAR comparte el job
+    persistido con PREPARAR, adopta el job del 429 o el guardado en vez de
+    fallar, usa timeout de POST largo (190 s) y reintenta el polling ante 5xx
+    del túnel.
+  - **Proxy (`aletheia/aletheia.py`):** `POST /api/precalcular` espera hasta
+    **180 s** (`TIMEOUT_PRECALCULAR`) la respuesta del servicio (motor en frío);
+    el 429 se reenvía con su cuerpo. `_request_service`/`_passthrough_post`
+    aceptan `timeout` opcional (solo afecta a las llamadas directas a BASE_URL).
+  - Contexto: FUT Esports vs T1 #753448 mostró "Error: Ya hay un precálculo en
+    curso" mientras un job real terminaba bien (26/26, ~117 s), por doble
+    petición y por tratar el 429 como fatal.
 - **2026-10-03 — Nodos: rebote real y fondo visible.**
   - `header/header-nodes.js`: el rebote ahora **refleja la deriva base**
     (`bvx`/`bvy`, con patada mínima hacia dentro) además de la velocidad; antes
