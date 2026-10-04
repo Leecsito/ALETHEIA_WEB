@@ -128,12 +128,16 @@ function fmtNum(v, d = 4) {
     return Number(v).toFixed(d);
 }
 
+// Formatos válidos por veto completo (contrato /api/serie y /api/predecir):
+// la API exige 1, 3 o 5 mapas; 2/4 responden 400.
+const VETO_COMPLETO = [1, 3, 5];
+
 function inferFormat(n) {
     if (n <= 0) return '—';
     if (n === 1) return 'Bo1';
-    if (n <= 3) return 'Bo3';
-    if (n <= 5) return 'Bo5';
-    return `Bo${n}`;
+    if (n === 3) return 'Bo3';
+    if (n === 5) return 'Bo5';
+    return 'incompleto';
 }
 
 function sameSim(a, b) {
@@ -307,6 +311,9 @@ function actualizarFiltroSims(base) {
 function seriePillHtml(mid, info) {
     if (!info || info.score_a == null || info.score_b == null) return '';
     const s = simSerie[mid];
+    if (s && s.sin_pool) {
+        return `<span class="si-pred-pill dim" data-serie="${mid}" title="Sin pool de veto completo (1/3/5 mapas): no se calcula la P de serie.">SERIE sin pool</span>`;
+    }
     if (s && s.p_real != null) {
         const marca = Number(s.p_real) >= 0.5 ? '✓' : '✕';
         const tt = `Serie: P del motor al ganador real = ${pct(s.p_real)} (motor ${pct(s.p_a)} / ${pct(s.p_b)}). ${marca === '✓' ? 'Era su favorito' : 'Upset de serie'}.`;
@@ -322,7 +329,7 @@ function seriePillHtml(mid, info) {
 // P(MAPA) (calibración media) · puntos por mapa.
 function simResumenHtml(info, res, mid) {
     if (!info) return '';
-    const motor = `<span class="si-pred-item" title="P(mapa) del motor para ${escapeHtml(info.team_a || 'A')} / ${escapeHtml(info.team_b || 'B')} (calibrada, misma en todos los mapas)">MOTOR ${pct(info.p_a)}/${pct(info.p_a == null ? null : 1 - info.p_a)}</span>`;
+    const motor = `<span class="si-pred-item" title="P(mapa) del motor para ${escapeHtml(info.team_a || 'A')} / ${escapeHtml(info.team_b || 'B')} (calibrada, plana entre mapas y lados)">MOTOR ${pct(info.p_a)}/${pct(info.p_a == null ? null : 1 - info.p_a)}</span>`;
     if (res !== true || info.score_a == null || info.score_b == null) {
         return `<div class="si-pred">${motor}</div>`;
     }
@@ -346,12 +353,15 @@ function simResumenHtml(info, res, mid) {
 
 // Mapas para calcular la P de serie: pool del veto (picks + decider, en orden).
 // Es clave pasar el pool completo: con solo los mapas jugados, un bo3 terminado
-// 2-0 le da al endpoint /serie una lista de 2 y devuelve una P incoherente.
+// 2-0 le da al endpoint /serie una lista de 2 (la API responde 400). Si la lista
+// no es 1/3/5 se devuelve [] y NO se llama al servicio.
 function mapasSerieDe(info) {
     const nombres = (info && Array.isArray(info.serie_mapas) && info.serie_mapas.length)
         ? info.serie_mapas
         : ((info && Array.isArray(info.mapas)) ? info.mapas.map(m => m.map_name) : []);
-    return nombres.filter(Boolean).map(m => ({ map_name: m, lado_inicial_a: 'attack' }));
+    const limpios = nombres.filter(Boolean);
+    if (!VETO_COMPLETO.includes(limpios.length)) return [];
+    return limpios.map(m => ({ map_name: m, lado_inicial_a: 'attack' }));
 }
 
 // Pide en 2º plano la P de serie (POST /serie, desde la caché) para las filas
@@ -370,7 +380,9 @@ async function cargarSeriesLista() {
             const info = simsInfo[s.match_id];
             const mapas = mapasSerieDe(info);
             if (!mapas.length) {
-                simSerie[s.match_id] = { error: true };
+                // Sin pool de veto completo (1/3/5): no se llama al servicio.
+                simSerie[s.match_id] = { sin_pool: true };
+                actualizarSeriesLista();
                 continue;
             }
             simSerie[s.match_id] = { cargando: true };
@@ -793,15 +805,21 @@ function renderLiveMapPicker() {
     liveMapPicker.innerHTML = '';
     availableMaps.forEach(m => {
         const row = liveBulk ? liveBulk[`${m}|${liveSide}`] : null;
-        // Motor = predicción calibrada (misma en todos los mapas); hist = análisis
-        // histórico del mapa (contrato: "no es la predicción del motor").
+        // Motor = predicción calibrada (plana entre mapas y lados); hist =
+        // análisis histórico del mapa (contrato: "no es la predicción del motor").
         const motorP = row ? row.prob_victoria_a : null;
         const am = row && row.analisis_mapa ? row.analisis_mapa : null;
         const histP = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
         const ot = row ? row.prob_overtime : null;
+        // Capa B (escenarios por mapa/lado): solo si el backend la devuelve.
+        const esc = (row && row.escenario_mapa && row.escenario_mapa.p_mapa != null)
+            ? Number(row.escenario_mapa.p_mapa) : null;
         const meta = row
-            ? `<span class="mqp-prob" title="Predicción del motor (calibrada, igual en todos los mapas)">MOTOR ${pct(motorP)}</span>`
+            ? `<span class="mqp-prob" title="Predicción del motor (calibrada, plana entre mapas y lados; el ESCENARIO añade la lectura por mapa/lado)">MOTOR ${pct(motorP)}</span>`
             + `<span class="mqp-ot" title="P(overtime) del motor">OT ${pct(ot)}</span>`
+            + ((esc != null && !isNaN(esc))
+                ? `<span class="mqp-esc" title="Capa de escenarios por mapa/lado anclada al motor (no es el predictor)">ESC ${pct(esc)}</span>`
+                : '')
             + ((histP != null && !isNaN(histP))
                 ? `<span class="mqp-hist" title="Análisis histórico del mapa (no es la predicción del motor)">hist ${pct(histP)}</span>`
                 : '')
@@ -944,15 +962,24 @@ function renderEconomia(p) {
     const eqA = (current && current.equipo_a) || 'A';
     const eqB = (current && current.equipo_b) || 'B';
     const pctOr = v => (v == null || isNaN(Number(v))) ? '—' : `${Math.round(Number(v) * 100)}%`;
+    const nDe = d => (d && d.n != null && d.n !== '' && !isNaN(Number(d.n))) ? Number(d.n) : null;
+    // A1: el backend publica la semántica nueva (eco sin pistols R1/R13 y
+    // n = rondas simuladas de la categoría). Si no viene, se usa el texto previo.
+    const semantica = (typeof eco.semantica === 'string' && eco.semantica.trim())
+        ? eco.semantica.trim()
+        : 'estimación condicionada a la P del mapa · no resultado seguro';
+    const pistolSemantica = (typeof eco.pistol_semantica === 'string' && eco.pistol_semantica.trim())
+        ? eco.pistol_semantica.trim() : '';
 
     const catCols = datos => CAT_ECO.map(([key, label]) => {
         const d = (datos && datos[key]) || {};
         const pv = Number(d.p_gana_ronda);
+        const n = nDe(d);
         const ancho = isNaN(pv) ? 0 : Math.round(pv * 100);
         return `<div class="eco-cat">
             <span class="eco-cat-label">${label}</span>
             <span class="eco-cat-bar"><span style="width:${ancho}%"></span></span>
-            <span class="eco-cat-val">${pctOr(pv)}</span>
+            <span class="eco-cat-val">${pctOr(pv)}${n != null ? ` <span class="eco-n">n=${n}</span>` : ''}</span>
         </div>`;
     }).join('');
 
@@ -962,23 +989,26 @@ function renderEconomia(p) {
         const celdas = CAT_ECO.map(([cb]) => {
             const d = (eco.cruce || {})[`${ra}_vs_${cb}`] || {};
             const pv = Number(d.p_gana_a);
+            const n = nDe(d);
             const txt = isNaN(pv) ? '—' : `${Math.round(pv * 100)}%`;
             const tono = isNaN(pv) ? '' : (pv >= 0.5 ? 'eco-hi' : 'eco-lo');
             const dest = destacados.has(`${ra}_vs_${cb}`) ? ' eco-dest' : '';
-            return `<span class="eco-cell ${tono}${dest}">${txt}</span>`;
+            const nTxt = (dest && n != null) ? `<span class="eco-cell-n">${n}</span>` : '';
+            return `<span class="eco-cell ${tono}${dest}"${n != null ? ` title="n=${n} rondas simuladas"` : ''}>${txt}${nTxt}</span>`;
         }).join('');
         return `<div class="eco-mrow"><span class="eco-mrow-label">${la}</span>${celdas}</div>`;
     }).join('');
 
     const pistol = eco.pistol || {};
     const pvPis = Number(pistol.p_gana_a);
+    const nPis = nDe(pistol);
     const anchoPis = isNaN(pvPis) ? 0 : Math.round(pvPis * 100);
 
     liveEconomia.className = 'economia-block has-data';
     liveEconomia.innerHTML = `
     <div class="eco-head">
       <div class="eco-title">ECONOMÍA / RONDAS
-        <span class="eco-note">estimación condicionada a la P del mapa · no resultado seguro</span>
+        <span class="eco-note"${pistolSemantica ? ` title="${escapeHtml(pistolSemantica)}"` : ''}>${escapeHtml(semantica)}</span>
       </div>
     </div>
     <div class="eco-cols">
@@ -991,10 +1021,10 @@ function renderEconomia(p) {
         ${catCols(eco.equipo_b)}
       </div>
     </div>
-    <div class="eco-pistol">
+    <div class="eco-pistol"${pistolSemantica ? ` title="${escapeHtml(pistolSemantica)}"` : ''}>
       <span class="eco-cat-label">PISTOL</span>
       <span class="eco-cat-bar"><span style="width:${anchoPis}%"></span></span>
-      <span class="eco-cat-val">${escapeHtml(eqA)} ${pctOr(pvPis)}</span>
+      <span class="eco-cat-val">${escapeHtml(eqA)} ${pctOr(pvPis)}${nPis != null ? ` <span class="eco-n">n=${nPis}</span>` : ''}</span>
     </div>
     <div class="eco-cruce-wrap">
       <div class="eco-cruce-title">CRUCES · prob. de que <b>${escapeHtml(eqA)}</b> gane la ronda
@@ -1023,6 +1053,9 @@ function paintLiveDetail(p, modelVersion, vigente) {
     // IC95% aditivo del motor (A6); filas viejas sin el dato lo ocultan.
     const ic = (p && Array.isArray(p.prob_intervalo) && p.prob_intervalo.length === 2
         && p.prob_intervalo[0] != null && p.prob_intervalo[1] != null) ? p.prob_intervalo : null;
+    // Capa B: escenario por (mapa, lado). El backend la manda `null` cuando el
+    // flag está apagado o en modo DB; la tarjeta se oculta sin romper.
+    const esc = (p && p.escenario_mapa && typeof p.escenario_mapa === 'object') ? p.escenario_mapa : null;
     renderScoreboard(p);
     renderEconomia(p);
     liveCards.innerHTML = `
@@ -1050,13 +1083,18 @@ function paintLiveDetail(p, modelVersion, vigente) {
       <div class="live-card-label">IC95% (MOTOR)</div>
       <div class="live-card-val">${pct(ic[0])}–${pct(ic[1])}</div>
     </div>` : ''}
+    ${esc ? `<div class="live-card" title="Capa de escenarios por mapa/lado anclada al motor; no es el predictor y NO cambia la P del motor">
+      <div class="live-card-label">ESCENARIO · ${escapeHtml(current.equipo_a)} (MAPA/LADO)</div>
+      <div class="live-card-val">${pct(esc.p_mapa)}</div>
+      <div class="live-card-sub">n ${esc.n_a != null ? esc.n_a : '—'}/${esc.n_b != null ? esc.n_b : '—'} · Δlogit ${fmtNum(esc.delta_logit, 3)} · ${pct(esc.p_lo)}–${pct(esc.p_hi)}</div>
+    </div>` : ''}
     <div class="analisis-nota analisis-nota-hist">
       <b>ANÁLISIS HISTÓRICO</b> (no es la predicción del motor) ·
       ${histP != null && !isNaN(histP) ? `p_mapa_a: <b>${pct(histP)}</b>` : 'p_mapa_a: —'} ·
       historial en <b>${(liveMap || '').toUpperCase()}</b>:
       ${escapeHtml(current.equipo_a)} ${wrA ? pct(wrA.winrate) + ' <span style="color:var(--dim)">(n=' + wrA.n + ')</span>' : '—'} ·
       ${escapeHtml(current.equipo_b)} ${wrB ? pct(wrB.winrate) + ' <span style="color:var(--dim)">(n=' + wrB.n + ')</span>' : '—'}
-      <br><span style="color:var(--dim)">La predicción del motor (tarjetas de arriba) es la misma en todos los mapas y lados del enfrentamiento.</span>
+      <br><span style="color:var(--dim)">El <b>MOTOR</b> es plano (misma P en todos los mapas y lados); el <b>ESCENARIO</b> añade la lectura por mapa/lado; el histórico es descriptivo.</span>
     </div>`;
     const stale = vigente === false || current.vigente === false;
     liveStatus.className = 'live-status ' + (stale ? 'warn' : 'ok');
@@ -1087,12 +1125,21 @@ document.querySelectorAll('.fmt-btn').forEach(btn => {
     });
 });
 
-// Marca la serie como "hay que recalcular" (cambió algo).
+// Marca la serie como "hay que recalcular" (cambió algo). Con un veto
+// incompleto (n ∉ {1,3,5}) avisa de cuántos mapas faltan y no hay POST.
 function marcarSeriePendiente() {
     seriesBanner.innerHTML = '';
-    serieNote.textContent = matchMaps.length
-        ? 'Cambió la serie · pulsa ARMAR SERIE.'
-        : 'Elige los mapas y pulsa ARMAR SERIE.';
+    const n = matchMaps.length;
+    if (!n) {
+        serieNote.textContent = 'Elige los mapas y pulsa ARMAR SERIE.';
+        return;
+    }
+    if (!VETO_COMPLETO.includes(n)) {
+        const falta = Math.max(0, maxMapsSel - n);
+        serieNote.textContent = `Veto incompleto (${n}/${maxMapsSel}) · faltan ${falta || 1} mapa(s): la API exige el veto completo (Bo1=1, Bo3=3, Bo5=5).`;
+        return;
+    }
+    serieNote.textContent = 'Cambió la serie · pulsa ARMAR SERIE.';
 }
 
 function syncSerieBuilder() {
@@ -1135,12 +1182,15 @@ function syncSerieBuilder() {
             ? Number(row.prob_victoria_b)
             : ((motorA != null && !isNaN(motorA)) ? 1 - motorA : null);
         const histP = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
+        const escP = (row && row.escenario_mapa && row.escenario_mapa.p_mapa != null)
+            ? Number(row.escenario_mapa.p_mapa) : null;
         const pred = row
             ? `<div class="qi-pred">
-                 <span class="qi-pred-tag" title="Predicción del motor (calibrada, igual en todos los mapas)">MOTOR</span>
+                 <span class="qi-pred-tag" title="Predicción del motor (calibrada, plana entre mapas y lados; el ESCENARIO añade la lectura por mapa/lado)">MOTOR</span>
                  <span class="qi-pred-a">${pct(motorA)}</span>
                  <span class="qi-pred-b">${pct(motorB)}</span>
                  <span class="qi-pred-ot" title="P(overtime) del motor">OT ${pct(row.prob_overtime)}</span>
+                 ${escP != null && !isNaN(escP) ? `<span class="qi-pred-esc" title="Capa de escenarios por mapa/lado anclada al motor (no es el predictor)">ESC ${pct(escP)}</span>` : ''}
                  ${histP != null && !isNaN(histP) ? `<span class="qi-pred-hist" title="Análisis histórico del mapa (no es la predicción del motor)">hist ${pct(histP)}</span>` : ''}
                </div>`
             : `<span class="qi-pred-none">sin caché</span>`;
@@ -1203,13 +1253,27 @@ if (btnArmarSerie) btnArmarSerie.addEventListener('click', () => updateSerie());
 
 function updateSerieState() {
     const n = matchMaps.length;
-    mbFormat.textContent = `${n > 0 ? inferFormat(n) : '—'} · ${n}/${maxMapsSel}`;
+    const valido = VETO_COMPLETO.includes(n);
+    const falta = valido ? 0 : Math.max(0, maxMapsSel - n);
+    mbFormat.textContent = valido
+        ? `${inferFormat(n)} · ${n}/${maxMapsSel}`
+        : `${n}/${maxMapsSel}${falta ? ` · faltan ${falta}` : ' · veto incompleto'}`;
+    // Deshabilitado mientras el veto no sea 1/3/5 (con 0 mapas se mantiene
+    // activo para mostrar la ayuda al pulsar).
+    if (btnArmarSerie) btnArmarSerie.disabled = !valido && n > 0;
 }
 
 async function updateSerie() {
     if (!current || !matchMaps.length) {
         seriesBanner.innerHTML = '';
         serieNote.textContent = current ? 'Toca los mapas para armar la serie.' : '';
+        return;
+    }
+    const n = matchMaps.length;
+    if (!VETO_COMPLETO.includes(n)) {
+        seriesBanner.innerHTML = '';
+        const falta = Math.max(0, maxMapsSel - n);
+        serieNote.textContent = `Faltan ${falta || 1} mapa(s): arma el veto completo (1 para Bo1, 3 para Bo3 o 5 para Bo5); recibí ${n}.`;
         return;
     }
     serieNote.textContent = 'Calculando serie...';
@@ -1250,6 +1314,9 @@ function renderSerieBanner(data) {
         const conf = confBand(m);
         const mp = m.marcador_mas_probable || (Array.isArray(m.marcadores) && m.marcadores.length ? m.marcadores[0] : null);
         const marcadorTxt = mp ? `<b>${mp.marcador_a}-${mp.marcador_b}</b> (${((Number(mp.prob) || 0) * 100).toFixed(1)}%)` : '';
+        const esc = (m.escenario_mapa && m.escenario_mapa.p_mapa != null) ? Number(m.escenario_mapa.p_mapa) : null;
+        const escTxt = (esc != null && !isNaN(esc))
+            ? `<span class="smr-esc" title="Capa de escenarios por mapa/lado (no es el predictor)">ESC ${pct(esc)}</span>` : '';
         return `
     <div class="serie-map-row">
       <span class="smr-name">${m.map_name.toUpperCase()}</span>
@@ -1257,6 +1324,7 @@ function renderSerieBanner(data) {
       <span class="smr-a">${pct(m.prob_victoria_a)}</span>
       <span class="smr-b">${pct(m.prob_victoria_b)}</span>
       <span class="smr-ot">OT ${pct(m.prob_overtime)}</span>
+      ${escTxt}
       <span class="smr-marcador">${marcadorTxt}</span>
       <span class="smr-conf ${conf || ''}">${conf ? `<span class="conf-dot"></span>${conf}` : ''}</span>
       <span class="smr-fuente">${m.fuente || 'cache'}</span>
@@ -1331,7 +1399,7 @@ function renderSerieBanner(data) {
     </div>
     ${distBlock}
     ${caminosBlock}
-    ${mapRows ? `<div class="serie-maps"><div class="sd-title">MAPAS · PREDICCIÓN DEL MOTOR <span class="eco-note">P calibrada · misma en todos los mapas y lados · hist no incluido aquí</span></div>${mapRows}</div>` : ''}`;
+    ${mapRows ? `<div class="serie-maps"><div class="sd-title">MAPAS · PREDICCIÓN DEL MOTOR <span class="eco-note">P calibrada del MOTOR (plana entre mapas) · ESC = escenario por mapa/lado (no es el predictor) · hist no incluido aquí</span></div>${mapRows}</div>` : ''}`;
 
     const fuentes = [...new Set((data.mapas || []).map(m => m.fuente).filter(Boolean))];
     serieNote.innerHTML = `<strong>Serie cache-aware</strong> (reutiliza la caché y calcula/persiste lo que falte` +
@@ -1343,7 +1411,8 @@ function renderSerieBanner(data) {
 const PROMPT_ANALISTA = `Eres un analista de Valorant. Recibes el JSON de abajo con las predicciones y el análisis de un enfrentamiento.
 
 NOMENCLATURA (NO confundir):
-- model_p_a / model_p_b = P del MOTOR para ESE MAPA (igual en todos los mapas). NO es la P de la serie. Compara el "analítico" (p_mapa_a) SIEMPRE contra model_p_a, nunca contra prob_serie_a/prob_serie_b.
+- model_p_a / model_p_b = P del MOTOR para ESE MAPA (plana entre mapas y lados). NO es la P de la serie. Compara el "analítico" (p_mapa_a) SIEMPRE contra model_p_a, nunca contra prob_serie_a/prob_serie_b.
+- escenario_mapa = capa de escenarios por mapa/lado (p_mapa, delta_logit, n_a/n_b, IC p_lo–p_hi) anclada al MOTOR; NO es el predictor y NO sustituye a model_p_a.
 - prob_serie_a / prob_serie_b = P de GANAR LA SERIE; úsalas SOLO para la serie.
 - Nunca menciones un "n" que no venga explícito en el bloque. Si el bloque no trae n (p. ej. total_rondas), NO lo menciones (ni "n alto"): di "sin n reportado" o no lo cites.
 - ot (por mapa) = P(overtime) del MOTOR. total_rondas.mas_24_5 = P(rondas totales > 24.5) deducida de la distribución de marcadores: NO es el campo "ot"; no los mezcles.
@@ -1429,12 +1498,15 @@ function _mercadosTexto(payload) {
     }
     out.push('Total de rondas y pistol por mapa:');
     for (const mp of (m.por_mapa || [])) {
-        const tr = mp.total_rondas || {}, pis = mp.pistol || {};
+        const tr = mp.total_rondas || {}, pis = mp.pistol || {}, esc = mp.escenario_mapa || {};
         const ic = (Array.isArray(mp.ic95) && mp.ic95.length === 2 && mp.ic95[0] != null)
             ? ` · IC95% ${f(mp.ic95[0])}–${f(mp.ic95[1])}` : '';
+        const escTxt = esc.p_mapa != null
+            ? ` · ESC ${f(esc.p_mapa)} (n ${esc.n_a != null ? esc.n_a : '—'}/${esc.n_b != null ? esc.n_b : '—'})` : '';
         out.push(`  - ${mp.map} (${mp.lado}): rondas≈${tr.esperado != null ? tr.esperado : '—'}`
             + ` · >21.5 ${f(tr.mas_21_5)} · rondas>24.5 ${f(tr.mas_24_5)}`
             + ` · pistol ${payload.equipo_a} ${f(pis.p_a)} (n=${pis.n != null ? pis.n : '—'})`
+            + escTxt
             + ic);
     }
     return out.join('\n');
@@ -1454,6 +1526,7 @@ function descargarAnalisis() {
         confianza: confBand(p),
         ot: p.prob_overtime,
         ic95: p.prob_intervalo || null,
+        escenario_mapa: p.escenario_mapa || null,
         analisis_mapa: p.analisis_mapa || null,
         total_rondas: _totalRondas(p.marcadores),
         pistol: (p.economia && p.economia.pistol)
@@ -1473,6 +1546,7 @@ function descargarAnalisis() {
             map: m.map, lado: m.lado,
             total_rondas: m.total_rondas, pistol: m.pistol,
             marcador_top5: m.marcador_top5, ic95: m.ic95,
+            escenario_mapa: m.escenario_mapa,
         })),
     };
 
@@ -1654,8 +1728,13 @@ async function fetchSerieReal(detalle) {
     const nombreA = (filas[0] && filas[0].equipo_a) || current.equipo_a;
     const nombreB = (filas[0] && filas[0].equipo_b) || current.equipo_b;
     const marcadorReal = `<b class="${ganaA ? 'gana' : ''}">${winA}</b>-<b class="${ganaA ? '' : 'gana'}">${winB}</b>`;
-    // P de serie: mejor con el pool del veto (evita el bug de listas de 2 mapas).
-    const mapasSerie = mapasSerieDe(info);
+    // P de serie: mejor con el pool del veto; con listas de 2/4 la API responde
+    // 400, así que si no hay pool completo (1/3/5) no se llama al servicio.
+    let mapasSerie = mapasSerieDe(info);
+    if (!mapasSerie.length) {
+        const jugados = filas.map(d => ({ map_name: d.map_name, lado_inicial_a: d.lado_inicial_a }));
+        mapasSerie = VETO_COMPLETO.includes(jugados.length) ? jugados : [];
+    }
 
     const render = extra => {
         cmpSerie.innerHTML = `
@@ -1665,6 +1744,10 @@ async function fetchSerieReal(detalle) {
           ${extra}
         </div>`;
     };
+    if (!mapasSerie.length) {
+        render('<span class="cmp-serie-item cmp-serie-err">sin pool de veto completo (1/3/5 mapas); no se calcula la P de serie</span>');
+        return;
+    }
     render('<span class="cmp-serie-item cmp-serie-cargando">calculando P(serie) del motor…</span>');
     try {
         const res = await proxyFetch('/serie', {
@@ -1674,9 +1757,7 @@ async function fetchSerieReal(detalle) {
                 match_id: current.match_id || 0,
                 equipo_a: current.equipo_a,
                 equipo_b: current.equipo_b,
-                mapas: mapasSerie.length
-                    ? mapasSerie
-                    : filas.map(d => ({ map_name: d.map_name, lado_inicial_a: d.lado_inicial_a })),
+                mapas: mapasSerie,
             }),
         });
         const s = await res.json();

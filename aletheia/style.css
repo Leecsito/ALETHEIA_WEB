@@ -514,6 +514,13 @@ main {
     letter-spacing: 0;
 }
 
+.qi-pred-esc {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--txt-2);
+    letter-spacing: 0;
+}
+
 .qi-pred-none {
     margin-left: 10px;
     font-size: 9px;
@@ -2956,6 +2963,16 @@ main {
     text-shadow: 0 1px 4px var(--bg);
 }
 
+.mqp-esc {
+    position: relative;
+    z-index: 1;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: .5px;
+    color: var(--txt-2);
+    text-shadow: 0 1px 4px var(--bg);
+}
+
 .live-detail-title {
     font-family: var(--display);
     font-size: 16px;
@@ -3090,6 +3107,13 @@ main {
     font-size: 30px;
     letter-spacing: 1px;
     color: var(--txt-1);
+}
+
+.live-card-sub {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: .5px;
+    color: var(--dim);
 }
 
 .live-a {
@@ -3719,7 +3743,7 @@ main {
 
 .serie-map-row {
     display: grid;
-    grid-template-columns: 1fr 46px 54px 54px 62px 74px 60px 56px;
+    grid-template-columns: 1fr 46px 54px 54px 62px 54px 74px 60px 56px;
     align-items: center;
     gap: 8px;
     font-size: 10px;
@@ -3764,6 +3788,13 @@ main {
     color: var(--orange);
     font-size: 9px;
     text-align: right;
+}
+
+.smr-esc {
+    color: var(--txt-2);
+    font-size: 9px;
+    text-align: right;
+    white-space: nowrap;
 }
 
 .smr-fuente {
@@ -3894,6 +3925,22 @@ main {
 .eco-cat-val {
     text-align: right;
     color: var(--text);
+}
+
+.eco-n {
+    font-family: var(--mono);
+    font-size: 8px;
+    color: var(--dim);
+    letter-spacing: 0;
+}
+
+.eco-cell-n {
+    display: block;
+    font-family: var(--mono);
+    font-size: 8px;
+    color: var(--dim);
+    line-height: 1;
+    margin-top: 2px;
 }
 
 .eco-cruce-wrap {
