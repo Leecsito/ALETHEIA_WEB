@@ -51,9 +51,11 @@ Lectura directa de Turso (sin servidor): las predicciones ya preparadas se
 sirven **cache-first** desde `predicciones_mapa`/`predicciones_serie` con
 `backend.conexion.fetch_all`. Aplica a `mapas`, `modelo_version`,
 `simulaciones`, `prediccion`, `predicciones` y `serie` (si hay una fila
-cacheada con los mismos mapas/lados). El servicio solo aporta lo no persistido
+cacheada con los mismos mapas/lados y el veto está completo: 1/3/5 mapas; con
+2/4 se cae al proxy). El servicio solo aporta lo no persistido
 (`prob_intervalo`, `comparacion`/`scorecard`) y el cómputo
-(`precalcular`/`forzar`/`equipos`).
+(`precalcular`/`forzar`/`equipos`). En modo DB `prob_intervalo` y
+`escenario_mapa` quedan `null` (la UI los oculta).
 
 Clave API: si `ALETHEIA_API_KEY` está configurada en el entorno, este proxy
 añade **server-side** el header `X-API-Key` a todas las llamadas al servicio
@@ -242,12 +244,18 @@ def _banda_confianza(prob):
 
 
 def _formato_de_serie(n_mapas):
-    """Bo1/Bo3/Bo5 inferido por cantidad (el último mapa es decider)."""
-    if n_mapas <= 1:
+    """Bo1/Bo3/Bo5 del **veto completo** (1/3/5); `(None, None)` si no aplica.
+
+    Alineado con el contrato de `/api/serie` (Plan C): 2/4 mapas no son un
+    veto completo, no tienen formato válido y el servicio responde 400.
+    """
+    if n_mapas == 1:
         return 'bo1', 1
-    if n_mapas <= 3:
+    if n_mapas == 3:
         return 'bo3', 2
-    return 'bo5', 3
+    if n_mapas == 5:
+        return 'bo5', 3
+    return None, None
 
 
 def _parse_json(txt):
@@ -333,13 +341,20 @@ def _analisis_mapa_local(tabla, equipo_a, equipo_b, map_name, p_modelo):
 
 
 def _derivar_fila(fila, tabla):
-    """Completa una fila de `predicciones_mapa` como lo hace el servicio."""
+    """Completa una fila de `predicciones_mapa` como lo hace el servicio.
+
+    En modo DB (sin servicio) `prob_intervalo` y `escenario_mapa` quedan
+    `null`: el IC95% usa los RD locales del servicio y la capa de escenarios
+    (Plan B1) se calcula con la tabla de mapa/lado del motor, no replicada
+    aquí. La UI los oculta cuando vienen `null` (v1).
+    """
     fila = dict(fila)
     fila['marcadores'] = _parse_json(fila.get('marcadores_json'))
     fila['economia'] = _parse_json(fila.get('economia_json'))
     p = fila.get('prob_victoria_a')
     fila['confianza'] = _banda_confianza(p) if p is not None else None
     fila['prob_intervalo'] = None  # el IC95% usa los RD locales del servicio
+    fila['escenario_mapa'] = None  # la capa B se calcula en el servicio
     fila['analisis_mapa'] = _analisis_mapa_local(
         tabla, fila.get('equipo_a'), fila.get('equipo_b'), fila.get('map_name'), p)
     return fila
@@ -401,6 +416,11 @@ def _serie_desde_db(data):
         return None
     mapas = data.get('mapas')
     if not isinstance(mapas, list) or not mapas:
+        return None
+    # Plan C: la API exige el veto completo (1/3/5). Con 2/4 no hay fila de
+    # `predicciones_serie` válida que devolver: se cae al proxy (que a su vez
+    # responderá 400 si el servicio está caído).
+    if len(mapas) not in (1, 3, 5):
         return None
     equipo_a = str(data.get('equipo_a') or '').strip()
     equipo_b = str(data.get('equipo_b') or '').strip()
