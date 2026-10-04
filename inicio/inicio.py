@@ -709,12 +709,17 @@ def etl_rounds(df_rondas, df_eco, cur, team_lookup, map_to_match, match_teams):
         a_id, b_id = match_teams.get(map_to_match.get(mid), (None, None))
         top_id = ii(eg('team_top_id')) or team_lookup.get(str(eg('team_top','') or '')) or a_id
         bot_id = ii(eg('team_bot_id')) or team_lookup.get(str(eg('team_bot','') or '')) or b_id
+        cat_top = str(eg('category_top','') or '')
+        cat_bot = str(eg('category_bot','') or '')
+        if num in (1, 13):
+            if cat_top: cat_top = 'pistol'
+            if cat_bot: cat_bot = 'pistol'
         rows.append((mid, num, winner_id,
                      str(r.get('result','')), str(r.get('band','')),
                      int(eg('bank_top',0) or 0), int(eg('spend_top',0) or 0),
-                     str(eg('category_top','') or ''),
+                     cat_top,
                      int(eg('bank_bot',0) or 0), int(eg('spend_bot',0) or 0),
-                     str(eg('category_bot','') or ''),
+                     cat_bot,
                      top_id, bot_id))
     exec_batch(cur,
         """INSERT OR IGNORE INTO rounds
