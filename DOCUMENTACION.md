@@ -222,9 +222,11 @@ para estimar overtime. La URL base se lee de la variable de entorno
 una fila en `predicciones_serie` con los mismos mapas/lados) se sirven **primero
 desde Turso** (`backend.conexion.fetch_all`): la web lista y abre las
 predicciones preparadas con el PC y el servicio apagados. Se recalculan aquí
-`confianza` y `analisis_mapa` (misma regla/réplica que `core/`); el IC95%
-(`prob_intervalo`) queda `null` (usa los RD locales del servicio) y la UI lo
-oculta.
+`confianza` y `analisis_mapa` (misma regla/réplica que `core/`); en modo DB
+`prob_intervalo` y `escenario_mapa` quedan `null` (el IC95% usa los RD locales
+del servicio y la capa B se calcula en el servicio) y la UI los oculta. El
+`/api/serie` de modo DB solo responde de `predicciones_serie` si la lista
+pedida es el **veto completo** (1/3/5 mapas); con 2/4 se cae al proxy.
 
 Solo lo que el servicio deriva va a **`ALETHEIA_PREDICT_READ_URL`** (Render,
 cache-first, con reintento por cold start y caída a `ALETHEIA_PREDICT_URL`):
@@ -265,8 +267,9 @@ Endpoints expuestos por ALETHEIA (todos reenvían al servicio externo):
 }
 ```
 Reglas: `lado_inicial_a` se define **por mapa** (`"attack"` | `"defense"`); el
-formato se **infiere por cantidad** (1→bo1, 2-3→bo3, 4-5→bo5); `n_sim` se normaliza
-a `[100, MAX_SIM]` (default `10000`). **En hosting free no usar 25K/50K.**
+veto debe estar **completo**: `mapas` exige **1/3/5** entradas (1→bo1, 3→bo3,
+5→bo5) y 2/4 responden **400** (`'mapas' debe traer el veto completo…`); `n_sim`
+se normaliza a `[100, MAX_SIM]` (default `10000`). **En hosting free no usar 25K/50K.**
 
 > **P(mapa) es independiente del lado y constante entre mapas** del mismo
 > enfrentamiento: la fija la regresión logística calibrada (Platt) sobre el rating
@@ -288,6 +291,9 @@ a `[100, MAX_SIM]` (default `10000`). **En hosting free no usar 25K/50K.**
     {"map_name": "Split", "lado_inicial_a": "attack",
      "prob_victoria_a": 0.4412, "prob_victoria_b": 0.5588, "prob_overtime": 0.164,
      "confianza": "media", "fuente": "cache",
+     "escenario_mapa": {"p_mapa": 0.46, "delta_logit": 0.08, "n_a": 24, "n_b": 31,
+                        "peso": 0.71, "lambda": 0.4, "k": 10.0,
+                        "p_lo": 0.41, "p_hi": 0.51},
      "marcadores": [
        {"marcador_a": 11, "marcador_b": 13, "prob": 0.09},
        {"marcador_a": 13, "marcador_b": 11, "prob": 0.07},
@@ -318,6 +324,21 @@ difiere; es análisis, no la predicción calibrada del motor); a nivel serie,
 las lecturas crudas `/api/predicciones` y `/api/prediccion`, que además
 recalculan `prob_intervalo` (IC95% aditivo del RD, A6) sin persistirlo. La P
 puntual y `modelo_version` no cambian por este campo.
+
+**Semántica nueva de la economía (A1, 2026-10):** `eco`/`semi_eco`/`semi_buy`/
+`full_buy` y los cruces **excluyen los pistols R1/R13** (tienen bloque `pistol`
+aparte); `n` es el conteo crudo de rondas simuladas de esa categoría y
+`p_gana_*` se pondera por `Σw` (cambio de medida). El backend publica
+`economia.semantica` y `economia.pistol_semantica`, que la UI muestra en la nota
+del bloque (con fallback si faltan).
+
+**Capa de escenarios (B1, 2026-10):** cada mapa incluye `escenario_mapa`
+(`p_mapa`, `delta_logit`, `n_a`, `n_b`, `peso`, `lambda`, `k`, `p_lo`, `p_hi`) o
+`null` con `ALETHEIA_ESCENARIO_MAPA=0` o motor no cargado. Es una **segunda
+lectura** por (mapa, lado) anclada al motor (`sigmoid(logit(p_motor) + λ·peso·Δlogit(wr))`)
+y **no cambia `prob_victoria_a`**. La web muestra `p_mapa` con `n` e IC en la
+tarjeta ESCENARIO, el pill `ESC` del selector/armador y el informe `.md`; si
+viene `null`, se oculta sin romper.
 
 **Semántica de la banda de confianza** (la fija el backend, conservadora):
 se calcula sobre `max(p, 1-p)` → `>=0.62` **alta**, `>=0.55` **media**, si no
@@ -412,7 +433,7 @@ estas tablas). Endpoints adicionales del proxy:
   persiste** (mapa y serie) lo que falte; la segunda llamada idéntica sale de
   caché. Body:
   `{"match_id":753455,"equipo_a":...,"equipo_b":...,"mapas":[{map_name,lado_inicial_a},...]}`.
-  Respuesta: `{"ok":true,"formato":"bo3","mapas_para_ganar":2,"mapas":[{...,"fuente":"cache|calculado","confianza":...,"economia":...,"analisis_mapa":...,"prob_intervalo":[lo,hi]|null}],"prob_serie_a":...,"prob_serie_b":...,"confianza_serie":"...","modelo_version":"<hash>","n_sim":10000,"resultados_serie":{...},"caminos_serie":{...}}`.
+  `mapas` debe traer el **veto completo** (1/3/5); 2/4 → **400**. Respuesta: `{"ok":true,"formato":"bo3","mapas_para_ganar":2,"mapas":[{...,"fuente":"cache|calculado","confianza":...,"economia":...,"analisis_mapa":...,"escenario_mapa":{...}|null,"prob_intervalo":[lo,hi]|null}],"prob_serie_a":...,"prob_serie_b":...,"confianza_serie":"...","modelo_version":"<hash>","n_sim":10000,"resultados_serie":{...},"caminos_serie":{...}}`.
 - `POST /api/aletheia/borrar` → proxy de `POST {BASE}/api/borrar`. Body:
   `{"equipo_a", "equipo_b", "match_id"}`. Borra las filas de `predicciones_mapa`
   y `predicciones_serie` de ese enfrentamiento (útil para duplicados o
@@ -452,7 +473,7 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
 - `GET /api/partidos`: lista paginada estilo vlr.gg. Query: `page`, `limit` (máx 200, def 60), `q` (equipo/sigla/torneo/fase), `torneo` (nombre exacto), `year`, `event_id`, `orden` (`recientes|antiguos`). Cada fila trae equipos con tag/país, `event_id`/`event_name` resueltos y `maps_played`.
 - `GET /api/partidos/filtros`: `torneos` (30, con `event_id`, `n`, fechas) y `years` (2025/2026) para los selects.
 - `GET /api/partidos/resultados?match_ids=753456,753461`: dado un lote de ids (máx 500, separados por comas) responde `{"ok": true, "con_resultado": [...]}` con los que ya tienen **resultado real** (al menos un mapa jugado en `maps`). Lo usa EN VIVO para separar predicciones pendientes de las ya comparables. Además devuelve `partidos` (por `match_id`, en la orientación de la predicción: `team_a`/`team_b` = `equipo_a`/`equipo_b` del motor) con la identidad de los equipos (ids/tags para los logos), el marcador real de la serie, `p_a` (P del motor por mapa) y el resumen **predicción vs realidad**: `p_real_media` (P media que el motor dio a los ganadores reales), `favoritos_ok`/`n_mapas`, `mapas[]` (`map_name`, `gano_a`, `p_ganador`) y `serie_mapas` (pool del veto en orden: picks + decider; es la lista correcta para `POST /serie` — con solo los mapas jugados, un bo3 terminado 2-0 le da al servicio una lista de 2 y devuelve una P incoherente). Funciona también para simulaciones **sin resultado** (solo identidad + `p_a`, leídas de `predicciones_mapa`); si las tablas del servicio no existen (DB local vieja) se degrada a solo identidad/resultado.
-- `GET /api/partido/<match_id>`: detalle completo → `partido` (header), `veto` (ordenado), `maps[]` y, anidado por mapa, `rounds[]` (timeline de rondas), `players[]` (scoreboard agregado de los 2 lados: K/D/A, rating, ACS, KAST, ADR, HS%, FK/FD) y `economy[]` (pistol/eco/semi-eco/semi-buy/full-buy). `404` si no existe.
+- `GET /api/partido/<match_id>`: detalle completo → `partido` (header), `veto` (ordenado), `maps[]` y, anidado por mapa, `rounds[]` (timeline de rondas), `players[]` (scoreboard agregado de los 2 lados: K/D/A, rating, ACS, KAST, ADR, HS%, FK/FD) y `economy[]` (pistol/eco/semi-eco/semi-buy/full-buy). La `economy[]` se calcula **desde `rounds`** (excluye los pistols R1/R13 y resuelve el equipo con `team_top_id`/`team_bot_id`), con `fuente:'rounds'`; si un mapa no tiene rondas se conserva `economy_summary` etiquetado `fuente:'economy_summary'` (benchmark no fiable en eco, no comparable con el motor). `404` si no existe.
 
 ### 4.6. Módulo Equipos (`equipos_bp`) — componente `/equipos/`
 - `GET /api/equipos`: equipos con `matches`, `wins`, fechas y `regiones` (para chips). Query: `q`, `region`. Solo equipos con partidos jugados.
@@ -571,8 +592,10 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         con resultado real, la fila muestra, en este orden: `MOTOR p(A)/p(B)` (P
         del motor por mapa), el marcador real `x-y` (ganador resaltado), la
         píldora **`SERIE P%` + ✓/✕** (P del motor al ganador real de la serie,
-        calculada en 2º plano con `POST /serie` usando `serie_mapas`; **verde
-        ≥62%, naranja ≥55%, rojo <55%**), la píldora **`MAPAS x/y (%)`**
+        calculada en 2º plano con `POST /serie` usando `serie_mapas`; si no hay
+        pool completo 1/3/5 se pinta **`SERIE sin pool`** y no se llama al
+        servicio; **verde ≥62%, naranja ≥55%, rojo <55%**), la píldora
+        **`MAPAS x/y (%)`**
         (acierto del favorito por mapa: **verde ≥67%, naranja ≥50%, rojo <50%**),
         `P(MAPA)` (P media al ganador real por mapa, color por banda; es
         calibración, **no** la tasa de acierto) y puntos coloreados por mapa
@@ -598,12 +621,15 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         banner (hay que volver a pulsar). Clic en un mapa del grid o en un slot muestra
         su análisis a la izquierda, sin subir/bajar.
       - **Explorador de mapas:** rejilla de los 13 mapas con la **P(A) por mapa**
-        (`analisis_mapa.p_mapa_a`, **difiere por mapa**) y OT del bando elegido
-        (leídas de `liveBulk`; no llama al servicio en cada clic). Al tocar un mapa
-        muestra las tarjetas A/B **por mapa** (`p_mapa_a`), `prob_overtime`,
-        **confianza del motor** (derivada si falta: `max(p,1-p)` ≥0.62 alta, ≥0.55
-        media, resto baja), `n_sim` y una **nota de análisis** con la P del motor
-        (igual en todos los mapas) y el **historial de cada equipo en ese mapa**
+        (`analisis_mapa.p_mapa_a`, **difiere por mapa**), OT del bando elegido y,
+        si el backend la trae, la capa **ESC** (`escenario_mapa.p_mapa`, por
+        mapa/lado) (leídas de `liveBulk`; no llama al servicio en cada clic). Al
+        tocar un mapa muestra las tarjetas A/B **por mapa** (`p_mapa_a`),
+        `prob_overtime`, **confianza del motor** (derivada si falta: `max(p,1-p)`
+        ≥0.62 alta, ≥0.55 media, resto baja), `n_sim`, la tarjeta **ESCENARIO**
+        (`p_mapa`, `n_a`/`n_b`, Δlogit e IC `p_lo–p_hi`; se oculta si `null`) y
+        una **nota de análisis** con la P plana del motor, el escenario por
+        mapa/lado y el **historial de cada equipo en ese mapa**
         (`analisis_mapa.equipo_a/b`: `winrate`, `n`).
       - **DISTRIBUCIÓN DE MARCADOR:** bajo las tarjetas se muestra el **marcador
         más probable** (etiquetado como *estimación, no resultado seguro*) y el
@@ -613,30 +639,37 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         para **RE-PRECALCULAR**.
       - **ECONOMÍA / RONDAS (micro-eventos):** bloque `economia-block` bajo el
         marcador. Por mapa y bando muestra: win rate por categoría
-        (eco/semi-eco/semi-buy/full-buy) de **cada equipo** con barra, **pistol**
-        (P de que gane `equipo_a`), y la **mini-matriz de cruces** 4×4
-        (`cat_a_vs_cat_b`, prob. de que `equipo_a` gane la ronda; filas = `equipo_a`,
-        columnas = `equipo_b`), destacando `semi_buy_vs_full_buy` y
-        `eco_vs_full_buy`. Etiquetado como *estimación condicionada a la P del mapa*.
-        Si `economia` falta, el bloque se oculta y se marca **RE-PRECALCULAR**
-        junto con `marcadores` (helper `detalleFaltante`).
+        (eco/semi-eco/semi-buy/full-buy) de **cada equipo** con barra y `n`
+        (`n` = rondas simuladas de esa categoría), **pistol** (P de que gane
+        `equipo_a`), y la **mini-matriz de cruces** 4×4 (`cat_a_vs_cat_b`, prob.
+        de que `equipo_a` gane la ronda; filas = `equipo_a`, columnas =
+        `equipo_b`), destacando `semi_buy_vs_full_buy` y `eco_vs_full_buy` (con
+        `n` visible en las celdas destacadas). La nota del bloque usa
+        `economia.semantica` (con fallback): **sin pistols R1/R13**; el bloque
+        PISTOL va aparte (`pistol_semantica`). Si `economia` falta, el bloque se
+        oculta y se marca **RE-PRECALCULAR** junto con `marcadores` (helper
+        `detalleFaltante`).
       - **ARMAR SERIE (BO1/BO3/BO5)** *(sección dentro de `MAPA / SERIE`):* slots en
         orden (el último = DECIDER) con bando por mapa; cada cambio hace
         `POST /api/aletheia/serie` y muestra el banner (`prob_serie_a/b`,
         `confianza_serie` con color, formato, `mapas_para_ganar`, `n_sim`) al
-        instante. La tabla de mapas de la serie muestra la **confianza por mapa** y
-        el **marcador más probable** de cada mapa. El banner incluye además la
-        **distribución de la serie** (`resultados_serie`: 2-0/2-1/1-2/0-2, ordenada
-        por prob desc) y los **caminos de la serie** (`caminos_serie`: la secuencia
-        mapa a mapa, p. ej. `V-D-D` vs `D-V-D` para un 1-2; ✓ gana A, ✗ gana B).
+        instante. **Veto completo:** con 2/4 mapas no hay POST: el botón se
+        deshabilita, el formato se muestra como incompleto y la nota dice cuántos
+        mapas faltan (la API exige 1/3/5). La tabla de mapas de la serie muestra
+        la **confianza por mapa**, el **marcador más probable** de cada mapa y,
+        si viene, el **ESC** (`escenario_mapa.p_mapa`). El banner incluye además
+        la **distribución de la serie** (`resultados_serie`: 2-0/2-1/1-2/0-2,
+        ordenada por prob desc) y los **caminos de la serie** (`caminos_serie`:
+        la secuencia mapa a mapa, p. ej. `V-D-D` vs `D-V-D` para un 1-2; ✓ gana A,
+        ✗ gana B).
       - **DESCARGAR ANÁLISIS (.md):** botón que genera y descarga un `.md` con
         **(1) el prompt general** para un LLM, **(2) los MERCADOS** precalculados
         (ganador de serie, total de mapas Más/Menos, marcador exacto de serie,
         total de rondas por mapa derivado de la distribución de marcadores, y
         pistol), **(3) TODOS los datos** en JSON (por mapa×lado: P del modelo, OT,
         confianza, marcador, `total_rondas`, `pistol`, economía por categoría y
-        cruce, `analisis_mapa`; y la serie: probabilidades, `resultados_serie`,
-        `caminos_serie`) y **(4) un apartado de notas** para contexto de los
+        cruce, `escenario_mapa` y `analisis_mapa`; y la serie: probabilidades,
+        `resultados_serie`, `caminos_serie`) y **(4) un apartado de notas** para contexto de los
         equipos. Se arma con el `liveBulk` + la última serie (conviene pulsar
         ARMAR SERIE antes).
      - **VIGENCIA Y RE-PRECALCULAR:** la web compara `modelo_version` de cada
@@ -658,7 +691,8 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         Sobre la tabla, el banner **SERIE · PREDICHO VS REAL** (`POST
         /api/aletheia/serie` con el **pool del veto**, `serie_mapas`) muestra la
         P de serie del motor para ambos equipos, el marcador real `x-y` y
-        `P(REAL)` coloreada (✓ favorito / ✕ upset). Debajo se agrega el
+        `P(REAL)` coloreada (✓ favorito / ✕ upset); si no hay pool completo
+        (1/3/5) no llama al servicio y lo dice. Debajo se agrega el
         **SCORECARD**
         (`GET /api/aletheia/scorecard`): tarjetas de micro-eventos (MAP
         ACCURACY/BRIER, OT BRIER, MARCADOR TOP-1, ECO MAE, CRUCE MAE) y una
@@ -864,6 +898,29 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-03 — Alineación web ↔ Planes A/B/C de ALETHEIA_PREDICT (H1-H8).**
+  - **H1/H2 (veto completo):** ARMAR SERIE exige **1/3/5** mapas antes del POST;
+    con 2/4 el botón se deshabilita, el estado dice "faltan N" y **no hay
+    llamada** (la API responde 400). La P de serie en 2º plano de la lista y el
+    banner de COMPARACIÓN tampoco llaman con listas 2/4: la píldora muestra
+    **`SERIE sin pool`** y el armador avisa.
+  - **H3 (escenario):** la UI consume `escenario_mapa` (capa B1) en la tarjeta
+    **ESCENARIO** del mapa, el pill `ESC` del selector/armador, la tabla de la
+    serie y el informe `.md`; si viene `null` (flag apagado o modo DB) se oculta
+    sin romper. `prob_victoria_a` **no** cambia.
+  - **H4 (economía):** la nota del bloque usa `economia.semantica` ("sin pistols
+    R1/R13") y `n` por categoría/celda destacada; la matriz 4×4 y el bloque
+    PISTOL se mantienen.
+  - **H5 (partidos):** `GET /api/partido/<id>` calcula la economía real desde
+    `rounds` (excluye R1/R13, `fuente:'rounds'`); `economy_summary` queda solo
+    como fallback etiquetado (benchmark no fiable en eco).
+  - **H6 (modo DB):** `_serie_desde_db` rechaza listas 2/4, `_formato_de_serie`
+    queda alineado con 1/3/5 y `_derivar_fila` documenta `prob_intervalo`/
+    `escenario_mapa` como `null` (la UI los oculta).
+  - **H8 (ETL):** `inicio/inicio.py` etiqueta R1/R13 como `pistol` en
+    `category_top`/`category_bot` (coherente con la economía sin pistols).
+  - Referencia: `modelo_version` **`5232151ff388`** (caché 520/520). No se toca
+    `core/` de Predict ni la P(mapa)/`modelo_version`.
 - **2026-10-02 — Lectura directa de Turso: ver predicciones sin servidor.**
   - `aletheia/aletheia.py` sirve **cache-first desde Turso** (`fetch_all`):
     `mapas`, `modelo_version`, `simulaciones`, `prediccion`, `predicciones` y
