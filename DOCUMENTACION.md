@@ -222,9 +222,12 @@ para estimar overtime. La URL base se lee de la variable de entorno
 una fila en `predicciones_serie` con los mismos mapas/lados) se sirven **primero
 desde Turso** (`backend.conexion.fetch_all`): la web lista y abre las
 predicciones preparadas con el PC y el servicio apagados. Se recalculan aquí
-`confianza` y `analisis_mapa` (misma regla/réplica que `core/`); en modo DB
-`prob_intervalo` y `escenario_mapa` quedan `null` (el IC95% usa los RD locales
-del servicio y la capa B se calcula en el servicio) y la UI los oculta. El
+`confianza`, `analisis_mapa` y `escenario_mapa` (capa B1, misma regla/réplica
+que `core/escenario_mapa.py` desde `rounds`: `(equipo, mapa, lado) -> (w, n)`
+con swap r13 y alternancia de overtime r25+, agregada en la DB y cacheada
+5 min; flag `ALETHEIA_ESCENARIO_MAPA`, activo por defecto); en modo DB solo
+`prob_intervalo` queda `null` (el IC95% usa los RD locales del servicio) y la
+UI lo oculta. El
 `/api/serie` de modo DB solo responde de `predicciones_serie` si la lista
 pedida es el **veto completo** (1/3/5 mapas); con 2/4 se cae al proxy.
 
@@ -877,6 +880,10 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
     admin/mutantes. Se define en el `.env` local (web y Predict con la **misma**
     clave) y en el panel de Render (secreto, `sync: false`). El proxy la añade
     server-side; nunca se expone al navegador.
+  - `ALETHEIA_ESCENARIO_MAPA`: activa (default `1` si no está definida) la capa
+    de escenarios por (mapa, lado) del **modo DB**. Con `0/false/no/off`,
+    `escenario_mapa` queda `null` y la UI lo oculta; `prob_victoria_a` no
+    cambia (paridad con el backend). Opcional en el `.env` local.
 
 ---
 
@@ -899,6 +906,20 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-03 — ESC en modo DB (capa de escenarios sin servidor).**
+  - `aletheia/aletheia.py` replica `escenario_mapa` (B1) en modo DB desde
+    `rounds`: tabla `(equipo, mapa, lado) -> (w, n)` con el swap de regulación
+    (r13) y la alternancia de overtime (r25+), agregada en una sola consulta
+    (las dos ramas se unen antes de agrupar) y cacheada 5 min con fallback a la
+    copia previa; misma fórmula que `core/escenario_mapa.py` (`λ=0.4`, `K=10`,
+    Wilson 95%).
+  - `_derivar_fila` (`/prediccion`, `/predicciones`) y `_serie_desde_db`
+    (`/serie` cacheada) exponen la capa; la UI ya pinta el pill `ESC`, la
+    tarjeta ESCENARIO, la tabla de la serie y el informe `.md`.
+  - Flag `ALETHEIA_ESCENARIO_MAPA` (default `1`): `0/false/no/off` ⇒
+    `escenario_mapa=null`. `prob_victoria_a` y `modelo_version` no cambian.
+  - Paridad verificada contra el motor real: `tabla_mapa_lado` idéntica (1472
+    claves) y para 753455 `max|Δp_mapa| = 0.0` en los 26 pares (mismos `n`).
 - **2026-10-03 — Alineación web ↔ Planes A/B/C de ALETHEIA_PREDICT (H1-H8).**
   - **H1/H2 (veto completo):** ARMAR SERIE exige **1/3/5** mapas antes del POST;
     con 2/4 el botón se deshabilita, el estado dice "faltan N" y **no hay
@@ -907,7 +928,7 @@ Al recibir una nueva tarea o solicitud de cambio:
     **`SERIE sin pool`** y el armador avisa.
   - **H3 (escenario):** la UI consume `escenario_mapa` (capa B1) en la tarjeta
     **ESCENARIO** del mapa, el pill `ESC` del selector/armador, la tabla de la
-    serie y el informe `.md`; si viene `null` (flag apagado o modo DB) se oculta
+    serie y el informe `.md`; si viene `null` (flag apagado) se oculta
     sin romper. `prob_victoria_a` **no** cambia.
   - **H4 (economía):** la nota del bloque usa `economia.semantica` ("sin pistols
     R1/R13") y `n` por categoría/celda destacada; la matriz 4×4 y el bloque
@@ -916,8 +937,9 @@ Al recibir una nueva tarea o solicitud de cambio:
     `rounds` (excluye R1/R13, `fuente:'rounds'`); `economy_summary` queda solo
     como fallback etiquetado (benchmark no fiable en eco).
   - **H6 (modo DB):** `_serie_desde_db` rechaza listas 2/4, `_formato_de_serie`
-    queda alineado con 1/3/5 y `_derivar_fila` documenta `prob_intervalo`/
-    `escenario_mapa` como `null` (la UI los oculta).
+    queda alineado con 1/3/5 y `_derivar_fila` documenta `prob_intervalo` como
+    `null` (la UI lo oculta; el `escenario_mapa` se replica en modo DB desde la
+    entrada siguiente).
   - **H8 (ETL):** `inicio/inicio.py` etiqueta R1/R13 como `pistol` en
     `category_top`/`category_bot` (coherente con la economía sin pistols).
   - Referencia: `modelo_version` **`5232151ff388`** (caché 520/520). No se toca

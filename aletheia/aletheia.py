@@ -54,8 +54,11 @@ sirven **cache-first** desde `predicciones_mapa`/`predicciones_serie` con
 cacheada con los mismos mapas/lados y el veto está completo: 1/3/5 mapas; con
 2/4 se cae al proxy). El servicio solo aporta lo no persistido
 (`prob_intervalo`, `comparacion`/`scorecard`) y el cómputo
-(`precalcular`/`forzar`/`equipos`). En modo DB `prob_intervalo` y
-`escenario_mapa` quedan `null` (la UI los oculta).
+(`precalcular`/`forzar`/`equipos`). En modo DB `prob_intervalo` queda `null`
+(usa los RD locales del servicio; la UI lo oculta), pero `escenario_mapa`
+(capa B1) **sí se replica** desde `rounds` con la misma fórmula que
+`core/escenario_mapa.py` (flag `ALETHEIA_ESCENARIO_MAPA`, activo por
+defecto): el ESC no depende del servicio.
 
 Clave API: si `ALETHEIA_API_KEY` está configurada en el entorno, este proxy
 añade **server-side** el header `X-API-Key` a todas las llamadas al servicio
@@ -231,6 +234,8 @@ _BANDA_ALTA = 0.62
 _BANDA_MEDIA = 0.55
 _TABLA_MAPAS_TTL = 300
 _tabla_mapas = {'ts': 0.0, 'data': {}}
+_TABLA_LADO_TTL = 300
+_tabla_lado = {'ts': 0.0, 'data': {}}
 
 
 def _banda_confianza(prob):
@@ -328,6 +333,173 @@ def _tabla_mapas_equipo():
     return tabla
 
 
+def _escenario_activo():
+    """Plan B1 en la web: capa de escenarios por (mapa, lado) activa por defecto.
+
+    Paridad con el backend: `ALETHEIA_ESCENARIO_MAPA=0` la apaga y
+    `escenario_mapa` queda `null` (la UI lo oculta). Nunca toca
+    `prob_victoria_a`; reversible sin reentrenar.
+    """
+    return os.environ.get('ALETHEIA_ESCENARIO_MAPA', '1').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+
+
+def _tabla_mapa_lado():
+    """{(equipo, mapa, lado): (w, n)} desde `rounds`+`maps`+`teams` (Turso).
+
+    Réplica de `core.escenario_mapa.tabla_mapa_lado` (Plan B1) para el
+    `escenario_mapa` en modo DB: winrate de ronda por (equipo, mapa, lado) con
+    el swap de regulación (ronda 13) y la alternancia de overtime (ronda 25+).
+    La agregación se hace en la DB (una consulta; se unen las dos ramas antes
+    de agrupar porque un equipo puede ser top en un mapa y bot en otro del
+    mismo `map_name`) y se cachea en memoria 5 min. Ante un fallo devuelve la
+    copia previa (o `{}`): la capa es aditiva, nunca tumba la lectura.
+    """
+    ahora = time.time()
+    if _tabla_lado['data'] and (ahora - _tabla_lado['ts']) < _TABLA_LADO_TTL:
+        return _tabla_lado['data']
+    try:
+        filas = fetch_all(
+            """
+            WITH base AS (
+              SELECT m.map_name AS map_name,
+                     r.team_top_id AS team_top_id,
+                     r.team_bot_id AS team_bot_id,
+                     r.winner_id   AS winner_id,
+                     CASE
+                       WHEN r.round_num <= 12 THEN m.side_top_start
+                       WHEN r.round_num <= 24 THEN CASE m.side_top_start
+                         WHEN 'attack' THEN 'defense' ELSE 'attack' END
+                       ELSE CASE WHEN ((r.round_num - 25) % 2 = 0)
+                         THEN m.side_top_start
+                         ELSE CASE m.side_top_start
+                           WHEN 'attack' THEN 'defense' ELSE 'attack' END END
+                     END AS side_top
+              FROM rounds r JOIN maps m ON m.map_id = r.map_id
+              WHERE m.side_top_start IN ('attack', 'defense')
+            ),
+            long AS (
+              SELECT map_name, team_top_id AS team_id, side_top AS side,
+                     CASE WHEN winner_id = team_top_id THEN 1 ELSE 0 END AS won
+              FROM base
+              UNION ALL
+              SELECT map_name, team_bot_id,
+                     CASE side_top WHEN 'attack' THEN 'defense' ELSE 'attack' END,
+                     CASE WHEN winner_id = team_bot_id THEN 1 ELSE 0 END
+              FROM base
+            )
+            SELECT l.map_name AS map_name, t.team_name AS team, l.side AS side,
+                   SUM(l.won) AS w, COUNT(*) AS n
+            FROM long l JOIN teams t ON t.team_id = l.team_id
+            GROUP BY l.map_name, t.team_name, l.side
+            """
+        )
+    except Exception:  # noqa: BLE001 - la lectura cache-first no depende de esto
+        return _tabla_lado['data']
+    tabla = {}
+    for fila in filas:
+        equipo = fila.get('team')
+        mapa = fila.get('map_name')
+        lado = fila.get('side')
+        if not (equipo and mapa and lado in ('attack', 'defense')):
+            continue
+        tabla[(equipo, mapa, lado)] = (
+            int(fila.get('w') or 0), int(fila.get('n') or 0))
+    _tabla_lado['data'] = tabla
+    _tabla_lado['ts'] = ahora
+    return tabla
+
+
+def _logit_escenario(p, eps=1e-6):
+    """`log(p/(1-p))` con recorte 1e-6 (réplica de `core.escenario_mapa`)."""
+    p = min(max(float(p), eps), 1.0 - eps)
+    return math.log(p / (1.0 - p))
+
+
+def _sig_escenario(z):
+    return 1.0 / (1.0 + math.exp(-z))
+
+
+def _wilson(w, n, z=1.96):
+    """IC95% de Wilson para `w/n`; `(None, None)` si `n=0` (réplica de core)."""
+    if not n:
+        return None, None
+    p = float(w) / float(n)
+    den = 1.0 + z * z / n
+    centro = (p + z * z / (2.0 * n)) / den
+    mitad = z * math.sqrt(p * (1.0 - p) / n + z * z / (4.0 * n * n)) / den
+    return max(0.0, centro - mitad), min(1.0, centro + mitad)
+
+
+def _calcular_escenario(p_motor, stats_a, stats_b, lambda_=0.4, k=10.0, k_peso=10.0):
+    """Réplica de `core.escenario_mapa.escenario_mapa` (capa B1, aditiva).
+
+    `stats_a`/`stats_b` son `(w, n)` de cada equipo en ESE mapa y su lado (el de
+    B es el contrario). Sin datos de alguno, el peso es 0 y devuelve la P del
+    motor con `n=0` visible. No cambia `prob_victoria_a`.
+    """
+    if p_motor is None:
+        return None
+    w_a, n_a = stats_a if stats_a is not None else (0, 0)
+    w_b, n_b = stats_b if stats_b is not None else (0, 0)
+    n_min = min(int(n_a), int(n_b))
+    peso = n_min / (n_min + k_peso) if n_min > 0 else 0.0
+    wr_a = (w_a + k / 2.0) / (n_a + k)
+    wr_b = (w_b + k / 2.0) / (n_b + k)
+    delta = float(lambda_) * peso * (
+        _logit_escenario(wr_a) - _logit_escenario(wr_b))
+    p = _sig_escenario(_logit_escenario(p_motor) + delta)
+    lo_a, hi_a = _wilson(w_a, n_a)
+    lo_b, hi_b = _wilson(w_b, n_b)
+    p_lo = _sig_escenario(_logit_escenario(p_motor) + float(lambda_) * peso * (
+        _logit_escenario(lo_a if lo_a is not None else wr_a)
+        - _logit_escenario(hi_b if hi_b is not None else wr_b)))
+    p_hi = _sig_escenario(_logit_escenario(p_motor) + float(lambda_) * peso * (
+        _logit_escenario(hi_a if hi_a is not None else wr_a)
+        - _logit_escenario(lo_b if lo_b is not None else wr_b)))
+    return {
+        'p_mapa': round(p, 4),
+        'delta_logit': round(delta, 4),
+        'n_a': int(n_a),
+        'n_b': int(n_b),
+        'peso': round(float(peso), 4),
+        'lambda': float(lambda_),
+        'k': float(k),
+        'p_lo': round(min(p_lo, p_hi), 4),
+        'p_hi': round(max(p_lo, p_hi), 4),
+    }
+
+
+def _escenario_local(fila, tabla_lado=None):
+    """`escenario_mapa` de una fila en modo DB; `None` si está apagado/sin datos.
+
+    Usa `prob_victoria_a` (la P calibrada, idéntica) y la tabla
+    `(equipo, mapa, lado) -> (w, n)`; el equipo B se consulta en el lado
+    contrario. Si la tabla aún no está cargada se resuelve aquí (cacheada).
+    """
+    if not _escenario_activo():
+        return None
+    p = fila.get('prob_victoria_a')
+    if p is None:
+        return None
+    if tabla_lado is None:
+        tabla_lado = _tabla_mapa_lado()
+    if not tabla_lado:
+        return None
+    equipo_a = fila.get('equipo_a')
+    equipo_b = fila.get('equipo_b')
+    map_name = fila.get('map_name')
+    lado = fila.get('lado_inicial_a')
+    if not (equipo_a and equipo_b and map_name) or lado not in ('attack', 'defense'):
+        return None
+    lado_b = 'defense' if lado == 'attack' else 'attack'
+    return _calcular_escenario(
+        p,
+        tabla_lado.get((equipo_a, map_name, lado)),
+        tabla_lado.get((equipo_b, map_name, lado_b)),
+    )
+
+
 def _analisis_mapa_local(tabla, equipo_a, equipo_b, map_name, p_modelo):
     da = (tabla.get(equipo_a) or {}).get(map_name) or {'n': 0, 'winrate': 0.5}
     db = (tabla.get(equipo_b) or {}).get(map_name) or {'n': 0, 'winrate': 0.5}
@@ -340,13 +512,13 @@ def _analisis_mapa_local(tabla, equipo_a, equipo_b, map_name, p_modelo):
     }
 
 
-def _derivar_fila(fila, tabla):
+def _derivar_fila(fila, tabla, tabla_lado=None):
     """Completa una fila de `predicciones_mapa` como lo hace el servicio.
 
-    En modo DB (sin servicio) `prob_intervalo` y `escenario_mapa` quedan
-    `null`: el IC95% usa los RD locales del servicio y la capa de escenarios
-    (Plan B1) se calcula con la tabla de mapa/lado del motor, no replicada
-    aquí. La UI los oculta cuando vienen `null` (v1).
+    En modo DB (sin servicio) `prob_intervalo` queda `null` (usa los RD locales
+    del servicio); `escenario_mapa` (Plan B1) **sí se replica** desde `rounds`
+    con `_escenario_local` y la misma fórmula que `core/escenario_mapa.py`
+    (flag `ALETHEIA_ESCENARIO_MAPA`). La UI oculta lo que venga `null` (v1).
     """
     fila = dict(fila)
     fila['marcadores'] = _parse_json(fila.get('marcadores_json'))
@@ -354,7 +526,7 @@ def _derivar_fila(fila, tabla):
     p = fila.get('prob_victoria_a')
     fila['confianza'] = _banda_confianza(p) if p is not None else None
     fila['prob_intervalo'] = None  # el IC95% usa los RD locales del servicio
-    fila['escenario_mapa'] = None  # la capa B se calcula en el servicio
+    fila['escenario_mapa'] = _escenario_local(fila, tabla_lado)
     fila['analisis_mapa'] = _analisis_mapa_local(
         tabla, fila.get('equipo_a'), fila.get('equipo_b'), fila.get('map_name'), p)
     return fila
@@ -469,6 +641,19 @@ def _serie_desde_db(data):
         )
         if not coincide:
             continue
+        # ESC en modo DB: se enriquece cada mapa de la serie con la capa B1
+        # (misma tabla/replica que `_derivar_fila`); si el flag está apagado
+        # queda `None` y la UI lo oculta.
+        tabla_lado = _tabla_mapa_lado() if _escenario_activo() else None
+        for item in detalle:
+            if isinstance(item, dict):
+                item['escenario_mapa'] = _escenario_local({
+                    'equipo_a': fila.get('equipo_a') or equipo_a,
+                    'equipo_b': fila.get('equipo_b') or equipo_b,
+                    'map_name': item.get('map_name'),
+                    'lado_inicial_a': item.get('lado_inicial_a'),
+                    'prob_victoria_a': item.get('prob_victoria_a'),
+                }, tabla_lado)
         formato, objetivo = _formato_de_serie(len(pedido))
         p_a = float(fila['prob_serie_a'])
         return {
@@ -622,7 +807,9 @@ def prediccion():
             filas = _predicciones_db(match_id, equipo_a, equipo_b, map_name, lado)
             if filas:
                 version, _ = _version_vigente_db()
-                fila = _derivar_fila(filas[0], _tabla_mapas_equipo())
+                fila = _derivar_fila(
+                    filas[0], _tabla_mapas_equipo(),
+                    _tabla_mapa_lado() if _escenario_activo() else None)
                 return jsonify({
                     'ok': True,
                     'prediccion': fila,
@@ -648,10 +835,11 @@ def predicciones():
             if filas:
                 version, _ = _version_vigente_db()
                 tabla = _tabla_mapas_equipo()
+                tabla_lado = _tabla_mapa_lado() if _escenario_activo() else None
                 return jsonify({
                     'ok': True,
                     'modelo_version': version,
-                    'predicciones': [_derivar_fila(f, tabla) for f in filas],
+                    'predicciones': [_derivar_fila(f, tabla, tabla_lado) for f in filas],
                 })
         except Exception:  # noqa: BLE001 - cae al servicio
             pass
