@@ -650,10 +650,11 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         oculta y se marca **RE-PRECALCULAR** junto con `marcadores` (helper
         `detalleFaltante`).
       - **ARMAR SERIE (BO1/BO3/BO5)** *(sección dentro de `MAPA / SERIE`):* slots en
-        orden (el último = DECIDER) con bando por mapa; cada cambio hace
-        `POST /api/aletheia/serie` y muestra el banner (`prob_serie_a/b`,
+        orden (el último = DECIDER) con bando por mapa; al pulsar **ARMAR SERIE**
+        se hace `POST /api/aletheia/serie` y se muestra el banner (`prob_serie_a/b`,
         `confianza_serie` con color, formato, `mapas_para_ganar`, `n_sim`) al
-        instante. **Veto completo:** con 2/4 mapas no hay POST: el botón se
+        instante; cambiar formato/mapas/lado **invalida** el banner ("Cambió la
+        serie · pulsa ARMAR SERIE"). **Veto completo:** con 2/4 mapas no hay POST: el botón se
         deshabilita, el formato se muestra como incompleto y la nota dice cuántos
         mapas faltan (la API exige 1/3/5). La tabla de mapas de la serie muestra
         la **confianza por mapa**, el **marcador más probable** de cada mapa y,
