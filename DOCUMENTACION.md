@@ -767,7 +767,8 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         toda la página (`body > .ae-nodes-bg`), visible (opacidad .9), con nodos
         verdes `--g2`/`--g3` (halo suave para que se lean sobre el fondo negro),
         líneas tenues y encendido verde al pasar el cursor.
-      - Nodos 40–90 según el ancho; **rebotan en los bordes reflejando también
+      - Nodos 40–90 en el header y **60–300 en el fondo** (`W/8`, tope 300)
+        según el ancho; **rebotan en los bordes reflejando también
         la deriva base** (nunca se quedan pegados a la pared); líneas solo entre
         nodos cercanos con opacidad decreciente; repulsión suave con easing en
         el header y en el fondo.
@@ -917,6 +918,9 @@ Al recibir una nueva tarea o solicitud de cambio:
     base 0.72, halo suave, mayor radio, `linkDist` 115 y líneas/cursor más
     intensos; `.ae-nodes-bg` sube de `opacity: .6` a `.9` (`comun/theme.css`).
     El header (nodos oscuros sobre lima) conserva su aspecto.
+  - Densidad del fondo muy superior (`W/8`, **60–300 nodos**, antes 34–90);
+    tope de 5 líneas por nodo para que la red densa no se sature ni pierda
+    rendimiento.
 - **2026-10-03 — ESC en modo DB (capa de escenarios sin servidor).**
   - `aletheia/aletheia.py` replica `escenario_mapa` (B1) en modo DB desde
     `rounds`: tabla `(equipo, mapa, lado) -> (w, n)` con el swap de regulación

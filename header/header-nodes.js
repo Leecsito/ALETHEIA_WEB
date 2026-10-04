@@ -40,7 +40,7 @@
         /* Fondo oscuro: red VERDE visible detrás del contenido; el cursor la enciende. */
         bg: {
             vars: { a: '--g2', b: '--g3', hot: '--g3', spark: '--g3' },
-            count: { div: 20, min: 34, max: 90 },
+            count: { div: 8, min: 60, max: 300 },
             linkDist: 115,
             linkAlpha: 0.26,
             linkHeat: 0.2,
