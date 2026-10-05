@@ -127,7 +127,7 @@ const VCT = (() => {
         const enSolo = (t, v) => !solo || solo.has(clave(t, v));
         const equipos = new Set(), jugadores = new Set(), eventos = new Set(), nombres = new Set();
         const imgs = [...root.querySelectorAll('img[data-media]')];
-        const wms = [...root.querySelectorAll('[data-wm],[data-wm2]')];
+        const wms = [...root.querySelectorAll('[data-wm],[data-wm2],[data-wm3],[data-ce]')];
 
         const sumar = (t, v) => {
             if (!v || !enSolo(t, v)) return;
@@ -138,7 +138,12 @@ const VCT = (() => {
         };
 
         imgs.forEach(img => sumar(...parse(img.dataset.media)));
-        wms.forEach(el => { if (el.dataset.wm) sumar(...parse(el.dataset.wm)); if (el.dataset.wm2) sumar(...parse(el.dataset.wm2)); });
+        wms.forEach(el => {
+            if (el.dataset.wm) sumar(...parse(el.dataset.wm));
+            if (el.dataset.wm2) sumar(...parse(el.dataset.wm2));
+            if (el.dataset.wm3) sumar(...parse(el.dataset.wm3));   // watermark del evento (--wm-e)
+            if (el.dataset.ce) sumar(...parse(el.dataset.ce));     // color del evento (--ce)
+        });
         root.querySelectorAll('[data-c-equipo]').forEach(el => sumar('equipo', el.dataset.cEquipo));
         root.querySelectorAll('[data-c-equipo2]').forEach(el => sumar('equipo', el.dataset.cEquipo2));
         root.querySelectorAll('[data-c-evento]').forEach(el => sumar('evento', el.dataset.cEvento));
@@ -208,19 +213,27 @@ const VCT = (() => {
             });
 
             wms.forEach(el => {
-                if (el.dataset.wm) {
-                    const [t, v] = parse(el.dataset.wm);
+                // Cada atributo se procesa por separado (sin `return`): un
+                // elemento puede llevar wm/wm2/wm3/ce y en el reintento solo
+                // interesa el que quedó pendiente.
+                const wm = (data, varCss) => {
+                    if (!data) return;
+                    const [t, v] = parse(data);
                     if (!enSolo(t, v)) return;
                     const info = lookup(d, t, v);
-                    if (info?.u) el.style.setProperty('--wm-a', `url('${info.u}')`);
+                    if (info?.u) el.style.setProperty(varCss, `url('${info.u}')`);
                     else if (info?.pending || !info) marcar(t, v);
-                }
-                if (el.dataset.wm2) {
-                    const [t, v] = parse(el.dataset.wm2);
-                    if (!enSolo(t, v)) return;
-                    const info = lookup(d, t, v);
-                    if (info?.u) el.style.setProperty('--wm-b', `url('${info.u}')`);
-                    else if (info?.pending || !info) marcar(t, v);
+                };
+                wm(el.dataset.wm, '--wm-a');
+                wm(el.dataset.wm2, '--wm-b');
+                wm(el.dataset.wm3, '--wm-e');
+                if (el.dataset.ce) {
+                    const [t, v] = parse(el.dataset.ce);
+                    if (enSolo(t, v)) {
+                        const info = lookup(d, t, v);
+                        if (info?.c) el.style.setProperty('--ce', info.c);
+                        else if (info?.pending || !info) marcar(t, v);
+                    }
                 }
             });
         } catch (e) {

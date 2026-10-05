@@ -548,23 +548,27 @@ main.v-main.wide { max-width: 1500px; }
     background: radial-gradient(560px 220px at 8% 0%, color-mix(in srgb, var(--accent) 5.5%, transparent), transparent 65%);
 }
 
-/* VS: tinte con el color real de cada equipo para diferenciarlos. */
+/* VS: tinte con el color real de evento (izq), equipo A (centro) y equipo B
+   (der). El logo grande de la izquierda es el del evento, así que ese extremo
+   usa `--ce` (color del evento) en vez del color del equipo A. */
 .v-banner.vs {
     background: var(--hero-grad);
     background: linear-gradient(90deg,
-        color-mix(in srgb, var(--c, var(--panel)) 22%, var(--bg)) 0%,
-        var(--bg) 42%, var(--bg) 58%,
+        color-mix(in srgb, var(--ce, var(--c, var(--panel))) 22%, var(--bg)) 0%,
+        color-mix(in srgb, var(--c, var(--panel)) 20%, var(--bg)) 50%,
         color-mix(in srgb, var(--c2, var(--panel)) 22%, var(--bg)) 100%);
 }
 
+/* Watermarks: logo del evento a la izquierda, equipo A al centro, equipo B a
+   la derecha (mismo orden que el degradado). */
 .v-banner::after {
     content: '';
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background-image: var(--wm-a, none), var(--wm-b, none);
-    background-position: left -34px center, right -34px center;
-    background-size: 300px auto, 300px auto;
+    background-image: var(--wm-e, none), var(--wm-a, none), var(--wm-b, none);
+    background-position: left -34px center, center center, right -34px center;
+    background-size: 300px auto, 300px auto, 300px auto;
     background-repeat: no-repeat;
     opacity: .07;
     filter: saturate(0);
@@ -609,11 +613,12 @@ main.v-main.wide { max-width: 1500px; }
 .v-vs-team:hover .v-team-name { color: var(--accent); }
 .v-vs-team.away { flex-direction: row-reverse; text-align: right; }
 
+/* El logo es el protagonista; el nombre acompaña (secundario). */
 .v-team-name {
     font-family: var(--display);
-    font-size: 28px;
-    letter-spacing: 2px;
-    color: var(--txt-1);
+    font-size: 15px;
+    letter-spacing: 1px;
+    color: var(--txt-2);
     transition: color .2s;
 }
 
@@ -1072,9 +1077,10 @@ main.v-main.wide { max-width: 1500px; }
     .v-vs { width: 100%; justify-content: center; }
     .v-vs-team { min-width: 0; flex: 1; }
     .v-vs-score { font-size: 38px; }
+    .v-team-name { font-size: 13px; }
     .v-lozenge.big { width: 80px; height: 80px; font-size: 22px; }
     .v-avatar.big { width: 110px; height: 110px; font-size: 38px; }
     .v-econ { grid-template-columns: 1fr; }
     .v-tabs { margin-left: -14px; margin-right: -14px; padding-left: 14px; }
-    .v-banner::after { background-size: 190px auto, 190px auto; }
+    .v-banner::after { background-size: 170px auto, 170px auto, 170px auto; }
 }

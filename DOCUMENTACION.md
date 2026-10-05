@@ -1031,9 +1031,16 @@ Al recibir una nueva tarea o solicitud de cambio:
   - `partidos/script.js`: el banner del partido pintaba el logo de `team_a` en
     grande (`'big'`) junto al título del evento, mientras que el bloque VS pinta
     ambos equipos a tamaño normal (de ahí la sensación de "logos desiguales").
-    Ahora el logo grande es el del **evento** (coherente con el título) y los dos
-    equipos quedan al mismo tamaño; si el partido no trae evento/torneo se
-    conserva el logo grande de `team_a`.
+    Ahora el logo grande es el del **evento** (coherente con el título); si el
+    partido no trae evento/torneo se conserva el logo grande de `team_a`.
+  - **Degradado y watermarks del banner** (`comun/vct.css`, `comun/vct.js`,
+    `partidos/script.js`): izquierda = evento (`--ce`/`--wm-e`), centro = equipo
+    A (`--c`/`--wm-a`) y derecha = equipo B (`--c2`/`--wm-b`). `aplicarMedia`
+    entiende ahora `data-ce` (color del evento) y `data-wm3` (watermark del
+    evento) además de `data-wm`/`data-wm2`.
+  - **Logos de equipos más grandes en el bloque VS** (`'big'`, 104px; 80px en
+    móvil) y **nombre secundario** (`v-team-name` 28 → 15px, 13px en móvil):
+    el protagonismo es del logo, no del nombre.
 - **2026-10-05 — Auditoría de rendimiento web (F1–F14, sin F10).** Correcciones de
   carga/estabilidad sin tocar lógica de predicción, modelos, ratings ni resultados.
   - **F1 (`aletheia/script.js`) cola de `/serie`:** `cargarSeriesLista()` (hasta 12

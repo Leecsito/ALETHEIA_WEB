@@ -90,13 +90,19 @@ function pintarDetalle(d) {
     const winA = p.winner_id && p.winner_id === p.team_a_id;
     const winB = p.winner_id && p.winner_id === p.team_b_id;
     const titulo = p.event_name || p.tournament || 'PARTIDO';
+    // Evento del partido (para logo/color/watermark de la izquierda del banner).
+    const evKey = p.event_id ? `evento:${p.event_id}`
+        : ((p.event_name || p.tournament) ? `nombre:${titulo}` : null);
+    const evAttrs = evKey
+        ? ` data-ce="${VCT.esc(evKey)}" data-wm3="${VCT.esc(evKey)}"`
+        : '';
 
     const el = document.getElementById('vistaDetalle');
     el.innerHTML = `
         <a class="v-back" href="./">← VOLVER A PARTIDOS</a>
 
-        <div class="v-banner vs" data-c-equipo="${p.team_a_id}" data-c-equipo2="${p.team_b_id}" data-wm="equipo:${p.team_a_id}" data-wm2="equipo:${p.team_b_id}">
-            ${(p.event_id || p.event_name || p.tournament)
+        <div class="v-banner vs" data-c-equipo="${p.team_a_id}" data-c-equipo2="${p.team_b_id}" data-wm="equipo:${p.team_a_id}" data-wm2="equipo:${p.team_b_id}"${evAttrs}>
+            ${evKey
                 ? VCT.eventLogo(p.event_id, titulo, 'big')
                 : VCT.lozenge(p.team_a, p.team_a_tag, 'big', p.team_a_id)}
             <div class="v-banner-main">
@@ -111,12 +117,12 @@ function pintarDetalle(d) {
             </div>
             <div class="v-vs">
                 <a class="v-vs-team ${winA ? '' : 'lost'}" href="${VCT.teamHref(p.team_a_id)}">
-                    ${VCT.lozenge(p.team_a, p.team_a_tag, '', p.team_a_id)}
+                    ${VCT.lozenge(p.team_a, p.team_a_tag, 'big', p.team_a_id)}
                     <span class="v-team-name">${VCT.esc(p.team_a || 'TBD')}</span>
                 </a>
                 <span class="v-vs-score">${p.score_a ?? '-'}<small> : </small>${p.score_b ?? '-'}</span>
                 <a class="v-vs-team away ${winB ? '' : 'lost'}" href="${VCT.teamHref(p.team_b_id)}">
-                    ${VCT.lozenge(p.team_b, p.team_b_tag, '', p.team_b_id)}
+                    ${VCT.lozenge(p.team_b, p.team_b_tag, 'big', p.team_b_id)}
                     <span class="v-team-name">${VCT.esc(p.team_b || 'TBD')}</span>
                 </a>
             </div>
