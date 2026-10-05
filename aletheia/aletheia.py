@@ -540,6 +540,28 @@ def _derivar_fila(fila, tabla, tabla_lado=None):
     return fila
 
 
+def _map_pool_db():
+    """Nombres de mapa activos del pool (`map_pool.en_pool=1`), o None.
+
+    La tabla `map_pool` la gestiona la web (no el servicio). Si la tabla no
+    existe (DB vieja) se devuelve `None` para degradar sin romper: el llamador
+    mantiene el comportamiento anterior (todos los mapas con predicción).
+    """
+    try:
+        existe = fetch_all(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'map_pool' LIMIT 1")
+    except Exception:  # noqa: BLE001 - sin tabla se sigue con todos los mapas
+        return None
+    if not existe:
+        return None
+    try:
+        filas = fetch_all(
+            'SELECT map_name FROM map_pool WHERE en_pool = 1 ORDER BY map_name')
+    except Exception:  # noqa: BLE001 - pool ilegible = sin filtro
+        return None
+    return [str(f.get('map_name')).strip() for f in filas if f.get('map_name')]
+
+
 def _version_vigente_db():
     """(modelo_version, fecha) más reciente de la caché, o (None, None)."""
     filas = fetch_all(
@@ -732,12 +754,25 @@ def equipos():
 
 @aletheia_bp.route('/api/aletheia/mapas', methods=['GET'])
 def mapas():
-    """GET /api/mapas: directo de Turso (los mapas con predicción); si no hay, proxy."""
+    """GET /api/mapas: directo de Turso (los mapas con predicción); si no hay, proxy.
+
+    Con `?pool=1` (EN VIVO) se limita a los mapas del pool activo
+    (`map_pool.en_pool=1`); si la tabla `map_pool` no existe, se devuelven todos
+    (degradación sin romper). Así el selector/armador de serie nunca ofrece
+    mapas fuera del pool.
+    """
+    solo_pool = str(request.args.get('pool') or '').strip().lower() in (
+        '1', 'true', 'si', 'sí', 'yes', 'on')
     try:
         filas = fetch_all(
             'SELECT DISTINCT map_name FROM predicciones_mapa ORDER BY map_name')
         nombres = [f.get('map_name') for f in filas if f.get('map_name')]
-        if nombres:
+        if solo_pool:
+            pool = _map_pool_db()
+            if pool is not None:
+                activos = {m.lower() for m in pool}
+                nombres = [m for m in nombres if str(m).strip().lower() in activos]
+        if nombres or solo_pool:
             return jsonify({'ok': True, 'mapas': nombres})
     except Exception:  # noqa: BLE001 - cae al servicio
         pass

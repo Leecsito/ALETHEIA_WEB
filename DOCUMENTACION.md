@@ -183,6 +183,10 @@ Por eso los **blueprints de lectura** (`partidos`, `equipos`, `jugadores`, `even
 12. **`predicciones_serie`**: predicción cacheada de la serie.
     - `id`, `match_id`, `equipo_a`, `equipo_b`, `formato`, `mapas_json`, `prob_serie_a`, `prob_serie_b`, `n_sim`, `modelo_version`, `created_at`.
 
+**1 tabla de la web** (la gestiona la propia web; el motor no la escribe):
+
+- **`map_pool`**: pool de mapas activos. `map_name` (TEXT, PK), `en_pool` (INTEGER 0/1, default 1), `updated_at` (TEXT). EN VIVO (`/aletheia/`) solo ofrece los mapas con `en_pool=1` en el selector y el armador de serie; si la tabla no existe, se degrada a todos los mapas con predicción. El tope del pool en el motor (`precalcular`/`serie`) lo aplica ALETHEIA_PREDICT (fuera de este repo).
+
 ---
 
 ## 4. Catálogo de Rutas API (Backend)
@@ -254,6 +258,8 @@ Endpoints expuestos por ALETHEIA (todos reenvían al servicio externo):
   las métricas `maps_played`/`avg_rating` quedan en 0 porque el servicio no las aporta.
 - `GET /api/aletheia/mapas` → proxy de `GET {BASE}/api/mapas`.
   Devuelve `{"ok": true, "mapas": [...]}` (13 mapas, incluye `Summit`).
+  Con `?pool=1` (EN VIVO) se limita a los mapas de `map_pool` con `en_pool=1`
+  (intersección con los que tienen predicción); si la tabla no existe, los 13.
 - `POST /api/aletheia/predecir` → proxy de `POST {BASE}/api/predecir`.
   Reenvía el body tal cual y devuelve la respuesta del servicio sin transformar.
 
@@ -643,12 +649,14 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         `COMPARACIÓN`. **ARMAR SERIE dejó de ser un tab** y ahora es una **sección
         dentro de `MAPA / SERIE`**. Layout en **dos columnas**: **izquierda** el
         análisis del **mapa** seleccionado, **derecha** la **serie**. Arriba: selector
-        único de los 13 mapas (agrega mapas a la serie; clic = añadir + ver análisis),
+         único de los mapas del pool (`map_pool.en_pool=1`; si la tabla no existe,
+         los 13) (agrega mapas a la serie; clic = añadir + ver análisis),
         los **slots en orden** con bando por mapa, y el botón **ARMAR SERIE**. Al
         pulsar el botón se calcula la serie; cambiar formato/mapas/lado **invalida** el
         banner (hay que volver a pulsar). Clic en un mapa del grid o en un slot muestra
         su análisis a la izquierda, sin subir/bajar.
-      - **Explorador de mapas:** rejilla de los 13 mapas con la **P(A) por mapa**
+      - **Explorador de mapas:** rejilla de los mapas del pool activo
+        (`map_pool.en_pool=1`; si la tabla no existe, los 13) con la **P(A) por mapa**
         (`analisis_mapa.p_mapa_a`, **difiere por mapa**), OT del bando elegido y,
         si el backend la trae, la capa **ESC** (`escenario_mapa.p_mapa`, por
         mapa/lado) (leídas de `liveBulk`; no llama al servicio en cada clic). Al
@@ -937,6 +945,18 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-05 — Pool de mapas (`map_pool`) en EN VIVO.**
+  - `aletheia/aletheia.py`: nuevo helper `_map_pool_db()` (detecta `map_pool`
+    vía `sqlite_master` y devuelve los `map_name` con `en_pool=1`; `None` si la
+    tabla no existe). `GET /api/aletheia/mapas` acepta `?pool=1` y devuelve la
+    intersección con `predicciones_mapa`; con la tabla ausente degrada a todos.
+  - `aletheia/script.js`: `loadAvailableMaps()` pide `?pool=1` y purga de la
+    serie los mapas que salgan del pool; el selector/explorador y el armador de
+    serie quedan limitados al pool. PREPARAR no cambia (no usa `/mapas`).
+  - El tope del pool en el motor (`precalcular`/`serie`) es responsabilidad de
+    ALETHEIA_PREDICT (repo aparte); la web solo restringe la UI.
+  - Verificado contra Turso: `?pool=1` → 7 mapas (Abyss, Ascent, Haven, Lotus,
+    Split, Summit, Sunset); sin `pool` → 13.
 - **2026-10-04 — POST /api/precalcular: anti-doble-envío, 429 y reanudación del job.**
   - **PREPARAR (`aletheia_preparar/script.js`):** el job se persiste por
     enfrentamiento (`match_id`+equipos) en `localStorage`

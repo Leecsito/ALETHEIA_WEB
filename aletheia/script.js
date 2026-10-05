@@ -6,7 +6,7 @@ const API = `${window.location.origin}/api`;
 // RE-PRECALCULAR (forzar:true) va directo al PC (async: el POST responde 202 y
 // su polling es rápido). La clave API la añade el proxy server-side; nunca
 // llega al navegador.
-let availableMaps = [];    // 13 mapas del servicio (proxy /api/aletheia/mapas)
+let availableMaps = [];    // mapas del pool activo (proxy /api/aletheia/mapas?pool=1)
 let mapsLoading = false;
 let sims = [];             // enfrentamientos ya preparados (/api/simulaciones)
 let current = null;        // simulación seleccionada
@@ -245,14 +245,18 @@ function teamLogo(name, tag, teamId, cls = '') {
 }
 
 // ─── MAPAS (proxy) ────────────────────────────────────────────────────────────
+// Solo el pool activo (`map_pool.en_pool=1`, vía `?pool=1`); si la tabla no
+// existe, el proxy devuelve todos los mapas con predicción.
 async function loadAvailableMaps() {
     mapsLoading = true;
     mapsError = null;
     try {
-        const res = await fetch(`${API}/aletheia/mapas`);
+        const res = await fetch(`${API}/aletheia/mapas?pool=1`);
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || `HTTP ${res.status}`);
         availableMaps = data.mapas || [];
+        // La serie no conserva mapas que salieron del pool.
+        matchMaps = matchMaps.filter(m => availableMaps.includes(m.map_name));
     } catch (e) {
         mapsError = e.message || 'servicio no disponible';
     }
