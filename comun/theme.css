@@ -99,6 +99,10 @@
     height: 100%;
     pointer-events: none;
     opacity: .9;
+    /* Aísla el canvas del resto del layout: su repintado no invalida la
+       página y el navegador puede rasterizarlo en su propia capa. */
+    contain: strict;
+    will-change: transform;
 }
 
 /* ── Base ───────────────────────────────────────────────────────────────── */

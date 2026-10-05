@@ -37,11 +37,13 @@
             radius: [0.9, 1.8],
             fixed: false,
         },
-        /* Fondo oscuro: red VERDE visible detrás del contenido; el cursor la enciende. */
+        /* Fondo oscuro: red VERDE visible detrás del contenido; el cursor la enciende.
+           Densidad acotada y DPR máximo 1.25 (el fondo es decorativo): baja ~6x
+           los píxeles por frame y los pares de enlaces respecto a 300 nodos/DPR 2.5. */
         bg: {
             vars: { a: '--g2', b: '--g3', hot: '--g3', spark: '--g3' },
-            count: { div: 8, min: 60, max: 300 },
-            linkDist: 115,
+            count: { div: 14, min: 32, max: 110 },
+            linkDist: 125,
             linkAlpha: 0.26,
             linkHeat: 0.2,
             cursorDist: 180,
@@ -50,6 +52,7 @@
             radius: [0.9, 1.9],
             nodeAlpha: 0.72,
             halo: 0.13,
+            dprMax: 1.25,
             fixed: true,
         },
     };
@@ -135,7 +138,7 @@
                 W = Math.max(1, window.innerWidth);
                 H = Math.max(1, window.innerHeight);
             }
-            DPR = Math.min(2.5, window.devicePixelRatio || 1);
+            DPR = Math.min(mode.dprMax || 2.5, window.devicePixelRatio || 1);
 
             canvas.width = Math.round(W * DPR);
             canvas.height = Math.round(H * DPR);
@@ -209,30 +212,50 @@
             ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
             ctx.clearRect(0, 0, W, H);
 
-            /* Líneas entre nodos cercanos (opacidad baja con la distancia). */
+            /* Líneas entre nodos cercanos (opacidad baja con la distancia).
+               Rejilla espacial: solo se comparan celdas vecinas, así el coste
+               no crece con O(n²) al subir la densidad. */
             ctx.lineWidth = 1;
             const links = new Array(nodes.length).fill(0);
+            const cell = mode.linkDist;
+            const grid = new Map();
+            for (let i = 0; i < nodes.length; i++) {
+                const n = nodes[i];
+                const k = Math.floor(n.x / cell) + ',' + Math.floor(n.y / cell);
+                let bucket = grid.get(k);
+                if (!bucket) grid.set(k, bucket = []);
+                bucket.push(i);
+            }
+            const dist2 = mode.linkDist * mode.linkDist;
             for (let i = 0; i < nodes.length; i++) {
                 const a = nodes[i];
                 if (links[i] >= 5) continue;
-                for (let j = i + 1; j < nodes.length; j++) {
-                    if (links[j] >= 5) continue;
-                    const b = nodes[j];
-                    const dx = a.x - b.x;
-                    const dy = a.y - b.y;
-                    const d2 = dx * dx + dy * dy;
-                    if (d2 > mode.linkDist * mode.linkDist) continue;
-                    const d = Math.sqrt(d2);
-                    const alpha = (1 - d / mode.linkDist) * mode.linkAlpha;
-                    const heat = Math.max(a.heat, b.heat);
-                    const color = heat > 0.35 ? mix(P.b, P.hot, Math.min(1, heat)) : P.b;
-                    ctx.strokeStyle = rgba(color, alpha + heat * mode.linkHeat);
-                    ctx.beginPath();
-                    ctx.moveTo(a.x, a.y);
-                    ctx.lineTo(b.x, b.y);
-                    ctx.stroke();
-                    links[i]++;
-                    links[j]++;
+                const gx = Math.floor(a.x / cell);
+                const gy = Math.floor(a.y / cell);
+                for (let cx = gx - 1; cx <= gx + 1; cx++) {
+                    for (let cy = gy - 1; cy <= gy + 1; cy++) {
+                        const bucket = grid.get(cx + ',' + cy);
+                        if (!bucket) continue;
+                        for (const j of bucket) {
+                            if (j <= i || links[j] >= 5) continue;
+                            const b = nodes[j];
+                            const dx = a.x - b.x;
+                            const dy = a.y - b.y;
+                            const d2 = dx * dx + dy * dy;
+                            if (d2 > dist2) continue;
+                            const d = Math.sqrt(d2);
+                            const alpha = (1 - d / mode.linkDist) * mode.linkAlpha;
+                            const heat = Math.max(a.heat, b.heat);
+                            const color = heat > 0.35 ? mix(P.b, P.hot, Math.min(1, heat)) : P.b;
+                            ctx.strokeStyle = rgba(color, alpha + heat * mode.linkHeat);
+                            ctx.beginPath();
+                            ctx.moveTo(a.x, a.y);
+                            ctx.lineTo(b.x, b.y);
+                            ctx.stroke();
+                            links[i]++;
+                            links[j]++;
+                        }
+                    }
                 }
             }
 

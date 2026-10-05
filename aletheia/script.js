@@ -21,7 +21,6 @@ let filtroResultado = 'todas';   // todas | pendiente | resultado
 let simsConResultado = null;     // Set de match_id con resultado real (null = sin dato)
 let simsInfo = {};               // match_id -> identidad + resumen predicción↔realidad
 let simSerie = {};               // match_id -> {p_a,p_b,p_real} | {error:true} (P de serie)
-let serieQueueRunning = false;   // evita doble cola de POST /serie para la lista
 let resultadosError = null;      // error al leer /api/partidos/resultados (null = ok)
 let serviceModelVersion = null;  // modelo vigente (GET /modelo_version)
 let serviceModeloDesactualizado = false;  // true = reentreno/cambio sin reiniciar
@@ -87,11 +86,18 @@ function jobGuardado(a, b, mid) {
     return jobVigente(job) ? job : null;
 }
 
-// Cola de POST /serie de la lista: máximo de pedidos por carga y corte de
-// espera por request. 60 s cubre el cold start del servicio de lectura en
+// Cola de POST /serie de la lista (F1): solo para las filas VISIBLES (viewport,
+// con margen) y la seleccionada; nunca stale. Concurrencia acotada, resultado
+// cacheado por sesión (`simSerie` + `serieIntentados`) y sin relanzar lotes en
+// cada `renderSimList`. 60 s cubre el cold start del servicio de lectura en
 // Render (en caliente responde en segundos); el proxy reintenta y cae a ngrok.
-const SERIE_QUEUE_MAX = 12;
+const SERIE_CONCURRENCY = 2;     // peticiones /serie en vuelo a la vez
 const SERIE_TIMEOUT_MS = 60000;
+let serieCola = [];              // [{s, gen}] pendientes de procesar
+let serieActivos = 0;            // peticiones /serie en vuelo
+let serieIntentados = new Set(); // match_id ya encolados en esta carga (no repetir)
+let serieGen = 0;                // generación: invalida resultados de una carga vieja
+let simObserver = null;          // IntersectionObserver de las filas visibles
 
 // Filtro de resultado persistido (si el navegador lo permite).
 const FILTRO_SIMS_KEY = 'ae_sim_filtro';
@@ -229,8 +235,9 @@ function probAccClass(acc) {
 }
 
 // Logo + nombre de equipo (usa el core VCT; sin id cae a las siglas/iniciales).
-function teamLogo(name, tag, teamId, cls = '') {
-    return `<span class="team-inline">${VCT.lozenge(name, tag, cls, teamId || null)}` +
+// `prioridad` = logos de la primera fila (LCP): eager + fetchpriority=high.
+function teamLogo(name, tag, teamId, cls = '', prioridad = false) {
+    return `<span class="team-inline">${VCT.lozenge(name, tag, cls, teamId || null, prioridad)}` +
         `<span class="team-inline-name">${escapeHtml(name || '—')}</span></span>`;
 }
 
@@ -272,7 +279,11 @@ async function loadSimulaciones() {
             modelVersionError = null;
         }
         sims = data.simulaciones || [];
+        // Nueva carga = nueva generación: descarta cola/resultados de la anterior.
+        serieGen++;
         simSerie = {};
+        serieIntentados = new Set();
+        serieCola = [];
         // Marca no vigentes también por comparación de modelo_version (aunque el
         // backend no lo hubiera marcado), para ofrecer RE-PRECALCULAR.
         sims.forEach(s => {
@@ -348,7 +359,16 @@ function actualizarFiltroSims(base) {
     simFilterBtns.forEach(btn => {
         const f = btn.dataset.filtro || 'todas';
         btn.classList.toggle('active', f === filtroResultado);
-        btn.textContent = `${btn.dataset.label || f.toUpperCase()} (${cuenta[f] || 0})`;
+        // El conteo va en un span de ancho fijo: el texto del chip no cambia
+        // de tamaño al pasar de (0) a (24) y no desplaza el resto del header (CLS).
+        let cnt = btn.querySelector('.sim-filter-count');
+        if (!cnt) {
+            btn.textContent = `${btn.dataset.label || f.toUpperCase()} `;
+            cnt = document.createElement('span');
+            cnt.className = 'sim-filter-count';
+            btn.appendChild(cnt);
+        }
+        cnt.textContent = `(${cuenta[f] || 0})`;
     });
 }
 
@@ -428,69 +448,109 @@ function mapasSerieDe(info) {
     return limpios.map(m => ({ map_name: m, lado_inicial_a: 'attack' }));
 }
 
-// Pide en 2º plano la P de serie (POST /serie, desde la caché) para las filas
-// con resultado y va actualizando su píldora, sin bloquear la lista.
-async function cargarSeriesLista() {
-    if (serieQueueRunning) return;
-    serieQueueRunning = true;
-    try {
-        const pendientes = sims.filter(s => tieneResultado(s) === true && s.match_id &&
-            simsInfo[s.match_id] && !simSerie[s.match_id]);
-        const vistos = new Set();
-        let fallos = 0;
-        for (const s of pendientes.slice(0, SERIE_QUEUE_MAX)) {
-            if (vistos.has(s.match_id)) continue;
-            vistos.add(s.match_id);
-            const info = simsInfo[s.match_id];
-            const mapas = mapasSerieDe(info);
-            if (!mapas.length) {
-                // Sin pool de veto completo (1/3/5): no se llama al servicio.
-                simSerie[s.match_id] = { sin_pool: true };
-                actualizarSeriesLista();
-                continue;
-            }
-            simSerie[s.match_id] = { cargando: true };
-            const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-            const timer = ctrl ? setTimeout(() => ctrl.abort(), SERIE_TIMEOUT_MS) : null;
-            try {
-                const res = await proxyFetch('/serie', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        match_id: s.match_id || 0,
-                        equipo_a: s.equipo_a,
-                        equipo_b: s.equipo_b,
-                        mapas,
-                    }),
-                    signal: ctrl ? ctrl.signal : undefined,
-                });
-                const d = await res.json();
-                if (!d.ok) throw new Error(d.error || `HTTP ${res.status}`);
-                const ganaA = Number(info.score_a) > Number(info.score_b);
-                const num = v => (v == null || v === '' || isNaN(Number(v))) ? null : Number(v);
-                const pA = num(d.prob_serie_a);
-                const pB = num(d.prob_serie_b);
-                // El MOTOR (prob_motor_a/b) vive en la raíz de /serie (no se
-                // persiste por mapa); el ESC es prob_victoria_a de cada mapa.
-                simSerie[s.match_id] = {
-                    p_a: pA, p_b: pB, p_real: (pA != null) ? (ganaA ? pA : pB) : null,
-                    p_motor_a: num(d.prob_motor_a),
-                    p_motor_b: num(d.prob_motor_b),
-                };
-            } catch (e) {
-                simSerie[s.match_id] = { error: true };
-                // Solo cuentan los fallos de red/timeout (el servicio respondió
-                // con error de datos para ese partido => se sigue con el resto).
-                if (e && (e.name === 'AbortError' || e instanceof TypeError)) fallos++;
-            } finally {
-                if (timer) clearTimeout(timer);
-            }
-            actualizarSeriesLista();
-            if (fallos >= 2) break;   // servicio caído: no martillar con 12 pedidos
-        }
-    } finally {
-        serieQueueRunning = false;
+// Encola la P de serie (POST /serie, desde la caché) de UNA fila. Solo se
+// calcula para filas visibles/seleccionadas con resultado y vigentes; el
+// resultado queda cacheado por sesión (`simSerie`) y no se repite.
+function encolarSerie(s, gen = serieGen) {
+    if (!s || gen !== serieGen) return;
+    const mid = Number(s && s.match_id) || 0;
+    if (!mid || simSerie[mid] || serieIntentados.has(mid)) return;
+    if (simIsStale(s) || tieneResultado(s) !== true) return;
+    const info = simsInfo[mid];
+    if (!info) return;
+    if (!mapasSerieDe(info).length) {
+        // Sin pool de veto completo (1/3/5): no se llama al servicio.
+        simSerie[mid] = { sin_pool: true };
+        actualizarSeriesLista();
+        return;
     }
+    serieIntentados.add(mid);
+    serieCola.push({ s, gen });
+    bombearSerie();
+}
+
+// Cola con concurrencia acotada (2): las peticiones visibles no bloquean la
+// lista y no se martilla el worker con 12 POST seguidos.
+function bombearSerie() {
+    while (serieActivos < SERIE_CONCURRENCY && serieCola.length) {
+        const { s, gen } = serieCola.shift();
+        serieActivos++;
+        procesarSerie(s, gen).finally(() => {
+            serieActivos--;
+            bombearSerie();
+        });
+    }
+}
+
+async function procesarSerie(s, gen) {
+    if (gen !== serieGen) return;
+    const mid = Number(s.match_id) || 0;
+    const info = simsInfo[mid];
+    if (!info || simSerie[mid]) return;
+    const mapas = mapasSerieDe(info);
+    if (!mapas.length) {
+        simSerie[mid] = { sin_pool: true };
+        actualizarSeriesLista();
+        return;
+    }
+    simSerie[mid] = { cargando: true };
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), SERIE_TIMEOUT_MS) : null;
+    try {
+        const res = await proxyFetch('/serie', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                match_id: mid,
+                equipo_a: s.equipo_a,
+                equipo_b: s.equipo_b,
+                mapas,
+            }),
+            signal: ctrl ? ctrl.signal : undefined,
+        });
+        const d = await res.json();
+        if (gen !== serieGen) return;
+        if (!d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+        const ganaA = Number(info.score_a) > Number(info.score_b);
+        const num = v => (v == null || v === '' || isNaN(Number(v))) ? null : Number(v);
+        const pA = num(d.prob_serie_a);
+        const pB = num(d.prob_serie_b);
+        // El MOTOR (prob_motor_a/b) vive en la raíz de /serie (no se
+        // persiste por mapa); el ESC es prob_victoria_a de cada mapa.
+        simSerie[mid] = {
+            p_a: pA, p_b: pB, p_real: (pA != null) ? (ganaA ? pA : pB) : null,
+            p_motor_a: num(d.prob_motor_a),
+            p_motor_b: num(d.prob_motor_b),
+        };
+    } catch (e) {
+        if (gen === serieGen) simSerie[mid] = { error: true };
+    } finally {
+        if (timer) clearTimeout(timer);
+        if (gen === serieGen) actualizarSeriesLista();
+    }
+}
+
+// Observa las tarjetas renderizadas y encola su /serie recién cuando entran en
+// el viewport (con margen): al cargar solo se piden las visibles, y el resto
+// se completan al hacer scroll sin volver a lanzar lotes en cada render.
+function observarSeriesVisibles() {
+    if (simObserver) { simObserver.disconnect(); simObserver = null; }
+    const items = [...simList.querySelectorAll('.sim-item')].filter(el => el.__sim);
+    if (!items.length) return;
+    if (typeof IntersectionObserver === 'undefined') {
+        items.forEach(el => encolarSerie(el.__sim));
+        return;
+    }
+    const gen = serieGen;
+    simObserver = new IntersectionObserver(entradas => {
+        entradas.forEach(en => {
+            if (!en.isIntersecting) return;
+            const sim = en.target.__sim;
+            simObserver.unobserve(en.target);
+            if (sim) encolarSerie(sim, gen);
+        });
+    }, { rootMargin: '200px 0px' });
+    items.forEach(el => simObserver.observe(el));
 }
 
 // Refresca en sitio las píldoras SERIE y los MOTOR ya pintados (sin re-render
@@ -531,12 +591,15 @@ function renderSimList() {
                     ? 'No hay simulaciones pendientes de resultado con este filtro.'
                     : 'No hay simulaciones que mostrar.';
         simList.innerHTML = `<div class="live-hint" style="padding:14px">${msg}</div>`;
+        simList.setAttribute('aria-busy', 'false');
         return;
     }
-    list.forEach(s => {
+    list.forEach((s, idx) => {
         const vigente = s.vigente !== false;
         const res = tieneResultado(s);
         const info = simsInfo[s.match_id] || null;
+        // La primera fila carga sus logos en prioridad alta (LCP); el resto lazy.
+        const prio = idx < 2;
         const resBadge = res === true
             ? '<span class="si-res ok" title="Ya jugado: hay resultado real en la DB">CON RESULTADO</span>'
             : res === false
@@ -544,15 +607,16 @@ function renderSimList() {
                 : '';
         const item = document.createElement('div');
         item.className = 'sim-item' + (sameSim(current, s) ? ' selected' : '') + (vigente ? '' : ' stale');
+        item.__sim = s;
         const mid = s.match_id ? `#${s.match_id}` : 'sin id';
         const aName = (info && info.team_a) || s.equipo_a;
         const bName = (info && info.team_b) || s.equipo_b;
         item.innerHTML = `
       <div class="si-top">
         <div class="si-teams">
-          ${teamLogo(aName, info && info.team_a_tag, info && info.team_a_id)}
+          ${teamLogo(aName, info && info.team_a_tag, info && info.team_a_id, '', prio)}
           <span class="si-vs">VS</span>
-          ${teamLogo(bName, info && info.team_b_tag, info && info.team_b_id)}
+          ${teamLogo(bName, info && info.team_b_tag, info && info.team_b_id, '', prio)}
         </div>
         ${resBadge}
       </div>
@@ -567,8 +631,9 @@ function renderSimList() {
         item.querySelector('[data-act="del"]').addEventListener('click', e => { e.stopPropagation(); borrarSim(s); });
         simList.appendChild(item);
     });
+    simList.setAttribute('aria-busy', 'false');
     VCT.aplicarMedia(simList);
-    cargarSeriesLista();
+    observarSeriesVisibles();
 }
 
 // Asigna/corrige el match_id (id de vlr.gg) de un enfrentamiento ya preparado.
@@ -709,6 +774,7 @@ async function selectSim(s) {
     liveBulk = null;
     ultimaSerie = null;   // el MOTOR/la serie se recalculan para este enfrentamiento
     liveSection.style.display = 'block';
+    encolarSerie(s);      // la fila seleccionada siempre cuenta, esté o no a la vista
 
     liveTeamALabel.textContent = s.equipo_a;
     renderSimHead(s, simIsStale(s));

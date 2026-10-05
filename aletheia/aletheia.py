@@ -83,6 +83,7 @@ import time
 from flask import Blueprint, jsonify, request
 import requests
 
+from backend.cache import ttl_cache
 from backend.conexion import fetch_all
 
 aletheia_bp = Blueprint('aletheia', __name__)
@@ -246,7 +247,9 @@ def _error_response(err):
 # (`prob_intervalo`) usa los RD locales del servicio: en modo DB va `None`.
 _BANDA_ALTA = 0.62
 _BANDA_MEDIA = 0.55
-_TABLA_MAPAS_TTL = 300
+# El JOIN de `_tabla_mapas_equipo` (2.821 filas, ~0.7 s) solo cambia con un ETL:
+# TTL alto (30 min) para no pagarlo en cada worker/visita.
+_TABLA_MAPAS_TTL = 1800
 _tabla_mapas = {'ts': 0.0, 'data': {}}
 
 
@@ -300,8 +303,9 @@ def _tabla_mapas_equipo():
     """{equipo: {mapa: {n, winrate}}} desde `maps`+`matches`+`teams` (Turso).
 
     Réplica de `core.analisis.tabla_mapas_equipo` (shrinkage k=10) para el
-    `analisis_mapa`; se cachea en memoria 5 min. Ante un fallo devuelve la
-    copia previa (o `{}`): el análisis es decorativo, no tumba la lectura.
+    `analisis_mapa`; se cachea en memoria 30 min (`_TABLA_MAPAS_TTL`). Ante un
+    fallo devuelve la copia previa (o `{}`): el análisis es decorativo, no
+    tumba la lectura.
     """
     ahora = time.time()
     if _tabla_mapas['data'] and (ahora - _tabla_mapas['ts']) < _TABLA_MAPAS_TTL:
@@ -409,8 +413,13 @@ def _map_pool_db():
     return [str(f.get('map_name')).strip() for f in filas if f.get('map_name')]
 
 
+@ttl_cache(30)
 def _version_vigente_db():
-    """(modelo_version, fecha) más reciente de la caché, o (None, None)."""
+    """(modelo_version, fecha) más reciente de la caché, o (None, None).
+
+    Memo de 30 s (con single-flight de `ttl_cache`): es una consulta de 1-2
+    queries por request y solo cambia si entran predicciones nuevas.
+    """
     filas = fetch_all(
         'SELECT modelo_version, MAX(updated_at) AS fecha FROM predicciones_mapa '
         'GROUP BY modelo_version ORDER BY fecha DESC LIMIT 1'
@@ -424,6 +433,18 @@ def _version_vigente_db():
     if filas:
         return filas[0].get('modelo_version'), filas[0].get('fecha')
     return None, None
+
+
+# Columnas de `predicciones_mapa` que la web realmente usa (se proyectan en
+# explícito en vez de `SELECT *`). `marcadores_json`/`economia_json` SÍ se
+# necesitan: alimentan los bloques DISTRIBUCIÓN DE MARCADOR y ECONOMÍA; si el
+# servicio añade columnas, estas no viajan sin querer.
+_COLS_PREDICCIONES = (
+    'id, match_id, equipo_a, equipo_b, equipo_a_id, equipo_b_id, map_name, '
+    'lado_inicial_a, prob_victoria_a, prob_victoria_b, prob_overtime, n_sim, '
+    'con_datos, modelo_version, marcadores_json, economia_json, esc_peso, '
+    'created_at, updated_at'
+)
 
 
 def _predicciones_db(match_id=None, equipo_a=None, equipo_b=None,
@@ -447,7 +468,7 @@ def _predicciones_db(match_id=None, equipo_a=None, equipo_b=None,
         params.append(lado)
     where = ('WHERE ' + ' AND '.join(condiciones)) if condiciones else ''
     return fetch_all(
-        f'SELECT * FROM predicciones_mapa {where} '
+        f'SELECT {_COLS_PREDICCIONES} FROM predicciones_mapa {where} '
         'ORDER BY map_name, lado_inicial_a',
         params,
     )

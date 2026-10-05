@@ -36,6 +36,7 @@
 
     function currentId() {
         const seg = window.location.pathname.toLowerCase();
+        if (seg === '/' || seg === '') return 'aletheia';   // F13: EN VIVO en la raíz
         if (seg.includes('/aletheia_preparar')) return 'preparar';
         if (seg.includes('/aletheia')) return 'aletheia';
         if (seg.includes('/partidos') || seg.includes('/equipos') ||

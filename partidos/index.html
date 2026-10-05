@@ -8,10 +8,16 @@
   <link rel="icon" type="image/svg+xml" href="../comun/ALETHEIA_ico.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../comun/theme.css" />
-  <link rel="stylesheet" href="../header/header.css" />
-  <link rel="stylesheet" href="../comun/vct.css" />
+  <!-- Fuentes sin bloquear el render: se precargan y se aplican de forma
+         asíncrona (media=print + onload). Hay fallback <noscript>. -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" />
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" />
+    <noscript>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" />
+    </noscript>
+  <link rel="stylesheet" href="../comun/theme.min.css?v=00289f60" />
+  <link rel="stylesheet" href="../header/header.min.css?v=85b76780" />
+  <link rel="stylesheet" href="../comun/vct.min.css?v=8495b33b" />
   <link rel="stylesheet" href="style.css" />
 </head>
 
@@ -60,9 +66,9 @@
     <div class="txt">CARGANDO...</div>
   </div>
 
-  <script src="../header/header.js"></script>
-  <script src="../header/header-nodes.js"></script>
-  <script src="../comun/vct.js"></script>
+  <script src="../header/header.min.js?v=91585dc7"></script>
+  <script src="../header/header-nodes.min.js?v=f9bae8c1"></script>
+  <script src="../comun/vct.min.js?v=5664aa0f"></script>
   <script src="script.js"></script>
 </body>
 

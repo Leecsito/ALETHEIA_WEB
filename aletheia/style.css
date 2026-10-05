@@ -3135,6 +3135,13 @@ main {
     min-height: 14px;
 }
 
+/* El estado de la lista puede pasar de 1 a 2 líneas (avisos); reserva su
+   altura para que ese cambio de texto no mueva el layout (CLS). */
+#simListStatus {
+    min-height: 28px;
+    padding: 0 20px 10px;
+}
+
 .live-status.ok {
     color: var(--txt-2);
 }
@@ -3562,6 +3569,16 @@ main {
     letter-spacing: 1px;
     cursor: pointer;
     transition: all .15s;
+    white-space: nowrap;
+}
+
+/* El conteo vive en un span de ancho fijo: pasar de (0) a (24) no cambia el
+   ancho del chip ni desplaza el resto del header (CLS). */
+.sim-filter-count {
+    display: inline-block;
+    min-width: 3.4em;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
 }
 
 .sim-filter-btn:hover {
@@ -3597,6 +3614,9 @@ main {
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
     gap: 8px;
     padding: 14px 20px;
+    /* Reserva la altura típica de la lista cargada para que su inserción tras
+       el fetch no empuje el contenido de abajo (CLS). */
+    min-height: 260px;
 }
 
 .sim-item {
@@ -3605,6 +3625,34 @@ main {
     padding: 10px 14px;
     cursor: pointer;
     transition: all .15s;
+}
+
+/* Placeholder de carga con la altura de una tarjeta real. */
+.sim-skeleton {
+    min-height: 118px;
+    border-style: dashed;
+    border-color: color-mix(in srgb, var(--border) 70%, transparent);
+    background: linear-gradient(100deg,
+            color-mix(in srgb, var(--panel) 40%, transparent) 30%,
+            color-mix(in srgb, var(--panel) 75%, transparent) 50%,
+            color-mix(in srgb, var(--panel) 40%, transparent) 70%);
+    background-size: 220% 100%;
+    cursor: default;
+    animation: sim-skel 1.3s ease-in-out infinite;
+}
+
+.sim-skeleton:hover {
+    border-color: color-mix(in srgb, var(--border) 70%, transparent);
+    background-color: transparent;
+}
+
+@keyframes sim-skel {
+    0% { background-position: 120% 0; }
+    100% { background-position: -120% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sim-skeleton { animation: none; }
 }
 
 .sim-item:hover {

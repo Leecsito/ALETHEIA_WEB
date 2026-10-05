@@ -8,12 +8,20 @@
     <link rel="icon" type="image/svg+xml" href="../comun/ALETHEIA_ico.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
-        rel="stylesheet" />
-    <link rel="stylesheet" href="../comun/theme.css" />
-    <link rel="stylesheet" href="../header/header.css" />
-    <link rel="stylesheet" href="../comun/vct.css" />
-    <link rel="stylesheet" href="style.css" />
+    <!-- Fuentes sin bloquear el render: se precargan y se aplican de forma
+         asíncrona (media=print + onload). Hay fallback <noscript>. -->
+    <link rel="preload" as="style"
+        href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" />
+    <link rel="stylesheet" media="print" onload="this.media='all'"
+        href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" />
+    <noscript>
+        <link rel="stylesheet"
+            href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" />
+    </noscript>
+    <link rel="stylesheet" href="../comun/theme.min.css?v=00289f60" />
+    <link rel="stylesheet" href="../header/header.min.css?v=85b76780" />
+    <link rel="stylesheet" href="../comun/vct.min.css?v=8495b33b" />
+    <link rel="stylesheet" href="style.min.css?v=c6a1589b" />
 </head>
 
 <body>
@@ -30,11 +38,11 @@
                 <div class="lb-title">SIMULACIONES PREPARADAS</div>
                 <div class="sim-filter" id="simFilter" role="group" aria-label="Filtrar por resultado real">
                     <button class="sim-filter-btn active" data-filtro="todas" data-label="TODAS"
-                        title="Todas las simulaciones preparadas">TODAS</button>
+                        title="Todas las simulaciones preparadas">TODAS <span class="sim-filter-count">(0)</span></button>
                     <button class="sim-filter-btn" data-filtro="pendiente" data-label="SIN RESULTADO"
-                        title="Partidos que todavía no tienen resultado real en la DB">SIN RESULTADO</button>
+                        title="Partidos que todavía no tienen resultado real en la DB">SIN RESULTADO <span class="sim-filter-count">(0)</span></button>
                     <button class="sim-filter-btn" data-filtro="resultado" data-label="CON RESULTADO"
-                        title="Partidos ya jugados: se pueden revisar en COMPARACIÓN">CON RESULTADO</button>
+                        title="Partidos ya jugados: se pueden revisar en COMPARACIÓN">CON RESULTADO <span class="sim-filter-count">(0)</span></button>
                 </div>
                 <label class="lb-stale-toggle">
                     <input type="checkbox" id="chkShowStale" /> mostrar no vigentes
@@ -42,8 +50,16 @@
                 <div class="mb-spacer"></div>
                 <button class="btn-refresh" id="btnRefreshSims">↻ ACTUALIZAR</button>
             </div>
-            <div class="sim-list" id="simList"></div>
-            <div class="live-status" id="simListStatus"></div>
+            <!-- Skeleton: reserva la altura de la lista antes del fetch (CLS). -->
+            <div class="sim-list" id="simList" aria-busy="true">
+                <div class="sim-item sim-skeleton"></div>
+                <div class="sim-item sim-skeleton"></div>
+                <div class="sim-item sim-skeleton"></div>
+                <div class="sim-item sim-skeleton"></div>
+                <div class="sim-item sim-skeleton"></div>
+                <div class="sim-item sim-skeleton"></div>
+            </div>
+            <div class="live-status" id="simListStatus">Cargando simulaciones...</div>
         </section>
 
         <!-- ── DETALLE EN VIVO ── -->
@@ -129,10 +145,10 @@
 
     </main>
 
-    <script src="../header/header.js"></script>
-    <script src="../header/header-nodes.js"></script>
-    <script src="../comun/vct.js"></script>
-    <script src="script.js"></script>
+    <script src="../header/header.min.js?v=91585dc7"></script>
+    <script src="../header/header-nodes.min.js?v=f9bae8c1"></script>
+    <script src="../comun/vct.min.js?v=5664aa0f"></script>
+    <script src="script.min.js?v=d98bb249"></script>
 </body>
 
 </html>

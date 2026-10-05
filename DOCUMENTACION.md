@@ -84,16 +84,26 @@ ALETHEIA/
 │   ├── index.html, style.css, script.js
 ├── media/                    # Enlaces a logos/fotos de vlr.gg (no es una página)
 │   ├── media.py              # Blueprint (/api/media/equipo/<id>, /api/media/jugador/<id>, /api/media/evento/<id>, /api/media/estado)
-│   └── urls_cache.json       # Caché de enlaces + color medio (solo texto, ignorada por git)
+│   └── urls_cache.json       # Caché de enlaces + color medio (solo texto, VERSIONADA desde F5
+│                             #   para sobrevivir a los deploys; solo se ignora el .tmp)
 ├── multimedia/               # Archivos multimedia / imágenes
 │   ├── agents/               # 28 retratos de agentes (.avif, locales, usados en scoreboards)
 │   └── maps/                 # 13 imágenes de mapas (.avif, locales, usadas en tabs de mapa)
+├── tools/                    # Utilidades de build/mantenimiento (no se sirven)
+│   └── minificar_assets.py   # F12: genera los *.min.css/*.min.js y reescribe los
+│                             #   HTML con ?v=<hash> (los fuentes se conservan)
 ├── ALETHEIA_ico.svg          # Logo/ico original del proyecto (raíz; se copia a comun/ para servir)
 ├── wsgi.py                   # Punto de entrada WSGI para Gunicorn
 ├── render.yaml               # Configuración de despliegue en Render
 ├── requirements.txt          # Dependencias de Python
 └── DOCUMENTACION.md          # Este documento de arquitectura
 ```
+
+> **Assets minificados/versionados (F12/F7):** las páginas enlazan las versiones
+> `*.min.css`/`*.min.js` con `?v=<hash8>` (`comun/theme.min.css`, `comun/vct.min.*`,
+> `header/header*.min.*`, `aletheia/style.min.css`, `aletheia/script.min.js`). Las
+> fuentes siguen en el repo y el desarrollo se hace sobre ellas; para regenerar
+> las versiones minificadas y los hashes de los HTML: `py tools/minificar_assets.py`.
 
 > **Módulos eliminados:** `predecir/` (Predictor Monte Carlo clásico) y `exportar/`
 > (exportación CSV/Excel/JSON/ZIP) fueron **borrados** junto con sus blueprints
@@ -118,6 +128,12 @@ Por eso los **blueprints de lectura** (`partidos`, `equipos`, `jugadores`, `even
 - `@ttl_cache(120)` (`backend/cache.py`): cachea en memoria el resultado de cada SQL
   (clave = SQL + parámetros) por **120 s**. Los datos solo cambian al correr un ETL.
   Efecto medido: detalle de equipo pasó de ~6.5 s a ~2.5 s en frío y ~0.2 s en caliente.
+  Desde **F9** incluye **single-flight**: 8 peticiones concurrentes de la misma clave
+  ejecutan **una** consulta y las demás esperan su resultado (verificado con test).
+- **F9 (módulo `aletheia`)**: `_tabla_mapas_equipo` (JOIN de ~0,7 s) con TTL
+  **1800 s**; `_version_vigente_db` memoizada 30 s (`@ttl_cache`, single-flight); y
+  `_predicciones_db` proyecta columnas explícitas en vez de `SELECT *` (los JSON
+  `marcadores_json`/`economia_json` se conservan porque alimentan la UI).
 - **gzip**: `flask-compress` comprime JSON/HTML/CSS/JS (un JSON de 24 KB baja a ~3 KB).
 
 ### Variables de Entorno Soporta:
@@ -536,10 +552,10 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
 - `GET /api/media/jugador/<player_id>`: igual para la foto (`player-header`, fallback `og:image`).
 - `GET /api/media/evento/<event_id>`: igual para el logo del evento (`event-header`, fallback `og:image`).
 - `GET /api/media/evento?nombre=<torneo>`: para torneos **sin `event_id`** (p. ej. *Valorant Champions 2026*). Busca el evento en `vlr.gg/search/?q=...`, extrae el primer resultado `/search/r/event/<id>/idx` + su thumbnail, y lo cachea por nombre (`n:<slug>`) y por id.
-- `GET /api/media/meta?equipos=1,2&jugadores=4&eventos=2766&nombres=A|B`: devuelve **enlaces ya resueltos** (`u`) + color (`c`) + flag oscuro (`d`), sin disparar descargas. El frontend apunta los `<img>` **directo al CDN** con esto (cero requests de imagen a este backend) y pinta colores/watermarks. Si la entidad no tiene imagen en origen devuelve `{"miss": true}` y el frontend se queda con siglas/iniciales **sin pedir la imagen** (nada de iconos rotos). Los enlaces cacheados sin color lo calculan en un hilo de fondo (`cc` evita reintentos infinitos).
+- `GET /api/media/meta?equipos=1,2&jugadores=4&eventos=2766&nombres=A|B`: devuelve **enlaces ya resueltos** (`u`) + color (`c`) + flag oscuro (`d`), sin bloquear la carga. El frontend apunta los `<img>` **directo al CDN** con esto (cero requests de imagen a este backend) y pinta colores/watermarks. Si la entidad no tiene imagen en origen devuelve `{"miss": true}` y el frontend se queda con siglas/iniciales **sin pedir la imagen** (nada de iconos rotos). **F5:** si la entidad no tiene entrada, responde `{"pending": true}` y la resuelve en un **hilo de fondo** (mismo semáforo 2 + throttle; `_resoluciones_en_proceso` evita duplicados): la primera carga no paga el scrape de 1,6 s; el frontend **reintenta solo las pendientes** (F6) y recibe el enlace o `miss`. Los enlaces cacheados sin color lo calculan también en un hilo de fondo (`cc` evita reintentos infinitos).
 - **Sin imagen real:** vlr.gg usa rutas relativas para placeholders (`/img/base/ph/sil.png` en jugadores, `/img/vlr/tmp/vlr.png` en equipos) y `og:image` genérica (`vlr/card.png`); `_extraer_imagen` las descarta (solo acepta `http(s)`), así que se marcan como miss y el fallback es el monograma/iniciales. Verificado con precarga completa: equipos 70/79 (9 sin logo real), eventos 16/16, jugadores 524/688 (164 sin foto), **0 errores**.
 - `GET /api/media/estado`: conteo de resueltas / sin imagen / con color por tipo y tamaño del JSON.
-- **Reglas:** máximo 2 resoluciones simultáneas y 0.3 s entre requests a vlr.gg; los "sin imagen"/404 reales se marcan y no se reintentan por 24 h; los errores de red **no** se marcan (se reintenta en la próxima visita); el redirect se cachea 7 días en el navegador. Al guardar `urls_cache.json` se hace **merge por `t`** con lo que haya en disco, para que el servidor y `cachear_media.py` (u otro worker) nunca se pisen.
+- **Reglas:** máximo 2 resoluciones simultáneas y 0.3 s entre requests a vlr.gg; los "sin imagen"/404 reales se marcan y no se reintentan por 24 h; los errores de red **no** se marcan (se reintenta en la próxima visita); el redirect se cachea 7 días en el navegador. Al guardar `urls_cache.json` se hace **merge por `t`** con lo que haya en disco, para que el servidor y `cachear_media.py` (u otro worker) nunca se pisen. **F5:** `urls_cache.json` se versiona (deja de estar gitignored) para que los enlaces sobrevivan a los deploys de Render; solo se ignora `urls_cache.json.tmp`.
 - **Precarga opcional de enlaces y colores:** `python cachear_media.py --equipos|--jugadores|--eventos|--todo [--limite N] [--delay S]` (1 s entre resoluciones por defecto; también calcula el color medio de equipos/eventos). No es necesario: el sitio resuelve enlaces solo al mostrar cada imagen.
 - El frontend usa el fallback si la imagen falla: **lozenge con siglas** del equipo (colores por hash del nombre) y **avatar con iniciales** del jugador. `VCT.imgError` reintenta una vez a los 3 s y luego quita la imagen.
 
@@ -549,7 +565,7 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
 
 1. **Rutas Estáticas de Navegación (`backend/app.py`):**
    Las subcarpetas registradas en `FRONTEND_FOLDERS = ['inicio', 'tablas', 'visualizar', 'aletheia', 'aletheia_preparar', 'header', 'partidos', 'equipos', 'jugadores', 'eventos']` se sirven automáticamente en la raíz HTTP:
-   - `/` → **redirige a `/aletheia/`**
+   - `/` → **sirve EN VIVO directo** (200, sin redirección desde F13; es la misma página que `/aletheia/`)
    - `/inicio/` o `/inicio/index.html` → **CARGAR DATOS** (ETL: subir Excel, INIT DB, log)
    - `/tablas/` o `/tablas/index.html`
    - `/visualizar/` o `/visualizar/index.html`
@@ -559,10 +575,15 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
    - `/header/` o `/header/index.html` (demo del componente header)
    - `comun/theme.css`, `header/header.css`, `header/header.js`, `header/header-nodes.js`,
      `comun/vct.css` y `comun/vct.js` se sirven como estáticos desde la raíz (`static_url_path=''`).
-   - **Ojo con los archivos sueltos en la raíz:** Werkzeug responde **308** a rutas de un
-     solo segmento (`/ALETHEIA_ico.svg` → `/ALETHEIA_ico.svg/`) porque compiten con la
-     regla `/<folder>/`, y termina en 404. Por eso el ico/logo se sirve desde
-     `comun/ALETHEIA_ico.svg` y todos los `<link rel="icon">`/`<img>` apuntan ahí.
+     Desde F7/F12 los HTML enlazan sus versiones `.min.*` con `?v=<hash>` (ver arriba).
+   - **Caché de estáticos (F7, `_cache_estaticos`):** CSS/JS con `?v=` → `max-age=31536000,
+     immutable`; CSS/JS sin `?v=` → 300 s; imágenes/fuentes (`.avif`, `.svg`, `.png`…) →
+     30 días sin `immutable`; el HTML (`<folder>/` y `/`) sale `no-cache, max-age=0`.
+   - **Sin 308 de barra final (F13):** la regla `/<folder>/` usa `strict_slashes=False`, así
+     `/aletheia`, `/partidos`, etc. responden 200 directo (antes Werkzeug hacía 308).
+   - **Ojo con los archivos sueltos en la raíz:** un archivo de un solo segmento
+     (`/ALETHEIA_ico.svg`) puede caer en la ruta de carpeta/404. Por eso el ico/logo se
+     sirve desde `comun/ALETHEIA_ico.svg` y todos los `<link rel="icon">`/`<img>` apuntan ahí.
    > Los módulos `predecir/` y `exportar/` **ya no existen**.
    > `comun/` **no es una página**: es el core visual compartido (CSS `v-*` + objeto JS global `VCT`); no está en `FRONTEND_FOLDERS` y no debe registrarse blueprint.
 
@@ -663,8 +684,14 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         (acierto del favorito **ESC** por mapa: **verde ≥67%, naranja ≥50%, rojo <50%**),
         `P(MAPA)` (P media **ESC** al ganador real por mapa, color por banda; es
         calibración, **no** la tasa de acierto) y puntos coloreados por mapa
-        (`title` = mapa + P real + favorito/upset). Las series se piden una vez
-        por `match_id` (cola secuencial en memoria, máx 30) y la píldora se
+        (`title` = mapa + P real + favorito/upset). **Cola de `/serie` (F1):** la P
+        de serie se pide una vez por `match_id` y solo para las filas **visibles**
+        (IntersectionObserver con 200 px de margen) o la **seleccionada**, nunca
+        para `stale`/sin resultado; como máximo **2 peticiones en vuelo**
+        (`SERIE_CONCURRENCY`), el resultado queda cacheado por sesión
+        (`simSerie` + `serieIntentados`) y **no se relanza en cada
+        `renderSimList`**. Al hacer scroll se encolan las nuevas visibles. Antes
+        se lanzaban hasta 12 POST secuenciales en cada render. La píldora se
         actualiza en sitio. `prob_victoria_a` (ESC) ya **no** se usa como MOTOR;
         los `match_id` sin resultado no piden serie y no muestran MOTOR. El acento
         está en el **acierto** (✓/✕ y `MAPAS`): en
@@ -847,11 +874,13 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         toda la página (`body > .ae-nodes-bg`), visible (opacidad .9), con nodos
         verdes `--g2`/`--g3` (halo suave para que se lean sobre el fondo negro),
         líneas tenues y encendido verde al pasar el cursor.
-      - Nodos 40–90 en el header y **60–300 en el fondo** (`W/8`, tope 300)
-        según el ancho; **rebotan en los bordes reflejando también
+      - Nodos 40–90 en el header y **32–110 en el fondo** (`W/14`, tope 110
+        desde F2) según el ancho; **rebotan en los bordes reflejando también
         la deriva base** (nunca se quedan pegados a la pared); líneas solo entre
         nodos cercanos con opacidad decreciente; repulsión suave con easing en
-        el header y en el fondo.
+        el header y en el fondo. **F2:** el fondo usa `dprMax 1.25` (menos
+        píxeles por frame) y los enlaces se calculan con **rejilla espacial**
+        (no O(n²)); `.ae-nodes-bg` lleva `contain: strict`.
      - `requestAnimationFrame`, `devicePixelRatio`, `ResizeObserver`, pausa
        con la pestaña oculta y `prefers-reduced-motion` (nodos estáticos).
      - Se puede desactivar el fondo por página con `window.AE_NODES_BG = false;`
@@ -905,17 +934,18 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
    - `eventos/`: lista de torneos (con `event_id` cuando existe) y detalle con
      tabs PARTIDOS / EQUIPOS / MAPAS / AGENTES.
    - **Imágenes (PNG transparentes, sin caja):** los lozenges de equipo,
-     avatares y logos de evento usan `VCT.lozenge(name, tag, cls, teamId)`,
-     `VCT.avatar(playerId, nickname, cls)` y `VCT.eventLogo(eventId, name, cls)`.
-     Cada uno pinta **dos** `<img>` (misma URL, un solo request): el `*-fg`
-     nítido con `object-fit: contain` (nunca recorta) y el `*-bg` **igual pero
-     difuminado** (`blur(8-12px)`, escala leve) como glow de fondo. No hay
-     cuadros ni bordes. Los logos oscuros se ven por dos vías: un
-     `drop-shadow` blanco sutil en el `*-fg` (siempre) y, cuando se conoce el
-     color, la clase `on-light` (halo claro + glow invertido `invert(1)`).
-     Fallback: siglas/iniciales/monograma (`VCT.imgError`). Los agentes
-     (`VCT.agentIcon`) y mapas (`VCT.mapIcon`) usan los `.avif` locales de
-     `multimedia/agents/` y `multimedia/maps/`.
+     avatares y logos de evento usan `VCT.lozenge(name, tag, cls, teamId, prioridad)`,
+     `VCT.avatar(playerId, nickname, cls, prioridad)` y
+     `VCT.eventLogo(eventId, name, cls, prioridad)`. Desde **F8** cada uno pinta
+     **una sola** `<img>` (`*-fg`) con `object-fit: contain` (nunca recorta); el
+     glow se hace por CSS con `drop-shadow` (antes eran dos `<img>` fg+bg con la
+     misma URL: se pagaba el doble de decodificación/pintura). No hay cuadros ni
+     bordes. Los logos oscuros se ven por el `drop-shadow` blanco sutil y, cuando
+     se conoce el color, la clase `on-light` (halo claro reforzado).
+     `prioridad=true` (primera fila de EN VIVO) usa `loading="eager"` +
+     `fetchpriority="high"` para el LCP. Fallback: siglas/iniciales/monograma
+     (`VCT.imgError`). Los agentes (`VCT.agentIcon`) y mapas (`VCT.mapIcon`)
+     usan los `.avif` locales de `multimedia/agents/` y `multimedia/maps/`.
      Tamaños: lozenge 42px (`md` 60, `big` 104), avatar 56px (`sm` 36, `big` 148),
      elogo 64px (`big` 116), agente 34×44px, mapa 40×23px (`big` 96×54).
    - **Carga de imágenes (1 solo request por render):** los `<img>` se pintan sin
@@ -923,10 +953,12 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      (y `data-fallback="/api/media/..."`). `VCT.aplicarMedia(root)` pide
      `/api/media/meta` una vez por render y:
      1. apunta los `<img>` **directo al CDN** (`u`) — cero requests de imagen al backend;
-     2. para lo no resuelto usa el `data-fallback` (redirect que resuelve bajo demanda);
+     2. si el backend responde `pending` (F5) **no** dispara el fallback: espera
+        el resultado del hilo de fondo y reintenta solo esa entidad;
      3. setea `--c` (color medio), `--c2` (rival, para el gradiente VS), `on-light`
         cuando el logo es oscuro, y `--wm-a`/`--wm-b` (watermarks);
-     4. reintenta hasta 3 veces (3.5 s) lo que aún no está resuelto.
+     4. reintenta hasta 3 veces (3.5 s) **solo las entidades pendientes** (F6),
+        nunca el lote completo.
      Nunca se usan colores aleatorios. Los `matchRow` llevan
      `data-c-equipo`/`data-c-equipo2` para el degradado A→B de cada VS.
    - **`tablas/` no se toca**: sigue siendo el explorador raw; los componentes
@@ -940,6 +972,13 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
 - **Servidor WSGI:** `gunicorn wsgi:app`
 - **Comando de Build:** `pip install -r requirements.txt`
 - **Archivo de Configuración:** `render.yaml` declara el servicio web Python con las variables de entorno necesarias para la conexión remota a Turso.
+- **Assets del deploy (F12):** los `*.min.css`/`*.min.js` se **versionan** para que
+  Render los sirva con el HTML ya enlazado; si se editan los fuentes, correr
+  `py tools/minificar_assets.py` **antes** de commitear (regenera min + `?v=` de
+  todos los HTML). No hace falta en el build de Render (no hay paso de build JS).
+- **Caché de media persistente (F5):** `media/urls_cache.json` se versiona (ya no
+  está en `.gitignore`): así el FS efímero de Render arranca con enlaces resueltos
+  y sin scraping de vlr.gg en la primera visita.
 - **Variables de Entorno:**
   - `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN`: conexión a la base de datos Turso.
     El **token no se versiona**: `render.yaml` lo declara con `sync: false`, se
@@ -979,8 +1018,8 @@ Al recibir una nueva tarea o solicitud de cambio:
 5. **Recuerda los módulos eliminados**: `predecir/` y `exportar/` no existen; no los referencies.
 6. **Prioriza siempre la tasa de acierto** (principio rector, §1): ningún cambio debe degradar la precisión de las predicciones. Si un cambio la empeora, descártalo o revíerte.
 7. **Para vistas nuevas del estilo VCT**: reutiliza el core `comun/` (`vct.css` + `vct.js`) en lugar de duplicar estilos o helpers; agrega los endpoints en el blueprint del componente correspondiente y registra la carpeta en `FRONTEND_FOLDERS` si es una página nueva. No modifiques `tablas/` para esto.
-8. **Imágenes de equipos/jugadores/eventos**: usa siempre `/api/media/meta` (enlaces+color, 1 request por render) y los endpoints `/api/media/...` como fallback (resuelven y redirigen al CDN; **no se descargan ni guardan imágenes**). No scrapees Google Images ni guardes archivos de imagen; la caché es solo de enlaces/color (`media/urls_cache.json`). Si necesitas precargar enlaces, usa `cachear_media.py` con `--delay`.
-9. **Rendimiento**: para blueprints de solo lectura usa `fetch_all` (`backend.conexion`) + `@ttl_cache(120)` (`backend.cache`); no abras conexiones nuevas por consulta ni paralelices consultas a Turso (el cliente serializa). Mantén gzip (`flask-compress`) y paginación en listados grandes.
+8. **Imágenes de equipos/jugadores/eventos**: usa siempre `/api/media/meta` (enlaces+color, 1 request por render) y los endpoints `/api/media/...` como fallback (resuelven y redirigen al CDN; **no se descargan ni guardan imágenes**). `meta` marca `pending` y resuelve en 2º plano: **no** fuerces el fallback ni scrapees en la ruta crítica. No scrapees Google Images ni guardes archivos de imagen; la caché es solo de enlaces/color (`media/urls_cache.json`, **versionado**: no lo vuelvas a ignorar). Si necesitas precargar enlaces, usa `cachear_media.py` con `--delay`.
+9. **Rendimiento**: para blueprints de solo lectura usa `fetch_all` (`backend.conexion`) + `@ttl_cache(120)` (`backend.cache`, con single-flight); no abras conexiones nuevas por consulta ni paralelices consultas a Turso (el cliente serializa). Mantén gzip (`flask-compress`) y paginación en listados grandes. Para cambiar CSS/JS propios, edita los fuentes y corre `py tools/minificar_assets.py` (regenera `.min` + `?v=`); el HTML propio va `no-cache` y los estáticos con hash van `immutable`.
 10. **Enlaces internos**: navega siempre con `/componente/` (o relativo `../componente/`, `./`), **nunca** `/componente/index.html` (regla de estética de URL, §5.1). Al añadir una vista dentro de una página, usa query params (`?team=`, `?match=`…), no nuevas carpetas con `index.html` en el enlace.
 11. **Diseño y colores**: la paleta y los tokens viven SOLO en `comun/theme.css`; no introduzcas colores literales en HTML/CSS (usa variables). El contenido/chrome va en negros, grises y blancos neutros: el verde no se usa en bordes ni superficies, solo en la escala semántica de datos (verde/naranja/amarillo/rojo) y en la animación de nodos. Toda página nueva debe enlazar `comun/theme.css` antes de sus CSS y `header/header-nodes.js` después de `header.js`. El ico/logo se referencia desde `comun/ALETHEIA_ico.svg` (los archivos sueltos de la raíz dan 308/404 en Flask).
 
@@ -988,6 +1027,66 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-05 — Auditoría de rendimiento web (F1–F14, sin F10).** Correcciones de
+  carga/estabilidad sin tocar lógica de predicción, modelos, ratings ni resultados.
+  - **F1 (`aletheia/script.js`) cola de `/serie`:** `cargarSeriesLista()` (hasta 12
+    POST secuenciales por render) se sustituye por `encolarSerie()` +
+    `bombearSerie()` + `procesarSerie()`: solo filas **visibles**
+    (`IntersectionObserver`, 200 px de margen) o la **seleccionada**, nunca
+    `stale`/sin resultado; **concurrencia 2** (`SERIE_CONCURRENCY`); resultado
+    cacheado por sesión (`simSerie` + `serieIntentados`) y sin relanzar en cada
+    `renderSimList`; generación (`serieGen`) descarta respuestas de una carga
+    vieja. Verificado en Node con las funciones reales extraídas del fuente
+    (10 filas ⇒ 10 llamadas, máx. 2 en vuelo, 0 repetidas en 2 renders).
+  - **F2 (`header/header-nodes.js`, `comun/theme.css`):** fondo con 32–110 nodos
+    (antes 60–300), `dprMax 1.25` (antes 2,5) y enlaces por **rejilla espacial**
+    (fin del O(n²) por frame); `contain: strict` en `.ae-nodes-bg`. Se conserva
+    el aspecto y `prefers-reduced-motion`; el header mantiene su densidad.
+  - **F3 (CLS):** skeleton de 6 tarjetas en `#simList` + `min-height` en
+    `.sim-list`; `#simListStatus` con altura reservada; conteo de chips en
+    `<span class="sim-filter-count">` de ancho fijo (ya no reescribe el texto
+    del botón).
+  - **F4 (LCP):** logos de la primera fila con `loading="eager"`
+    `fetchpriority="high"` (`VCT.lozenge(..., prioridad)`); el resto lazy con
+    `width`/`height`; `aplicarMedia` ya no espera a fijar `src` para el fallback.
+  - **F5 (`media/media.py`, `.gitignore`):** `media/urls_cache.json` se
+    **versiona** (solo se ignora el `.tmp`) para sobrevivir a los deploys;
+    `/api/media/meta` responde `{"pending": true}` y resuelve en hilo de fondo
+    (semáforo/throttle, `_resoluciones_en_proceso`), sin scrape en la ruta
+    crítica.
+  - **F6 (`comun/vct.js`):** `aplicarMedia` reintenta **solo las entidades
+    pendientes** (no el lote completo) y no dispara el fallback cuando el
+    backend marca `pending`.
+  - **F7 (`backend/app.py`, HTML):** CSS/JS con `?v=<hash>` (generado por
+    `tools/minificar_assets.py`) → `max-age=31536000, immutable`; imágenes/fuentes
+    → 30 días; HTML `no-cache`.
+  - **F8 (`comun/vct.js`, `comun/vct.css`):** **una sola `<img>`** por logo/foto
+    (glow por `drop-shadow` CSS) en vez de fg+bg; se evita la doble
+    decodificación/pintura. El CDN de owcdn no ofrece redimensionado verificado:
+    no se inventaron parámetros de tamaño.
+  - **F9 (`backend/cache.py`, `aletheia/aletheia.py`):** single-flight en
+    `@ttl_cache` (8 hilos concurrentes ⇒ 1 query); `_TABLA_MAPAS_TTL` 300→1800 s;
+    `_version_vigente_db` memoizada 30 s; `_predicciones_db` proyecta columnas
+    explícitas (los JSON de marcadores/economía sí se usan y se conservan).
+  - **F11 (HTML):** Google Fonts con `rel="preload"` + `media="print"
+    onload="this.media='all'"` y fallback `<noscript>` en las 10 páginas.
+  - **F12 (`tools/minificar_assets.py`, assets `.min`):** versiones minificadas
+    de los CSS/JS propios (fuentes intactas) y versionado automático de los HTML.
+  - **F13 (`backend/app.py`, `header/header.js`):** `/` sirve EN VIVO directo
+    (sin 302) y `strict_slashes=False` elimina los 308 de `/aletheia`,
+    `/partidos`…; el nav marca EN VIVO en `/`.
+  - **F14 (`.gitignore`, `inicio/inicio.py`):** pandas/numpy con import perezoso
+    (`_LazyPandas`; al arrancar la app ya no se cargan); `.gitignore` ordenado
+    (`AUDITORIA_*.md`, `*.db-journal`, `.tmp` de media).
+  - **F10 fuera de alcance** (workers/plan de Render y Cloudflare): no se tocó
+    `render.yaml` ni configuración de borde; queda reportado.
+  - **Medición local (`py wsgi.py`):** `/predicciones?match_id=754732`
+    2,17/1,29 s → 1,58/1,04 s; `/prediccion` 1,06 → 0,84 s; `/modelo_version`
+    caliente 1,24 → 0,003 s; `/` 302→200 y `/aletheia` 308→200; CSS/JS con
+    `?v=` e `immutable`; `.min` + gzip: `style.css` 10,5 → 8,8 KB, `script.js`
+    27,8 → 27,4 KB. No se pudieron medir CLS/LCP/TBT reales ni el conteo de
+    `/serie` en navegador (sin headless disponible). Turso añade varianza
+    (±1–2 s en conexión fría por hilo): los endpoints calientes son los fiables.
 - **2026-10-05 — Contrato ESC por (mapa, lado) + MOTOR en la raíz (adaptación web).**
   - **Backend ALETHEIA_PREDICT (no tocado aquí):** `mapas[].prob_victoria_a` pasó
     a ser la capa **ESC por (mapa, lado)** (anclada al Glicko) y varía por mapa y

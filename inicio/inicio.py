@@ -5,7 +5,6 @@ Para agregar más rutas ETL, editá solo este archivo.
 """
 
 from flask import Blueprint, request, jsonify
-import pandas as pd
 import os
 import re
 import io
@@ -18,6 +17,25 @@ try:
     from backend.conexion import get_conn, release_conn
 except ImportError:
     from conexion import get_conn, release_conn
+
+
+class _LazyPandas:
+    """Importa pandas/numpy la primera vez que el ETL lo usa (F14).
+
+    El arranque de la web (y el cold start de Render) no paga el import de
+    pandas cuando nadie va a cargar Excel; el ETL funciona igual porque el
+    acceso (`pd.isna`, `pd.read_excel`, ...) dispara el import real.
+    """
+    _mod = None
+
+    def __getattr__(self, name):
+        if _LazyPandas._mod is None:
+            import pandas
+            _LazyPandas._mod = pandas
+        return getattr(_LazyPandas._mod, name)
+
+
+pd = _LazyPandas()
 
 inicio_bp = Blueprint('inicio', __name__)
 

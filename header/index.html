@@ -8,10 +8,15 @@
     <link rel="icon" type="image/svg+xml" href="../comun/ALETHEIA_ico.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap"
-        rel="stylesheet" />
-    <link rel="stylesheet" href="../comun/theme.css" />
-    <link rel="stylesheet" href="header.css" />
+    <!-- Fuentes sin bloquear el render: se precargan y se aplican de forma
+         asíncrona (media=print + onload). Hay fallback <noscript>. -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" />
+    <link rel="stylesheet" media="print" onload="this.media='all'" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" />
+    <noscript>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&display=swap" />
+    </noscript>
+    <link rel="stylesheet" href="../comun/theme.min.css?v=00289f60" />
+    <link rel="stylesheet" href="header.min.css?v=85b76780" />
     <style>
         body {
             margin: 0;
@@ -40,9 +45,9 @@
 <body>
     <!-- Componente HEADER reutilizable (página de demostración).
          Para usarlo en cualquier componente:
-             <link rel="stylesheet" href="../header/header.css" />
+             <link rel="stylesheet" href="header.min.css?v=85b76780" />
              <div id="aeHeaderMount"></div>
-             <script src="../header/header.js"></script>
+             <script src="header.min.js?v=91585dc7"></script>
          El script inyecta el marcado y marca el nav activo según la ruta. -->
     <div id="aeHeaderMount"></div>
 
@@ -55,8 +60,8 @@
         <pre><code>window.AE_HEADER = { hidden: ['datos'] };</code></pre>
     </main>
 
-    <script src="header.js"></script>
-    <script src="header-nodes.js"></script>
+    <script src="header.min.js?v=91585dc7"></script>
+    <script src="header-nodes.min.js?v=f9bae8c1"></script>
 </body>
 
 </html>

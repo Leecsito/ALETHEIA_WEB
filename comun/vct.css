@@ -366,20 +366,8 @@ main.v-main.wide { max-width: 1500px; }
     letter-spacing: 1px;
 }
 
-/* El mismo logo, difuminado, hace de glow detrás (los PNG son transparentes). */
-.v-lozenge-bg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    filter: blur(8px) saturate(1.35);
-    opacity: .5;
-    transform: scale(1.05);
-    z-index: 0;
-    pointer-events: none;
-}
-
+/* Una sola <img>: el glow se hace con drop-shadows (sin duplicar la imagen,
+   así se paga una sola decodificación/pintura por logo). */
 .v-lozenge-fg {
     position: absolute;
     inset: 4%;
@@ -387,10 +375,12 @@ main.v-main.wide { max-width: 1500px; }
     height: 92%;
     object-fit: contain;
     z-index: 1;
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c, var(--g3)) 45%, transparent))
+            drop-shadow(0 0 14px color-mix(in srgb, var(--c, var(--txt-1)) 22%, transparent))
+            drop-shadow(0 0 5px color-mix(in srgb, var(--txt-1) 25%, transparent));
 }
 
 /* Halo claro: los logos negros se ven incluso antes de conocer su color. */
-.v-lozenge-fg,
 .v-elogo-fg {
     filter: drop-shadow(0 0 5px color-mix(in srgb, var(--txt-1) 25%, transparent)) drop-shadow(0 0 16px color-mix(in srgb, var(--txt-1) 10%, transparent));
 }
@@ -398,9 +388,9 @@ main.v-main.wide { max-width: 1500px; }
 .v-lozenge.has-img { background: transparent; }
 .v-lozenge.has-img .v-lozenge-txt { display: none; }
 
-/* Logo oscuro: halo claro + glow invertido para que se vea */
+/* Logo oscuro: halo claro más intenso para que se vea */
 .v-lozenge.on-light { background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--txt-1) 50%, transparent), transparent 76%); }
-.v-lozenge.on-light .v-lozenge-bg { filter: blur(9px) invert(1) brightness(1.5); opacity: .45; }
+.v-lozenge.on-light .v-lozenge-fg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--txt-1) 70%, transparent)) drop-shadow(0 0 18px color-mix(in srgb, var(--txt-1) 40%, transparent)); }
 .v-lozenge.on-light .v-lozenge-txt { color: var(--bg); }
 
 .v-lozenge-txt { position: relative; z-index: 1; }
@@ -427,19 +417,6 @@ main.v-main.wide { max-width: 1500px; }
     font-size: 42px;
 }
 
-.v-elogo-bg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    filter: blur(9px) saturate(1.35);
-    opacity: .5;
-    transform: scale(1.06);
-    z-index: 0;
-    pointer-events: none;
-}
-
 .v-elogo-fg {
     position: absolute;
     inset: 3%;
@@ -453,7 +430,7 @@ main.v-main.wide { max-width: 1500px; }
 .v-elogo.has-img .v-elogo-txt { display: none; }
 
 .v-elogo.on-light { background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--txt-1) 50%, transparent), transparent 76%); }
-.v-elogo.on-light .v-elogo-bg { filter: blur(10px) invert(1) brightness(1.5); opacity: .45; }
+.v-elogo.on-light .v-elogo-fg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--txt-1) 70%, transparent)) drop-shadow(0 0 18px color-mix(in srgb, var(--txt-1) 40%, transparent)); }
 .v-elogo.on-light .v-elogo-txt { color: var(--bg); }
 
 .v-elogo-txt { position: relative; z-index: 1; }
@@ -478,19 +455,7 @@ main.v-main.wide { max-width: 1500px; }
 .v-avatar.sm { width: 36px; height: 36px; font-size: 13px; }
 .v-avatar.big { width: 148px; height: 148px; font-size: 48px; }
 
-/* La misma foto difuminada rellena el fondo; la foto nítida va contain (sin recorte). */
-.v-avatar-bg {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    filter: blur(12px);
-    opacity: .55;
-    transform: scale(1.18);
-    z-index: 0;
-}
-
+/* Una sola foto (contain, sin recorte); sin duplicar para decodificar menos. */
 .v-avatar-fg {
     position: absolute;
     inset: 0;

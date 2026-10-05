@@ -68,22 +68,27 @@ const VCT = (() => {
         return (s.slice(0, 3) || '?').toUpperCase();
     }
 
-    /* Logo de equipo: PNG transparente SIN caja; el mismo logo difuminado
-       hace de glow de fondo. Si el logo es oscuro, el glow se invierte. */
-    function lozenge(name, tag, cls = '', teamId = null) {
+    /* Atributos de carga de una sola <img>. La primera fila (prioridad=true)
+       se carga eager + fetchpriority=high para adelantar el LCP. */
+    const attrsImg = (prioridad) => prioridad
+        ? ' loading="eager" fetchpriority="high" decoding="async"'
+        : ' loading="lazy" decoding="async"';
+
+    /* Logo de equipo: PNG transparente SIN caja. Una sola <img>; el glow se
+       hace por CSS (drop-shadow), lo que evita duplicar decodificación/pintura.
+       Si el logo es oscuro, la clase on-light refuerza el halo. */
+    function lozenge(name, tag, cls = '', teamId = null, prioridad = false) {
         const img = teamId
-            ? `<img class="v-lozenge-bg" data-media="equipo:${teamId}" data-fallback="/api/media/equipo/${teamId}" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">` +
-              `<img class="v-lozenge-fg" data-media="equipo:${teamId}" data-fallback="/api/media/equipo/${teamId}" alt="${esc(name || '')}" loading="lazy" decoding="async" onload="this.style.visibility='';this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            ? `<img class="v-lozenge-fg" data-media="equipo:${teamId}" data-fallback="/api/media/equipo/${teamId}" alt="${esc(name || '')}" width="68" height="68"${attrsImg(prioridad)} onload="this.style.visibility='';this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         const attr = teamId ? ` data-c-equipo="${teamId}"` : '';
         return `<span class="v-lozenge ${cls}"${attr}>${img}<span class="v-lozenge-txt">${esc((tag || initials(name)).slice(0, 4))}</span></span>`;
     }
 
-    /* Foto de jugador: contain (sin recorte) + la misma foto difuminada detrás. */
-    function avatar(playerId, nickname, cls = '') {
+    /* Foto de jugador: contain (sin recorte). Una sola <img> (glow por CSS). */
+    function avatar(playerId, nickname, cls = '', prioridad = false) {
         const img = playerId
-            ? `<img class="v-avatar-bg" data-media="jugador:${playerId}" data-fallback="/api/media/jugador/${playerId}" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">` +
-              `<img class="v-avatar-fg" data-media="jugador:${playerId}" data-fallback="/api/media/jugador/${playerId}" alt="${esc(nickname || '')}" loading="lazy" decoding="async" onload="this.style.visibility='';this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            ? `<img class="v-avatar-fg" data-media="jugador:${playerId}" data-fallback="/api/media/jugador/${playerId}" alt="${esc(nickname || '')}"${attrsImg(prioridad)} onload="this.style.visibility='';this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         return `<span class="v-avatar ${cls}">${img}<span class="v-avatar-txt">${esc(initials(nickname))}</span></span>`;
     }
@@ -95,7 +100,7 @@ const VCT = (() => {
         return words.slice(0, 3).map(w => w[0]).join('').toUpperCase();
     }
 
-    function eventLogo(eventId, name, cls = '') {
+    function eventLogo(eventId, name, cls = '', prioridad = false) {
         const key = eventId ? `evento:${eventId}` : `nombre:${name || ''}`;
         const fallback = eventId
             ? `/api/media/evento/${eventId}`
@@ -104,8 +109,7 @@ const VCT = (() => {
             ? ` data-c-evento="${eventId}"`
             : ` data-c-nombre="${esc(name || '')}"`;
         const img = (eventId || name)
-            ? `<img class="v-elogo-bg" data-media="${esc(key)}" data-fallback="${fallback}" alt="" aria-hidden="true" loading="lazy" decoding="async" onerror="this.remove()">` +
-              `<img class="v-elogo-fg" data-media="${esc(key)}" data-fallback="${fallback}" alt="${esc(name || '')}" loading="lazy" decoding="async" onload="this.style.visibility='';this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
+            ? `<img class="v-elogo-fg" data-media="${esc(key)}" data-fallback="${fallback}" alt="${esc(name || '')}"${attrsImg(prioridad)} onload="this.style.visibility='';this.parentNode.classList.add('has-img')" onerror="VCT.imgError(this)">`
             : '';
         return `<span class="v-elogo ${cls}"${attr}>${img}<span class="v-elogo-txt">${esc(initialsEvent(name))}</span></span>`;
     }
@@ -113,16 +117,20 @@ const VCT = (() => {
     const slug = texto => String(texto || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
     /* Un solo request por render: apunta las imágenes al CDN (si ya están
-       resueltas), aplica colores medios y watermarks. Lo no resuelto se pide
-       por el endpoint de redirect (que resuelve bajo demanda) y se reintenta. */
-    async function aplicarMedia(root = document, intento = 0) {
+       resueltas), aplica colores medios y watermarks. Los reintentos piden
+       SOLO las entidades que quedaron pendientes (no el lote completo) y lo
+       que el backend marca `pending` se resuelve en 2º plano (sin scrape en
+       la ruta crítica: no se dispara el fallback). */
+    async function aplicarMedia(root = document, intento = 0, solo = null) {
         const parse = k => { const i = String(k).indexOf(':'); return [k.slice(0, i), k.slice(i + 1)]; };
+        const clave = (t, v) => `${t}:${v}`;
+        const enSolo = (t, v) => !solo || solo.has(clave(t, v));
         const equipos = new Set(), jugadores = new Set(), eventos = new Set(), nombres = new Set();
         const imgs = [...root.querySelectorAll('img[data-media]')];
         const wms = [...root.querySelectorAll('[data-wm],[data-wm2]')];
 
         const sumar = (t, v) => {
-            if (!v) return;
+            if (!v || !enSolo(t, v)) return;
             if (t === 'equipo') equipos.add(v);
             else if (t === 'jugador') jugadores.add(v);
             else if (t === 'evento') eventos.add(v);
@@ -149,59 +157,86 @@ const VCT = (() => {
             : t === 'evento' ? d.eventos?.[v]
             : d.nombres?.[slug(v)];
 
-        let pendientes = 0;
+        const pendientes = new Set();
+        const marcar = (t, v) => pendientes.add(clave(t, v));
         try {
             const d = await api(`/media/meta?${qs}`);
 
             imgs.forEach(img => {
                 const [t, v] = parse(img.dataset.media);
+                if (!enSolo(t, v)) return;
                 const info = lookup(d, t, v);
                 if (info?.u) {
                     if (img.src !== info.u) img.src = info.u;   // directo al CDN
+                } else if (info?.pending) {
+                    // El backend la resuelve en 2º plano: se reintenta luego
+                    // sin lanzar el scrape sincrónico en la ruta crítica.
+                    marcar(t, v);
                 } else if (info?.miss) {
                     // Sin imagen en origen (ya verificado): nos quedamos con las iniciales.
                 } else {
-                    // Sin enlace aún: solo el foreground usa el fallback (evita duplicar).
-                    const esBg = img.classList.contains('v-lozenge-bg')
-                        || img.classList.contains('v-elogo-bg')
-                        || img.classList.contains('v-avatar-bg');
-                    if (!img.src && !esBg) img.src = img.dataset.fallback;
-                    pendientes++;
+                    // Sin entrada aún: fallback bajo demanda y reintento filtrado.
+                    if (!img.src) img.src = img.dataset.fallback;
+                    marcar(t, v);
                 }
             });
 
-            const aplicar = (el, info) => {
-                if (!info) return false;
+            const aplicar = (el, info, t, v) => {
+                if (!info) { marcar(t, v); return; }
                 if (info.c) el.style.setProperty('--c', info.c);
                 el.classList.toggle('on-light', !!info.d);
-                return true;
+                if (info.pending) marcar(t, v);
             };
-            root.querySelectorAll('[data-c-equipo]').forEach(el => { if (!aplicar(el, d.equipos?.[el.dataset.cEquipo])) pendientes++; });
-            root.querySelectorAll('[data-c-equipo2]').forEach(el => {
-                const info = d.equipos?.[el.dataset.cEquipo2];
-                if (info?.c) el.style.setProperty('--c2', info.c);
-                else pendientes++;
+            root.querySelectorAll('[data-c-equipo]').forEach(el => {
+                const v = el.dataset.cEquipo;
+                if (enSolo('equipo', v)) aplicar(el, d.equipos?.[v], 'equipo', v);
             });
-            root.querySelectorAll('[data-c-evento]').forEach(el => { if (!aplicar(el, d.eventos?.[el.dataset.cEvento])) pendientes++; });
-            root.querySelectorAll('[data-c-nombre]').forEach(el => { if (!aplicar(el, d.nombres?.[slug(el.dataset.cNombre)])) pendientes++; });
+            root.querySelectorAll('[data-c-equipo2]').forEach(el => {
+                const v = el.dataset.cEquipo2;
+                if (!enSolo('equipo', v)) return;
+                const info = d.equipos?.[v];
+                if (info?.c) el.style.setProperty('--c2', info.c);
+                else marcar('equipo', v);
+            });
+            root.querySelectorAll('[data-c-evento]').forEach(el => {
+                const v = el.dataset.cEvento;
+                if (enSolo('evento', v)) aplicar(el, d.eventos?.[v], 'evento', v);
+            });
+            root.querySelectorAll('[data-c-nombre]').forEach(el => {
+                const v = el.dataset.cNombre;
+                if (enSolo('nombre', v)) aplicar(el, d.nombres?.[slug(v)], 'nombre', v);
+            });
 
             wms.forEach(el => {
                 if (el.dataset.wm) {
                     const [t, v] = parse(el.dataset.wm);
+                    if (!enSolo(t, v)) return;
                     const info = lookup(d, t, v);
                     if (info?.u) el.style.setProperty('--wm-a', `url('${info.u}')`);
+                    else if (info?.pending || !info) marcar(t, v);
                 }
                 if (el.dataset.wm2) {
                     const [t, v] = parse(el.dataset.wm2);
+                    if (!enSolo(t, v)) return;
                     const info = lookup(d, t, v);
                     if (info?.u) el.style.setProperty('--wm-b', `url('${info.u}')`);
+                    else if (info?.pending || !info) marcar(t, v);
                 }
             });
         } catch (e) {
             console.error(e);
-            pendientes++;
+            if (solo) {
+                solo.forEach(k => pendientes.add(k));
+            } else {
+                equipos.forEach(v => pendientes.add(clave('equipo', v)));
+                jugadores.forEach(v => pendientes.add(clave('jugador', v)));
+                eventos.forEach(v => pendientes.add(clave('evento', v)));
+                nombres.forEach(v => pendientes.add(clave('nombre', v)));
+            }
         }
-        if (pendientes && intento < 3) setTimeout(() => aplicarMedia(root, intento + 1), 3500);
+        if (pendientes.size && intento < 3) {
+            setTimeout(() => aplicarMedia(root, intento + 1, pendientes), 3500);
+        }
     }
 
     const AGENT_SLUG_ALIAS = { pheonix: 'phoenix' };

@@ -19,6 +19,9 @@ Reglas:
 - Resolución serializada de a 2 como máximo y con 0.3 s entre requests (cortesía).
 - Los "sin imagen" (404 real o sin logo/foto) se marcan y no se reintentan por 24 h.
 - Los timeouts/errores de red NO se marcan: se reintenta en la próxima visita.
+- `/api/media/meta` no bloquea: lo no cacheado se responde `{"pending": true}` y se
+  resuelve en un hilo de fondo (F5); `media/urls_cache.json` se versiona para
+  sobrevivir a los deploys.
 """
 
 import os
@@ -59,7 +62,9 @@ SEM = threading.BoundedSemaphore(2)
 RATE_LOCK = threading.Lock()
 CACHE_LOCK = threading.Lock()
 COLOR_LOCK = threading.Lock()
+RESOL_LOCK = threading.Lock()
 _colores_en_proceso = set()
+_resoluciones_en_proceso = set()
 _last_request = [0.0]
 
 
@@ -161,16 +166,18 @@ def media_evento_nombre():
 
 @media_bp.route('/api/media/meta', methods=['GET'])
 def media_meta():
-    """URLs resueltas + color medio, sin disparar descargas.
+    """URLs resueltas + color medio, sin bloquear la carga.
 
     Con esto el frontend apunta los <img> directo al CDN (cero requests a este
-    backend por imagen) y pinta colores/watermarks. Lo no resuelto se pide por
-    el endpoint de redirect (`/api/media/...`) que sí resuelve bajo demanda.
+    backend por imagen) y pinta colores/watermarks. Lo resuelto va tal cual; lo
+    que no tiene entrada se marca `{"pending": true}` y se resuelve en un hilo
+    de fondo (sin scrape sincrónico en la ruta crítica); el frontend reintenta
+    y recibe el enlace o `miss`. Los "sin imagen" vigentes se marcan `miss`.
     """
     def parse_ids(raw):
         return [x.strip() for x in (raw or '').split(',') if x.strip()]
 
-    def info(kind, eid):
+    def info(kind, eid, nombre=None):
         e = _entrada(kind, eid)
         if e and e.get('u'):
             # Enlace resuelto pero sin color (o con versión vieja): recalcular en 2º plano.
@@ -179,7 +186,11 @@ def media_meta():
             return {'u': e['u'], 'c': e.get('c'), 'd': bool(e.get('d'))}
         if _miss_vigente(e):
             return {'miss': True}          # sin imagen conocida: no pedirla de nuevo
-        return None
+        # Sin entrada: resolver en 2º plano (con el semáforo y el throttle
+        # globales) y avisar `pending`. Así el fallback /api/media/<id> no se
+        # dispara durante la carga de la página.
+        _lanzar_resolucion(kind, eid, nombre)
+        return {'pending': True}
 
     def collect(kind, ids):
         out = {}
@@ -194,7 +205,7 @@ def media_meta():
     eventos = collect('eventos', parse_ids(request.args.get('eventos')))
     nombres = {}
     for nombre in [n for n in (request.args.get('nombres') or '').split('|') if n.strip()]:
-        v = info('eventos', 'n:' + _slug(nombre))
+        v = info('eventos', 'n:' + _slug(nombre), nombre=nombre)
         if v:
             nombres[_slug(nombre)] = v
     return jsonify({
@@ -370,6 +381,39 @@ def _lanzar_color(kind, eid, url):
             return
         _colores_en_proceso.add(clave)
     threading.Thread(target=_completar_color, args=(kind, eid, url), daemon=True).start()
+
+
+def _resolver_en_bg(kind, eid, nombre=None):
+    """Resuelve una entidad sin entrada en 2º plano (no bloquea la respuesta).
+
+    Usa los mismos `ensure()`/`ensure_evento_nombre()` (semáforo 2 + throttle)
+    y deja el resultado en `urls_cache.json`: `u`, o `miss` si no hay imagen.
+    """
+    try:
+        if kind == 'equipos':
+            ensure('equipos', eid, f'https://www.vlr.gg/team/{eid}')
+        elif kind == 'jugadores':
+            ensure('jugadores', eid, f'https://www.vlr.gg/player/{eid}')
+        elif kind == 'eventos':
+            if nombre:
+                ensure_evento_nombre(nombre)
+            else:
+                ensure('eventos', eid, f'https://www.vlr.gg/event/{eid}')
+    except Exception:
+        pass
+    finally:
+        with RESOL_LOCK:
+            _resoluciones_en_proceso.discard((kind, str(eid)))
+
+
+def _lanzar_resolucion(kind, eid, nombre=None):
+    """Arranca una resolución de fondo por entidad (sin duplicar la misma)."""
+    clave = (kind, str(eid))
+    with RESOL_LOCK:
+        if clave in _resoluciones_en_proceso:
+            return
+        _resoluciones_en_proceso.add(clave)
+    threading.Thread(target=_resolver_en_bg, args=(kind, str(eid), nombre), daemon=True).start()
 
 
 def ensure(kind, eid, page_url):

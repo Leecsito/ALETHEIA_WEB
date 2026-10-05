@@ -1,11 +1,13 @@
 # Python
 __pycache__/
 *.pyc
+*.pyo
 
 # Base de Datos (SQLite)
-# Ignoramos los archivos temporales de la base de datos
+# Archivos temporales de la base de datos
 *.db-shm
 *.db-wal
+*.db-journal
 
 # Ignoramos la base de datos si quieres que cada uno use la suya
 # Si quieres que el proyecto ya suba con datos, comenta la siguiente línea:
@@ -18,5 +20,11 @@ venv/
 # Variables de entorno locales
 .env
 
-# Caché de enlaces de imágenes (logos/fotos desde vlr.gg; solo texto, regenerable)
-media/urls_cache.json
+# Caché de enlaces de imágenes (logos/fotos desde vlr.gg; solo texto).
+# F5: se VERSIONA a propósito para que sobreviva a los deploys/restarts de
+# Render (el FS es efímero) y la primera carga no scrapee vlr.gg. Solo se
+# ignora el temporal de escritura atómica.
+media/urls_cache.json.tmp
+
+# Informes de auditoría (no deben viajar al deploy; el servidor los bloquea)
+AUDITORIA_*.md
