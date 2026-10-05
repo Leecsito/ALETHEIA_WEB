@@ -937,11 +937,12 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      avatares y logos de evento usan `VCT.lozenge(name, tag, cls, teamId, prioridad)`,
      `VCT.avatar(playerId, nickname, cls, prioridad)` y
      `VCT.eventLogo(eventId, name, cls, prioridad)`. Desde **F8** cada uno pinta
-     **una sola** `<img>` (`*-fg`) con `object-fit: contain` (nunca recorta); el
-     glow se hace por CSS con `drop-shadow` (antes eran dos `<img>` fg+bg con la
-     misma URL: se pagaba el doble de decodificación/pintura). No hay cuadros ni
-     bordes. Los logos oscuros se ven por el `drop-shadow` blanco sutil y, cuando
-     se conoce el color, la clase `on-light` (halo claro reforzado).
+     **una sola** `<img>` (`*-fg`) con `object-fit: contain` (nunca recorta;
+     antes eran dos `<img>` fg+bg con la misma URL: doble decodificación/pintura).
+     **Sin glow ni fondos**: el logo se muestra tal cual (los halos amplificaban
+     los logos brillantes y hacían "caja" en los oscuros). No hay cuadros ni
+     bordes; la clase `on-light` ya solo se usa para el color del texto de
+     respaldo.
      `prioridad=true` (primera fila de EN VIVO) usa `loading="eager"` +
      `fetchpriority="high"` para el LCP. Fallback: siglas/iniciales/monograma
      (`VCT.imgError`). Los agentes (`VCT.agentIcon`) y mapas (`VCT.mapIcon`)
@@ -1041,10 +1042,13 @@ Al recibir una nueva tarea o solicitud de cambio:
   - **Logos de equipos más grandes en el bloque VS** (`'big'`, 104px; 80px en
     móvil) y **nombre secundario** (`v-team-name` 28 → 15px, 13px en móvil):
     el protagonismo es del logo, no del nombre.
-  - **Halo de logos oscuros (F8 bis):** `on-light` ya no usa el fondo radial
-    (se recortaba como "caja" cuadrada alrededor del logo, sobre todo en T1,
-    FUT o DRX); ahora el halo sigue la **silueta** con `drop-shadow` blanco +
-    glow del color del equipo (`--c`), sin fondo. Mismo cambio en `.v-elogo`.
+  - **Logos sin glow (F8 bis, decisión final):** se eliminaron los halos
+    (`drop-shadow`) de `.v-lozenge-fg`/`.v-elogo-fg` y sus variantes
+    `on-light`. El glow del color del equipo amplificaba los logos ya
+    brillantes (XI LAI cian, VCT naranja/rojo/púrpura) y el halo blanco se
+    recortaba como "caja" en logos oscuros (T1, FUT, DRX, EMEA). Ahora el
+    logo se muestra **tal cual**, sin filtros: consistente para cualquier
+    diseño/color. Verificado con capturas headless (equipos, eventos y partido).
   - **Watermark del banner:** la regla genérica vuelve a 2 capas (`--wm-a`/`--wm-b`)
     para no mover el watermark de equipos/jugadores/eventos; el orden evento/A/B
     vive solo en `.v-banner.vs::after` (partidos). Verificado con capturas
@@ -1083,9 +1087,9 @@ Al recibir una nueva tarea o solicitud de cambio:
     `tools/minificar_assets.py`) → `max-age=31536000, immutable`; imágenes/fuentes
     → 30 días; HTML `no-cache`.
   - **F8 (`comun/vct.js`, `comun/vct.css`):** **una sola `<img>`** por logo/foto
-    (glow por `drop-shadow` CSS) en vez de fg+bg; se evita la doble
-    decodificación/pintura. El CDN de owcdn no ofrece redimensionado verificado:
-    no se inventaron parámetros de tamaño.
+    en vez de fg+bg (sin glow al final: el logo se muestra tal cual); se evita
+    la doble decodificación/pintura. El CDN de owcdn no ofrece redimensionado
+    verificado: no se inventaron parámetros de tamaño.
   - **F9 (`backend/cache.py`, `aletheia/aletheia.py`):** single-flight en
     `@ttl_cache` (8 hilos concurrentes ⇒ 1 query); `_TABLA_MAPAS_TTL` 300→1800 s;
     `_version_vigente_db` memoizada 30 s; `_predicciones_db` proyecta columnas

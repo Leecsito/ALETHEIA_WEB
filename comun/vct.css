@@ -366,8 +366,9 @@ main.v-main.wide { max-width: 1500px; }
     letter-spacing: 1px;
 }
 
-/* Una sola <img>: el glow se hace con drop-shadows (sin duplicar la imagen,
-   así se paga una sola decodificación/pintura por logo). */
+/* Una sola <img>, sin glow: el logo se muestra tal cual. Los halos
+   (de color o blancos) ensuciaban los diseños ya brillantes y hacían
+   parecer sucios a los demás; sin filtro todos se ven limpios. */
 .v-lozenge-fg {
     position: absolute;
     inset: 4%;
@@ -375,27 +376,20 @@ main.v-main.wide { max-width: 1500px; }
     height: 92%;
     object-fit: contain;
     z-index: 1;
-    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c, var(--g3)) 45%, transparent))
-            drop-shadow(0 0 14px color-mix(in srgb, var(--c, var(--txt-1)) 22%, transparent))
-            drop-shadow(0 0 5px color-mix(in srgb, var(--txt-1) 25%, transparent));
 }
 
-/* Halo claro: los logos negros se ven incluso antes de conocer su color. */
+/* Sin halo: el logo del evento se muestra tal cual. */
 .v-elogo-fg {
-    filter: drop-shadow(0 0 5px color-mix(in srgb, var(--txt-1) 25%, transparent)) drop-shadow(0 0 16px color-mix(in srgb, var(--txt-1) 10%, transparent));
+    filter: none;
 }
 
 .v-lozenge.has-img { background: transparent; }
 .v-lozenge.has-img .v-lozenge-txt { display: none; }
 
-/* Logo oscuro: el halo sigue la silueta del logo (drop-shadow), sin fondo
-   radial: un radial grande se recorta como "caja" cuadrada alrededor. */
+/* Logo oscuro: sin fondo ni halo (el glow se veía sucio); el logo se muestra
+   tal cual sobre la superficie. */
 .v-lozenge.on-light { background: none; }
-.v-lozenge.on-light .v-lozenge-fg {
-    filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--txt-1) 95%, transparent))
-            drop-shadow(0 0 7px color-mix(in srgb, var(--txt-1) 70%, transparent))
-            drop-shadow(0 0 16px color-mix(in srgb, var(--c, var(--txt-1)) 40%, transparent));
-}
+.v-lozenge.on-light .v-lozenge-fg { filter: none; }
 .v-lozenge.on-light .v-lozenge-txt { color: var(--bg); }
 
 .v-lozenge-txt { position: relative; z-index: 1; }
@@ -435,11 +429,7 @@ main.v-main.wide { max-width: 1500px; }
 .v-elogo.has-img .v-elogo-txt { display: none; }
 
 .v-elogo.on-light { background: none; }
-.v-elogo.on-light .v-elogo-fg {
-    filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--txt-1) 95%, transparent))
-            drop-shadow(0 0 7px color-mix(in srgb, var(--txt-1) 70%, transparent))
-            drop-shadow(0 0 16px color-mix(in srgb, var(--c, var(--txt-1)) 40%, transparent));
-}
+.v-elogo.on-light .v-elogo-fg { filter: none; }
 .v-elogo.on-light .v-elogo-txt { color: var(--bg); }
 
 .v-elogo-txt { position: relative; z-index: 1; }
