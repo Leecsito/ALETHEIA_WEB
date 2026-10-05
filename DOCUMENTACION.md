@@ -1027,6 +1027,13 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-05 — Fix visual del detalle de PARTIDOS (post-auditoría).**
+  - `partidos/script.js`: el banner del partido pintaba el logo de `team_a` en
+    grande (`'big'`) junto al título del evento, mientras que el bloque VS pinta
+    ambos equipos a tamaño normal (de ahí la sensación de "logos desiguales").
+    Ahora el logo grande es el del **evento** (coherente con el título) y los dos
+    equipos quedan al mismo tamaño; si el partido no trae evento/torneo se
+    conserva el logo grande de `team_a`.
 - **2026-10-05 — Auditoría de rendimiento web (F1–F14, sin F10).** Correcciones de
   carga/estabilidad sin tocar lógica de predicción, modelos, ratings ni resultados.
   - **F1 (`aletheia/script.js`) cola de `/serie`:** `cargarSeriesLista()` (hasta 12

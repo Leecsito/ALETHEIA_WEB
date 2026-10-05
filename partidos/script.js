@@ -96,7 +96,9 @@ function pintarDetalle(d) {
         <a class="v-back" href="./">← VOLVER A PARTIDOS</a>
 
         <div class="v-banner vs" data-c-equipo="${p.team_a_id}" data-c-equipo2="${p.team_b_id}" data-wm="equipo:${p.team_a_id}" data-wm2="equipo:${p.team_b_id}">
-            ${VCT.lozenge(p.team_a, p.team_a_tag, 'big', p.team_a_id)}
+            ${(p.event_id || p.event_name || p.tournament)
+                ? VCT.eventLogo(p.event_id, titulo, 'big')
+                : VCT.lozenge(p.team_a, p.team_a_tag, 'big', p.team_a_id)}
             <div class="v-banner-main">
                 <h1>${VCT.esc(titulo)}</h1>
                 <div class="v-meta">
