@@ -198,24 +198,14 @@ function sameSim(a, b) {
     return a.equipo_a === b.equipo_a && a.equipo_b === b.equipo_b;
 }
 
-// Banda de confianza. Usa la que manda el backend (`confianza`) y, si no viene
-// (p. ej. las filas crudas de /predicciones no la incluyen), la deriva con la
-// misma regla conservadora que el motor: max(p, 1-p) >=0.62 alta, >=0.55 media.
-function confBand(p) {
+// Peso/confianza del ESC de una fila (`esc_peso`; si falta, `escenario_mapa.peso`).
+// Devuelve un número 0-1 o null; null no es error (la UI oculta la confianza).
+function escPeso(p) {
     if (!p) return null;
-    if (p.confianza) return String(p.confianza).toLowerCase();
-    const pa = Number(p.prob_victoria_a);
-    const pb = Number(p.prob_victoria_b);
-    if (isNaN(pa) && isNaN(pb)) return null;
-    const pmax = Math.max(isNaN(pa) ? 0 : pa, isNaN(pb) ? 0 : pb);
-    if (pmax >= 0.62) return 'alta';
-    if (pmax >= 0.55) return 'media';
-    return 'baja';
-}
-
-function confBadge(conf) {
-    if (!conf) return '';
-    return `<span class="conf-badge ${conf}"><span class="conf-dot"></span>${escapeHtml(conf)}</span>`;
+    const raw = (p.esc_peso != null) ? p.esc_peso
+        : ((p.escenario_mapa && p.escenario_mapa.peso != null) ? p.escenario_mapa.peso : null);
+    if (raw == null || raw === '' || isNaN(Number(raw))) return null;
+    return Number(raw);
 }
 
 // Escala verde / naranja / rojo para la probabilidad del resultado real
@@ -372,27 +362,45 @@ function seriePillHtml(mid, info) {
     }
     if (s && s.p_real != null) {
         const marca = Number(s.p_real) >= 0.5 ? '✓' : '✕';
-        const tt = `Serie: P del motor al ganador real = ${pct(s.p_real)} (motor ${pct(s.p_a)} / ${pct(s.p_b)}). ${marca === '✓' ? 'Era su favorito' : 'Upset de serie'}.`;
+        const tt = `Serie: P del motor (Glicko + temperatura) al ganador real = ${pct(s.p_real)} (motor ${pct(s.p_a)} / ${pct(s.p_b)}). ${marca === '✓' ? 'Era su favorito' : 'Upset de serie'}.`;
         return `<span class="si-pred-pill ${probBandClass(s.p_real)}" data-serie="${mid}" title="${tt}">SERIE ${pct(s.p_real)} ${marca}</span>`;
     }
     if (s && s.error) return '';
-    return `<span class="si-pred-pill dim" data-serie="${mid}" title="Calculando P(serie) del motor…">SERIE …</span>`;
+    return `<span class="si-pred-pill dim" data-serie="${mid}" title="Calculando P(serie) del motor (motor + temperatura)…">SERIE …</span>`;
 }
 
-// Resumen compacto "predicción (motor) vs realidad" de una fila de la lista.
-// Orden: MOTOR (P por mapa) · REAL (marcador de serie) · SERIE (P del ganador
-// real, color por banda) · MAPAS (acierto del favorito, color por tasa) ·
-// P(MAPA) (calibración media) · puntos por mapa.
+// MOTOR del enfrentamiento (P del motor Glicko, plana entre mapas y lados).
+// No se persiste por mapa: se obtiene de la raíz de POST /serie y por eso solo
+// se pinta cuando el /serie de la fila ya respondió. NUNCA se usa
+// `prob_victoria_a` (que es el ESC por mapa/lado) como MOTOR.
+function motorItemHtml(info, mid) {
+    const s = simSerie[mid];
+    if (s && s.p_motor_a != null) {
+        return `<span class="si-pred-item" data-motor="${mid}" title="P del MOTOR Glicko de ${escapeHtml((info && info.team_a) || 'A')} / ${escapeHtml((info && info.team_b) || 'B')}: una sola por enfrentamiento, plana entre mapas y lados; decide la serie.">MOTOR ${pct(s.p_motor_a)}/${pct(s.p_motor_b)}</span>`;
+    }
+    // Ya respondió /serie (sin motor, p. ej. caché DB) o falló: se oculta.
+    if (s && !s.cargando) return '';
+    // Partido pendiente: la lista no pide /serie (solo se calcula con pool y
+    // resultado), así que no se inventa un MOTOR.
+    if (info && info.score_a == null) return '';
+    return `<span class="si-pred-item dim" data-motor="${mid}" title="La P del motor no se persiste por mapa; se lee de la raíz de /serie.">MOTOR …</span>`;
+}
+
+// Resumen compacto "predicción (ESC) vs realidad" de una fila de la lista.
+// Orden: MOTOR (P Glicko del enfrentamiento, de la raíz de /serie; plana) ·
+// REAL (marcador de serie) · SERIE (P del ganador real, color por banda) ·
+// MAPAS (acierto del favorito ESC, color por tasa) · P(MAPA) (calibración
+// media del ESC) · puntos por mapa.
 function simResumenHtml(info, res, mid) {
     if (!info) return '';
-    const motor = `<span class="si-pred-item" title="P(mapa) del motor para ${escapeHtml(info.team_a || 'A')} / ${escapeHtml(info.team_b || 'B')} (calibrada, plana entre mapas y lados)">MOTOR ${pct(info.p_a)}/${pct(info.p_a == null ? null : 1 - info.p_a)}</span>`;
+    const motor = motorItemHtml(info, mid);
     if (res !== true || info.score_a == null || info.score_b == null) {
         return `<div class="si-pred">${motor}</div>`;
     }
     const ganaA = Number(info.score_a) > Number(info.score_b);
     const ganaB = Number(info.score_b) > Number(info.score_a);
     const dots = (info.mapas || []).map(m => {
-        const p = m.p_ganador != null ? `P(real) ${pct(m.p_ganador)} · ${m.p_ganador >= 0.5 ? 'favorito ✓' : 'upset ✕'}` : 'sin predicción cacheada';
+        const p = m.p_ganador != null ? `P(real) ${pct(m.p_ganador)} · ${m.p_ganador >= 0.5 ? 'favorito ESC ✓' : 'upset ✕'}` : 'sin predicción cacheada';
         return `<span class="si-dot ${probBandClass(m.p_ganador)}" title="${escapeHtml(m.map_name || '')}: ${p}"></span>`;
     }).join('');
     const n = Number(info.n_mapas) || 0;
@@ -401,8 +409,8 @@ function simResumenHtml(info, res, mid) {
         ${motor}
         <span class="si-pred-item">REAL <b class="${ganaA ? 'gana' : ''}">${info.score_a}</b>-<b class="${ganaB ? 'gana' : ''}">${info.score_b}</b></span>
         ${seriePillHtml(mid, info)}
-        <span class="si-pred-pill ${probAccClass(acc)}" title="ACIERTO del favorito del motor por mapa (${info.favoritos_ok || 0}/${n}). Verde ≥67% · naranja ≥50% · rojo <50%.">MAPAS ${info.favoritos_ok || 0}/${n} (${pct(acc)})</span>
-        <span class="si-pred-item ${probBandClass(info.p_real_media)}" title="P(MAPA): probabilidad media que el motor dio al ganador real de cada mapa (calibración; no es la tasa de acierto).">P(MAPA) ${pct(info.p_real_media)}</span>
+        <span class="si-pred-pill ${probAccClass(acc)}" title="ACIERTO del favorito ESC por mapa (${info.favoritos_ok || 0}/${n}). Verde ≥67% · naranja ≥50% · rojo <50%.">MAPAS ${info.favoritos_ok || 0}/${n} (${pct(acc)})</span>
+        <span class="si-pred-item ${probBandClass(info.p_real_media)}" title="P(MAPA): probabilidad media que la predicción ESC (por mapa/lado) dio al ganador real de cada mapa (calibración; no es la tasa de acierto).">P(MAPA) ${pct(info.p_real_media)}</span>
         ${dots ? `<span class="si-dots">${dots}</span>` : ''}
       </div>`;
 }
@@ -459,8 +467,16 @@ async function cargarSeriesLista() {
                 const d = await res.json();
                 if (!d.ok) throw new Error(d.error || `HTTP ${res.status}`);
                 const ganaA = Number(info.score_a) > Number(info.score_b);
-                const pA = Number(d.prob_serie_a), pB = Number(d.prob_serie_b);
-                simSerie[s.match_id] = { p_a: pA, p_b: pB, p_real: ganaA ? pA : pB };
+                const num = v => (v == null || v === '' || isNaN(Number(v))) ? null : Number(v);
+                const pA = num(d.prob_serie_a);
+                const pB = num(d.prob_serie_b);
+                // El MOTOR (prob_motor_a/b) vive en la raíz de /serie (no se
+                // persiste por mapa); el ESC es prob_victoria_a de cada mapa.
+                simSerie[s.match_id] = {
+                    p_a: pA, p_b: pB, p_real: (pA != null) ? (ganaA ? pA : pB) : null,
+                    p_motor_a: num(d.prob_motor_a),
+                    p_motor_b: num(d.prob_motor_b),
+                };
             } catch (e) {
                 simSerie[s.match_id] = { error: true };
                 // Solo cuentan los fallos de red/timeout (el servicio respondió
@@ -477,12 +493,21 @@ async function cargarSeriesLista() {
     }
 }
 
-// Refresca en sitio las píldoras SERIE ya pintadas (sin re-render de la lista).
+// Refresca en sitio las píldoras SERIE y los MOTOR ya pintados (sin re-render
+// de la lista). El MOTOR llega en 2º plano (raíz de /serie), no de la caché por
+// mapa.
 function actualizarSeriesLista() {
     document.querySelectorAll('[data-serie]').forEach(el => {
         const mid = Number(el.dataset.serie);
         const info = simsInfo[mid];
         const html = seriePillHtml(mid, info);
+        if (!html) { el.remove(); return; }
+        el.outerHTML = html;
+    });
+    document.querySelectorAll('[data-motor]').forEach(el => {
+        const mid = Number(el.dataset.motor);
+        const info = simsInfo[mid] || {};
+        const html = motorItemHtml(info, mid);
         if (!html) { el.remove(); return; }
         el.outerHTML = html;
     });
@@ -682,6 +707,7 @@ async function selectSim(s) {
     matchMaps = [];
     liveMap = null;
     liveBulk = null;
+    ultimaSerie = null;   // el MOTOR/la serie se recalculan para este enfrentamiento
     liveSection.style.display = 'block';
 
     liveTeamALabel.textContent = s.equipo_a;
@@ -950,23 +976,20 @@ function renderLiveMapPicker() {
     liveMapPicker.innerHTML = '';
     availableMaps.forEach(m => {
         const row = liveBulk ? liveBulk[`${m}|${liveSide}`] : null;
-        // Motor = predicción calibrada (plana entre mapas y lados); hist =
-        // análisis histórico del mapa (contrato: "no es la predicción del motor").
-        const motorP = row ? row.prob_victoria_a : null;
+        // ESC = predicción servida para ESTE mapa y ESTE lado (varía por mapa y
+        // lado); hist = análisis histórico del mapa (contrato: no es la
+        // predicción). El MOTOR es plano y solo se muestra en la serie.
+        const escP = row ? row.prob_victoria_a : null;
+        const peso = escPeso(row);
         const am = row && row.analisis_mapa ? row.analisis_mapa : null;
         const histP = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
         const ot = row ? row.prob_overtime : null;
-        // Capa B (escenarios por mapa/lado): solo si el backend la devuelve.
-        const esc = (row && row.escenario_mapa && row.escenario_mapa.p_mapa != null)
-            ? Number(row.escenario_mapa.p_mapa) : null;
         const meta = row
-            ? `<span class="mqp-prob" title="Predicción del motor (calibrada, plana entre mapas y lados; el ESCENARIO añade la lectura por mapa/lado)">MOTOR ${pct(motorP)}</span>`
-            + `<span class="mqp-ot" title="P(overtime) del motor">OT ${pct(ot)}</span>`
-            + ((esc != null && !isNaN(esc))
-                ? `<span class="mqp-esc" title="Capa de escenarios por mapa/lado anclada al motor (no es el predictor)">ESC ${pct(esc)}</span>`
-                : '')
+            ? `<span class="mqp-prob" title="ESC: predicción por mapa/lado (la que se sirve; puede variar por mapa y lado). El MOTOR plano decide la serie.">ESC ${pct(escP)}</span>`
+            + (peso != null ? `<span class="mqp-esc" title="conf: peso/confianza del ESC en este mapa/lado (n_min/(n_min+10)); más alto = más historial lo respalda.">conf ${pct(peso)}</span>` : '')
+            + `<span class="mqp-ot" title="P(overtime) del Monte Carlo de este mapa">OT ${pct(ot)}</span>`
             + ((histP != null && !isNaN(histP))
-                ? `<span class="mqp-hist" title="Análisis histórico del mapa (no es la predicción del motor)">hist ${pct(histP)}</span>`
+                ? `<span class="mqp-hist" title="Análisis histórico del mapa (no es la predicción)">hist ${pct(histP)}</span>`
                 : '')
             : `<span class="mqp-prob">—</span>`;
         const tile = document.createElement('button');
@@ -1182,70 +1205,87 @@ function renderEconomia(p) {
     </div>`;
 }
 
+// MOTOR del enfrentamiento actual: P(A) Glicko plana, solo conocida si ya se
+// armó la serie (raíz de /serie). `null` si no aplica (esperando ARMAR SERIE,
+// otra simulación, o serie servida de la caché DB sin `prob_motor_a`).
+function motorActualA() {
+    if (!ultimaSerie || !current) return null;
+    const midOk = (ultimaSerie.match_id && current.match_id)
+        ? Number(ultimaSerie.match_id) === Number(current.match_id)
+        : true;
+    const eqOk = String(ultimaSerie.equipo_a || '').trim().toLowerCase()
+        === String(current.equipo_a || '').trim().toLowerCase()
+        && String(ultimaSerie.equipo_b || '').trim().toLowerCase()
+        === String(current.equipo_b || '').trim().toLowerCase();
+    if (!midOk || !eqOk) return null;
+    const v = ultimaSerie.prob_motor_a;
+    if (v == null || v === '' || isNaN(Number(v))) return null;
+    return Number(v);
+}
+
 function paintLiveDetail(p, modelVersion, vigente) {
     liveDetailTitle.textContent = `${(liveMap || '').toUpperCase()} · ${liveSide === 'attack' ? 'ATK' : 'DEF'}`;
-    const conf = confBand(p);
     const am = p && p.analisis_mapa ? p.analisis_mapa : null;
-    // Motor: P calibrada del backend (independiente del lado). Histórico: p_mapa_a
-    // del analisis_mapa, que el contrato marca como análisis, no predicción.
-    const motorA = (p && p.prob_victoria_a != null) ? Number(p.prob_victoria_a) : null;
-    const motorB = (p && p.prob_victoria_b != null)
+    // ESC: predicción por (mapa, lado) de la fila elegida (ya es el lado que se
+    // muestra). No se promedian lados: el otro lado es su complementario en la
+    // MISMA fila. Historic: p_mapa_a del analisis_mapa (análisis, no predicción).
+    const escA = (p && p.prob_victoria_a != null) ? Number(p.prob_victoria_a) : null;
+    const escB = (p && p.prob_victoria_b != null)
         ? Number(p.prob_victoria_b)
-        : ((motorA != null && !isNaN(motorA)) ? 1 - motorA : null);
+        : ((escA != null && !isNaN(escA)) ? 1 - escA : null);
     const histP = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
     const wrA = (am && am.equipo_a) ? am.equipo_a : null;
     const wrB = (am && am.equipo_b) ? am.equipo_b : null;
-    // IC95% aditivo del motor (A6); filas viejas sin el dato lo ocultan.
-    const ic = (p && Array.isArray(p.prob_intervalo) && p.prob_intervalo.length === 2
-        && p.prob_intervalo[0] != null && p.prob_intervalo[1] != null) ? p.prob_intervalo : null;
-    // Capa B: escenario por (mapa, lado). El backend la manda `null` cuando el
-    // flag está apagado o en modo DB; la tarjeta se oculta sin romper.
+    // conf = esc_peso (n_min/(n_min+10)). `escenario_mapa` puede venir `null`
+    // en lecturas 100% cacheadas con el motor en frío: se usa la ESC y se
+    // oculta la confianza sin romper.
+    const peso = escPeso(p);
     const esc = (p && p.escenario_mapa && typeof p.escenario_mapa === 'object') ? p.escenario_mapa : null;
+    // MOTOR plano del enfrentamiento (raíz de /serie): idéntico en todas las
+    // tarjetas y en el banner; nunca se lee de `prob_victoria_a` (que es ESC).
+    const motorA = motorActualA();
+    const motorB = (motorA != null) ? 1 - motorA : null;
     renderScoreboard(p);
     renderEconomia(p);
     liveCards.innerHTML = `
     <div class="live-card">
-      <div class="live-card-label" style="color:var(--accent)">MOTOR · ${escapeHtml(current.equipo_a)} GANA EL MAPA</div>
-      <div class="live-card-val live-a">${pct(motorA)}</div>
+      <div class="live-card-label" style="color:var(--accent)">ESC · ${escapeHtml(current.equipo_a)} GANA EL MAPA</div>
+      <div class="live-card-val live-a">${pct(escA)}</div>
+      ${motorA != null ? `<div class="live-card-sub" title="MOTOR Glicko plano (misma P en todos los mapas y lados); decide la serie.">MOTOR ${pct(motorA)}</div>` : ''}
     </div>
     <div class="live-card">
-      <div class="live-card-label" style="color:var(--blue)">MOTOR · ${escapeHtml(current.equipo_b)} GANA EL MAPA</div>
-      <div class="live-card-val live-b">${pct(motorB)}</div>
+      <div class="live-card-label" style="color:var(--blue)">ESC · ${escapeHtml(current.equipo_b)} GANA EL MAPA</div>
+      <div class="live-card-val live-b">${pct(escB)}</div>
+      ${motorB != null ? `<div class="live-card-sub" title="MOTOR Glicko plano (misma P en todos los mapas y lados); decide la serie.">MOTOR ${pct(motorB)}</div>` : ''}
     </div>
     <div class="live-card">
-      <div class="live-card-label">OVERTIME (MOTOR)</div>
+      <div class="live-card-label">OVERTIME</div>
       <div class="live-card-val live-ot">${pct(p && p.prob_overtime)}</div>
     </div>
-    <div class="live-card">
-      <div class="live-card-label">CONFIANZA (MOTOR)</div>
-      <div class="live-card-val">${confBadge(conf) || '—'}</div>
-    </div>
+    ${(peso != null || esc) ? `<div class="live-card" title="conf = peso del ESC en este mapa/lado (esc_peso = n_min/(n_min+10)); el IC es de la capa de escenarios (Wilson 95%).">
+      <div class="live-card-label">CONF. ESC (MAPA/LADO)</div>
+      <div class="live-card-val">${peso != null ? pct(peso) : '—'}</div>
+      <div class="live-card-sub">${esc
+        ? `${pct(esc.p_lo)}–${pct(esc.p_hi)}${esc.n_a != null ? ` · n ${esc.n_a}/${esc.n_b != null ? esc.n_b : '—'}` : ''} · Δlogit ${fmtNum(esc.delta_logit, 3)}`
+        : 'escenario no disponible en caché'}</div>
+    </div>` : ''}
     <div class="live-card">
       <div class="live-card-label">MUESTRAS</div>
       <div class="live-card-val">${p.n_sim ? Number(p.n_sim).toLocaleString() : '—'}</div>
     </div>
-    ${ic ? `<div class="live-card" title="Intervalo de confianza 95% de la P(mapa) por varianza del rating (aditivo, no cambia la puntual)">
-      <div class="live-card-label">IC95% (MOTOR)</div>
-      <div class="live-card-val">${pct(ic[0])}–${pct(ic[1])}</div>
-    </div>` : ''}
-    ${esc ? `<div class="live-card" title="Capa de escenarios por mapa/lado anclada al motor; no es el predictor y NO cambia la P del motor">
-      <div class="live-card-label">ESCENARIO · ${escapeHtml(current.equipo_a)} (MAPA/LADO)</div>
-      <div class="live-card-val">${pct(esc.p_mapa)}</div>
-      <div class="live-card-sub">n ${esc.n_a != null ? esc.n_a : '—'}/${esc.n_b != null ? esc.n_b : '—'} · Δlogit ${fmtNum(esc.delta_logit, 3)} · ${pct(esc.p_lo)}–${pct(esc.p_hi)}</div>
-    </div>` : ''}
     <div class="analisis-nota analisis-nota-hist">
-      <b>ANÁLISIS HISTÓRICO</b> (no es la predicción del motor) ·
+      <b>ANÁLISIS HISTÓRICO</b> (no es la predicción) ·
       ${histP != null && !isNaN(histP) ? `p_mapa_a: <b>${pct(histP)}</b>` : 'p_mapa_a: —'} ·
       historial en <b>${(liveMap || '').toUpperCase()}</b>:
       ${escapeHtml(current.equipo_a)} ${wrA ? pct(wrA.winrate) + ' <span style="color:var(--dim)">(n=' + wrA.n + ')</span>' : '—'} ·
       ${escapeHtml(current.equipo_b)} ${wrB ? pct(wrB.winrate) + ' <span style="color:var(--dim)">(n=' + wrB.n + ')</span>' : '—'}
-      <br><span style="color:var(--dim)">El <b>MOTOR</b> es plano (misma P en todos los mapas y lados); el <b>ESCENARIO</b> añade la lectura por mapa/lado; el histórico es descriptivo.</span>
+      <br><span style="color:var(--dim)">El <b>ESC</b> es la predicción por mapa/lado (puede variar); el <b>MOTOR</b> es plano y decide la serie; el histórico es descriptivo.</span>
     </div>`;
     const stale = vigente === false || current.vigente === false;
     liveStatus.className = 'live-status ' + (stale ? 'warn' : 'ok');
     liveStatus.textContent = stale
         ? '⚠ Predicciones desactualizadas; usa RE-PRECALCULAR.'
-        : `✓ desde caché${conf ? ' · confianza ' + conf : ''} · modelo ${modelVersion || current.modelo_version || '—'}`;
+        : `✓ desde caché${peso != null ? ' · conf. ESC ' + pct(peso) : ''} · modelo ${modelVersion || current.modelo_version || '—'}`;
 }
 
 function setLiveSide(side) {
@@ -1322,21 +1362,22 @@ function syncSerieBuilder() {
 
         const row = liveBulk ? liveBulk[`${cfg.map_name}|${cfg.lado_inicial_a}`] : null;
         const am = row && row.analisis_mapa ? row.analisis_mapa : null;
-        const motorA = row ? Number(row.prob_victoria_a) : null;
-        const motorB = (row && row.prob_victoria_b != null)
+        // ESC del slot: predicción del (mapa, lado) configurado (A/B misma fila,
+        // sin promediar lados). El MOTOR plano vive en el banner de serie.
+        const escA = row ? Number(row.prob_victoria_a) : null;
+        const escB = (row && row.prob_victoria_b != null)
             ? Number(row.prob_victoria_b)
-            : ((motorA != null && !isNaN(motorA)) ? 1 - motorA : null);
+            : ((escA != null && !isNaN(escA)) ? 1 - escA : null);
         const histP = (am && am.p_mapa_a != null) ? Number(am.p_mapa_a) : null;
-        const escP = (row && row.escenario_mapa && row.escenario_mapa.p_mapa != null)
-            ? Number(row.escenario_mapa.p_mapa) : null;
+        const peso = escPeso(row);
         const pred = row
             ? `<div class="qi-pred">
-                 <span class="qi-pred-tag" title="Predicción del motor (calibrada, plana entre mapas y lados; el ESCENARIO añade la lectura por mapa/lado)">MOTOR</span>
-                 <span class="qi-pred-a">${pct(motorA)}</span>
-                 <span class="qi-pred-b">${pct(motorB)}</span>
-                 <span class="qi-pred-ot" title="P(overtime) del motor">OT ${pct(row.prob_overtime)}</span>
-                 ${escP != null && !isNaN(escP) ? `<span class="qi-pred-esc" title="Capa de escenarios por mapa/lado anclada al motor (no es el predictor)">ESC ${pct(escP)}</span>` : ''}
-                 ${histP != null && !isNaN(histP) ? `<span class="qi-pred-hist" title="Análisis histórico del mapa (no es la predicción del motor)">hist ${pct(histP)}</span>` : ''}
+                 <span class="qi-pred-tag" title="ESC: predicción por mapa/lado (la que se sirve; puede variar por mapa y lado)">ESC</span>
+                 <span class="qi-pred-a">${pct(escA)}</span>
+                 <span class="qi-pred-b">${pct(escB)}</span>
+                 <span class="qi-pred-ot" title="P(overtime) del Monte Carlo de este mapa">OT ${pct(row.prob_overtime)}</span>
+                 ${peso != null ? `<span class="qi-pred-esc" title="conf: peso/confianza del ESC en este mapa/lado (más alto = más historial)">conf ${pct(peso)}</span>` : ''}
+                 ${histP != null && !isNaN(histP) ? `<span class="qi-pred-hist" title="Análisis histórico del mapa (no es la predicción)">hist ${pct(histP)}</span>` : ''}
                </div>`
             : `<span class="qi-pred-none">sin caché</span>`;
 
@@ -1442,6 +1483,8 @@ async function updateSerie() {
         }
         ultimaSerie = data;
         renderSerieBanner(data);
+        // El MOTOR (raíz de /serie) se refleja también en las tarjetas del mapa.
+        renderLiveDetail();
     } catch (e) {
         seriesBanner.innerHTML = '';
         serieNote.textContent = `Servicio de predicción no disponible: ${e.message}`;
@@ -1456,12 +1499,15 @@ function renderSerieBanner(data) {
     const mid = current.match_id ? `PARTIDO #${current.match_id}` : 'sin id';
 
     const mapRows = (data.mapas || []).map(m => {
-        const conf = confBand(m);
+        const peso = escPeso(m);
         const mp = m.marcador_mas_probable || (Array.isArray(m.marcadores) && m.marcadores.length ? m.marcadores[0] : null);
         const marcadorTxt = mp ? `<b>${mp.marcador_a}-${mp.marcador_b}</b> (${((Number(mp.prob) || 0) * 100).toFixed(1)}%)` : '';
-        const esc = (m.escenario_mapa && m.escenario_mapa.p_mapa != null) ? Number(m.escenario_mapa.p_mapa) : null;
-        const escTxt = (esc != null && !isNaN(esc))
-            ? `<span class="smr-esc" title="Capa de escenarios por mapa/lado (no es el predictor)">ESC ${pct(esc)}</span>` : '';
+        // conf = esc_peso del ESC de ese (mapa, lado); IC de la capa de
+        // escenarios (Wilson 95%) si el backend la trae.
+        const esc = (m.escenario_mapa && typeof m.escenario_mapa === 'object') ? m.escenario_mapa : null;
+        const escTxt = peso != null
+            ? `<span class="smr-esc" title="conf: peso/confianza del ESC en este mapa/lado (esc_peso = n_min/(n_min+10))">conf ${pct(peso)}</span>` : '';
+        const icTxt = esc ? `<span class="smr-conf" title="IC95% (Wilson) de la capa de escenarios">IC ${pct(esc.p_lo)}–${pct(esc.p_hi)}</span>` : '';
         return `
     <div class="serie-map-row">
       <span class="smr-name">${m.map_name.toUpperCase()}</span>
@@ -1469,9 +1515,9 @@ function renderSerieBanner(data) {
       <span class="smr-a">${pct(m.prob_victoria_a)}</span>
       <span class="smr-b">${pct(m.prob_victoria_b)}</span>
       <span class="smr-ot">OT ${pct(m.prob_overtime)}</span>
-      ${escTxt}
+      ${escTxt || '<span class="smr-esc"></span>'}
       <span class="smr-marcador">${marcadorTxt}</span>
-      <span class="smr-conf ${conf || ''}">${conf ? `<span class="conf-dot"></span>${conf}` : ''}</span>
+      ${icTxt || '<span class="smr-conf"></span>'}
       <span class="smr-fuente">${m.fuente || 'cache'}</span>
     </div>`;
     }).join('');
@@ -1522,6 +1568,15 @@ function renderSerieBanner(data) {
            </div>`
         : '';
 
+    // MOTOR plano del enfrentamiento (raíz de la respuesta de /serie). No se
+    // persiste por mapa: si la serie vino de la caché DB puede faltar y se
+    // oculta sin romper.
+    const numOrNull = v => (v == null || v === '' || isNaN(Number(v))) ? null : Number(v);
+    const motorA = numOrNull(data.prob_motor_a);
+    const motorB = (numOrNull(data.prob_motor_b) != null)
+        ? numOrNull(data.prob_motor_b)
+        : ((motorA != null) ? 1 - motorA : null);
+
     seriesBanner.innerHTML = `
     <div class="sb-team ${favA}">
       <div class="sb-name">EQUIPO A</div>
@@ -1532,6 +1587,7 @@ function renderSerieBanner(data) {
     <div class="sb-center">
       <div class="sb-format">${(data.formato || '').toUpperCase()}</div>
       <div class="sb-sims">${(data.n_sim || current.n_sim || 0).toLocaleString()}<br>SIMULACIONES</div>
+      ${motorA != null ? `<div style="font-size:10px;color:var(--txt-2);letter-spacing:1px" title="P del MOTOR Glicko del enfrentamiento: una sola, plana entre mapas y lados; decide la serie (motor + temperatura).">MOTOR ${pct(motorA)} · ${pct(motorB)}</div>` : ''}
       <div style="font-size:10px;color:var(--dim);letter-spacing:1px;margin-top:4px">GANAR ${data.mapas_para_ganar}</div>
       ${data.confianza_serie ? `<div class="sb-conf ${String(data.confianza_serie).toLowerCase()}"><span class="conf-dot"></span>CONFIANZA ${escapeHtml(String(data.confianza_serie).toUpperCase())}</div>` : ''}
       <div style="font-size:9px;color:var(--dim);letter-spacing:1px;margin-top:4px">${mid}</div>
@@ -1544,7 +1600,7 @@ function renderSerieBanner(data) {
     </div>
     ${distBlock}
     ${caminosBlock}
-    ${mapRows ? `<div class="serie-maps"><div class="sd-title">MAPAS · PREDICCIÓN DEL MOTOR <span class="eco-note">P calibrada del MOTOR (plana entre mapas) · ESC = escenario por mapa/lado (no es el predictor) · hist no incluido aquí</span></div>${mapRows}</div>` : ''}`;
+    ${mapRows ? `<div class="serie-maps"><div class="sd-title">MAPAS · ESC (PREDICCIÓN POR MAPA/LADO) <span class="eco-note">ESC = predicción servida por mapa/lado (puede variar por mapa y lado) · motor plano decide la serie · conf = esc_peso</span></div>${mapRows}</div>` : ''}`;
 
     const fuentes = [...new Set((data.mapas || []).map(m => m.fuente).filter(Boolean))];
     serieNote.innerHTML = `<strong>Serie cache-aware</strong> (reutiliza la caché y calcula/persiste lo que falte` +
@@ -1556,11 +1612,13 @@ function renderSerieBanner(data) {
 const PROMPT_ANALISTA = `Eres un analista de Valorant. Recibes el JSON de abajo con las predicciones y el análisis de un enfrentamiento.
 
 NOMENCLATURA (NO confundir):
-- model_p_a / model_p_b = P del MOTOR para ESE MAPA (plana entre mapas y lados). NO es la P de la serie. Compara el "analítico" (p_mapa_a) SIEMPRE contra model_p_a, nunca contra prob_serie_a/prob_serie_b.
-- escenario_mapa = capa de escenarios por mapa/lado (p_mapa, delta_logit, n_a/n_b, IC p_lo–p_hi) anclada al MOTOR; NO es el predictor y NO sustituye a model_p_a.
-- prob_serie_a / prob_serie_b = P de GANAR LA SERIE; úsalas SOLO para la serie.
+- esc_p_a / esc_p_b = P del ESC para ESE MAPA y ESE LADO: es la predicción que se sirve y puede variar por mapa y lado. NO es la P de la serie. Compara el "analítico" (p_mapa_a) SIEMPRE contra esc_p_a, nunca contra prob_serie_a/prob_serie_b.
+- esc_peso (0–1) = peso/confianza del ESC en ese mapa/lado (n_min/(n_min+10)); más alto = más historial lo respalda. null = capa apagada (no es error).
+- motor_p_a / motor_p_b = P del MOTOR Glicko del enfrentamiento: UNA sola, plana entre mapas y lados; decide la serie. Solo está en la raíz (resumen_serie).
+- escenario_mapa = capa de escenarios por mapa/lado (delta_logit, n_a/n_b, IC p_lo–p_hi); su p_mapa coincide con esc_p_a cuando está presente. Puede venir null (lectura cacheada con el motor en frío): en ese caso usa esc_p_a + esc_peso.
+- prob_serie_a / prob_serie_b = P de GANAR LA SERIE (motor + temperatura); úsalas SOLO para la serie.
 - Nunca menciones un "n" que no venga explícito en el bloque. Si el bloque no trae n (p. ej. total_rondas), NO lo menciones (ni "n alto"): di "sin n reportado" o no lo cites.
-- ot (por mapa) = P(overtime) del MOTOR. total_rondas.mas_24_5 = P(rondas totales > 24.5) deducida de la distribución de marcadores: NO es el campo "ot"; no los mezcles.
+- ot (por mapa) = P(overtime) del Monte Carlo de ESE mapa. total_rondas.mas_24_5 = P(rondas totales > 24.5) deducida de la distribución de marcadores: NO es el campo "ot"; no los mezcles.
 - Certeza (de la RECOMENDACIÓN, no del resultado; mismos umbrales que la banda del motor sobre el favorito): **baja** si el pick < 55% (cerca de coinflip); **media** si 55%–<62%; **alta** si >= 62%. EXCEPCIÓN: "marcador exacto" y "pistol" son mercados dispersos → NUNCA "alta" (máximo "media"), aunque la probabilidad sea alta. "certeza alta" = el estimado es estable, NO significa que el resultado vaya a pasar.
 
 FORMATO DE SALIDA (respetar el orden):
@@ -1571,7 +1629,7 @@ FORMATO DE SALIDA (respetar el orden):
    - Pistol por mapa: <MAPA (LADO)>: <equipo> — <X%>
    - Total de rondas por mapa: <MAPA (LADO)>: Más|Menos de 21.5 — <X%>
    Al final de cada línea, la certeza entre paréntesis: (alta|media|baja).
-2) ANÁLISIS BREVE: 1 línea por mapa (analítico vs model_p_a) y 1 línea de serie. Máximo 120 palabras.
+2) ANÁLISIS BREVE: 1 línea por mapa (analítico vs esc_p_a) y 1 línea de serie. Máximo 120 palabras.
    - El mapa MÁS propenso a upset es el de p_mapa_a MÁS CERCANA a 0.50 (el más parejo). Si p_mapa_a se aleja del modelo HACIA el favorito, ese mapa es MENOS propenso a upset (NO es "valor" para el no-favorito).
 3) Si un mercado no es estimable con los datos, escríbelo: "no estimable: <motivo>".
 
@@ -1636,6 +1694,9 @@ function _mercadosTexto(payload) {
     const g = m.ganador_serie, tm = m.total_mapas || {};
     const out = [];
     out.push(`Ganador de serie: ${payload.equipo_a} ${f(g.equipo_a)} · ${payload.equipo_b} ${f(g.equipo_b)}`);
+    if (m.motor) {
+        out.push(`MOTOR (plano, decide la serie): ${payload.equipo_a} ${f(m.motor.p_a)} · ${payload.equipo_b} ${f(m.motor.p_b)}`);
+    }
     out.push(`Total de mapas (línea ${tm.linea}): Menos ${f(tm.menos)} · Más ${f(tm.mas)}`);
     if (m.marcador_exacto_serie) {
         out.push('Marcador exacto de serie: ' + Object.entries(m.marcador_exacto_serie)
@@ -1644,10 +1705,11 @@ function _mercadosTexto(payload) {
     out.push('Total de rondas y pistol por mapa:');
     for (const mp of (m.por_mapa || [])) {
         const tr = mp.total_rondas || {}, pis = mp.pistol || {}, esc = mp.escenario_mapa || {};
-        const ic = (Array.isArray(mp.ic95) && mp.ic95.length === 2 && mp.ic95[0] != null)
-            ? ` · IC95% ${f(mp.ic95[0])}–${f(mp.ic95[1])}` : '';
-        const escTxt = esc.p_mapa != null
-            ? ` · ESC ${f(esc.p_mapa)} (n ${esc.n_a != null ? esc.n_a : '—'}/${esc.n_b != null ? esc.n_b : '—'})` : '';
+        const ic = (esc.p_lo != null && esc.p_hi != null)
+            ? ` · IC ${f(esc.p_lo)}–${f(esc.p_hi)}` : '';
+        const escTxt = mp.esc_p_a != null
+            ? ` · ESC ${f(mp.esc_p_a)}${mp.esc_peso != null ? ` (conf ${f(mp.esc_peso)})` : ''}`
+            : '';
         out.push(`  - ${mp.map} (${mp.lado}): rondas≈${tr.esperado != null ? tr.esperado : '—'}`
             + ` · >21.5 ${f(tr.mas_21_5)} · rondas>24.5 ${f(tr.mas_24_5)}`
             + ` · pistol ${payload.equipo_a} ${f(pis.p_a)} (n=${pis.n != null ? pis.n : '—'})`
@@ -1666,11 +1728,10 @@ function descargarAnalisis() {
     const mapas = filas.map(p => ({
         map: p.map_name,
         lado: p.lado_inicial_a,
-        model_p_a: p.prob_victoria_a,
-        model_p_b: p.prob_victoria_b,
-        confianza: confBand(p),
+        esc_p_a: p.prob_victoria_a,
+        esc_p_b: p.prob_victoria_b,
+        esc_peso: escPeso(p),
         ot: p.prob_overtime,
-        ic95: p.prob_intervalo || null,
         escenario_mapa: p.escenario_mapa || null,
         analisis_mapa: p.analisis_mapa || null,
         total_rondas: _totalRondas(p.marcadores),
@@ -1682,15 +1743,21 @@ function descargarAnalisis() {
     })).sort((a, b) => String(a.map).localeCompare(String(b.map))
         || String(a.lado).localeCompare(String(b.lado)));
 
+    const numOrNull = v => (v == null || v === '' || isNaN(Number(v))) ? null : Number(v);
+    const motorA = ultimaSerie ? numOrNull(ultimaSerie.prob_motor_a) : null;
+    const motorB = ultimaSerie ? numOrNull(ultimaSerie.prob_motor_b) : null;
+
     const mercados = {
         ganador_serie: ultimaSerie
             ? { equipo_a: ultimaSerie.prob_serie_a, equipo_b: ultimaSerie.prob_serie_b } : null,
+        motor: (motorA != null) ? { p_a: motorA, p_b: (motorB != null ? motorB : 1 - motorA) } : null,
         total_mapas: ultimaSerie ? _totalMapas(ultimaSerie) : null,
         marcador_exacto_serie: ultimaSerie ? ultimaSerie.resultados_serie : null,
         por_mapa: mapas.map(m => ({
-            map: m.map, lado: m.lado,
+            map: m.map, lado: m.lado, esc_p_a: m.esc_p_a, esc_p_b: m.esc_p_b,
+            esc_peso: m.esc_peso,
             total_rondas: m.total_rondas, pistol: m.pistol,
-            marcador_top5: m.marcador_top5, ic95: m.ic95,
+            marcador_top5: m.marcador_top5,
             escenario_mapa: m.escenario_mapa,
         })),
     };
@@ -1703,6 +1770,8 @@ function descargarAnalisis() {
         resumen_serie: ultimaSerie ? {
             formato: ultimaSerie.formato,
             mapa_seleccionados: (ultimaSerie.mapas || []).map(m => `${m.map_name}|${m.lado_inicial_a}`),
+            motor_p_a: motorA,
+            motor_p_b: (motorB != null ? motorB : ((motorA != null) ? 1 - motorA : null)),
             prob_serie_a: ultimaSerie.prob_serie_a,
             prob_serie_b: ultimaSerie.prob_serie_b,
             confianza_serie: ultimaSerie.confianza_serie,
@@ -1822,7 +1891,7 @@ function renderComparison(data) {
         <td>${pct(d.prob_overtime)}</td>
         <td class="cmp-score"><b class="${d.gano_a_real ? 'gana' : ''}">${d.score_a}</b>-<b class="${d.gano_a_real ? '' : 'gana'}">${d.score_b}</b></td>
         <td>${escapeHtml(ganador)}</td>
-        <td class="cmp-preal ${probBandClass(pReal)}" title="Probabilidad que el motor dio al ganador real de este mapa">${pct(pReal)}</td>
+        <td class="cmp-preal ${probBandClass(pReal)}" title="Probabilidad que el ESC (mapa/lado) dio al ganador real de este mapa">${pct(pReal)}</td>
         <td>${tipoLabel(d.tipo)}</td>
         <td>${d.resultado === 'acierto' ? '✓' : '✕'} ${escapeHtml(d.resultado)}</td>
       </tr>`;
@@ -1832,7 +1901,7 @@ function renderComparison(data) {
     <table class="cmp-table">
       <thead>
         <tr>
-          <th>MAPA</th><th>LADO</th><th>P(A)</th><th>P(B)</th><th>OT</th>
+          <th>MAPA</th><th>LADO</th><th>ESC A</th><th>ESC B</th><th>OT</th>
           <th>MARCADOR</th><th>GANÓ (REAL)</th><th>P(REAL)</th><th>TIPO</th><th>RESULTADO</th>
         </tr>
       </thead>
@@ -1909,9 +1978,15 @@ async function fetchSerieReal(detalle) {
         if (!s.ok) throw new Error(s.error || `HTTP ${res.status}`);
         const pReal = ganaA ? Number(s.prob_serie_a) : Number(s.prob_serie_b);
         const marca = pReal >= 0.5 ? '✓ favorito' : '✕ upset';
+        // MOTOR = prob_motor_a/b (raíz, plano; puede faltar en caché DB).
+        // SERIE = prob_serie_a/b (motor + temperatura): es la que decide el global.
+        const mtrA = (s.prob_motor_a == null || isNaN(Number(s.prob_motor_a))) ? null : Number(s.prob_motor_a);
+        const mtrB = (s.prob_motor_b == null || isNaN(Number(s.prob_motor_b)))
+            ? ((mtrA != null) ? 1 - mtrA : null) : Number(s.prob_motor_b);
         render(`
-          <span class="cmp-serie-item">MOTOR: ${escapeHtml(nombreA)} ${pct(s.prob_serie_a)} · ${escapeHtml(nombreB)} ${pct(s.prob_serie_b)}</span>
-          <span class="cmp-serie-pill ${probBandClass(pReal)}" title="Probabilidad que el motor dio al ganador real de la serie">P(REAL) ${pct(pReal)} ${marca}</span>`);
+          ${mtrA != null ? `<span class="cmp-serie-item" title="P del MOTOR Glicko (una sola, plana entre mapas y lados).">MOTOR: ${escapeHtml(nombreA)} ${pct(mtrA)} · ${escapeHtml(nombreB)} ${pct(mtrB)}</span>` : ''}
+          <span class="cmp-serie-item" title="P de ganar la serie (motor + temperatura).">SERIE: ${escapeHtml(nombreA)} ${pct(s.prob_serie_a)} · ${escapeHtml(nombreB)} ${pct(s.prob_serie_b)}</span>
+          <span class="cmp-serie-pill ${probBandClass(pReal)}" title="Probabilidad que el motor (serie) dio al ganador real de la serie">P(REAL) ${pct(pReal)} ${marca}</span>`);
     } catch (e) {
         render(`<span class="cmp-serie-item cmp-serie-err">sin P(serie) del motor (${escapeHtml(e.message || 'servicio no disponible')})</span>`);
     }
@@ -1975,7 +2050,7 @@ function renderScorecard(data) {
     <div class="cmp-summary scorecard-cards">${cards.map(c =>
         `<div class="cmp-card"><div class="cmp-card-label">${c.label}</div><div class="cmp-card-val ${c.cls || ''}">${c.val == null ? '—' : c.val}</div></div>`).join('')}</div>
     <div class="cmp-table-wrap"><table class="cmp-table">
-        <thead><tr><th>MAPA</th><th>MARCADOR</th><th>P(A)</th><th>GANÓ</th><th>OT ≥50% (PRED/REAL)</th><th>P(MARCADOR REAL)</th><th>ECO MAE</th><th>CRUCE MAE</th></tr></thead>
+        <thead><tr><th>MAPA</th><th>MARCADOR</th><th>ESC A</th><th>GANÓ</th><th>OT ≥50% (PRED/REAL)</th><th>P(MARCADOR REAL)</th><th>ECO MAE</th><th>CRUCE MAE</th></tr></thead>
         <tbody>${rows}</tbody>
     </table></div>`;
 }

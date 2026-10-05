@@ -149,6 +149,37 @@ def _total_score(ataque, defensa):
         return None
 
 
+def _esc_mapa(por_mapa, mapa_real, mismo_lado, a_id):
+    """P ESC de la predicción para un mapa real, orientada a `equipo_a`.
+
+    `prob_victoria_a` es la capa ESC **por (mapa, lado)**, así que se elige la
+    fila del lado en que `equipo_a` de la predicción empezó el mapa real:
+    `side_top_start` es el del equipo top (`rounds.team_top_id`); si ese id no
+    es el de la predicción, el lado es el contrario. Sin fila para ese
+    (mapa, lado) se cae a cualquier lado cacheado del mapa (prefiere attack).
+    """
+    nombre = str(mapa_real.get('map_name') or '').strip().lower()
+    if not nombre:
+        return None
+    lado = str(mapa_real.get('side_top_start') or '').strip().lower()
+    top_id = mapa_real.get('team_top_id')
+    if lado in ('attack', 'defense'):
+        if top_id is not None and a_id is not None:
+            a_es_top = (top_id == a_id)
+        else:
+            # Sin rounds: el ETL guarda el equipo `a` como top del partido.
+            a_es_top = mismo_lado
+        lado_a = lado if a_es_top else ('defense' if lado == 'attack' else 'attack')
+        val = por_mapa.get((nombre, lado_a))
+        if val is not None:
+            return val
+    for preferido in ('attack', 'defense'):
+        val = por_mapa.get((nombre, preferido))
+        if val is not None:
+            return val
+    return None
+
+
 # Categorías de compra del detalle (mismas que `economy_summary`).
 CAT_ECO = ('eco', 'semi_eco', 'semi_buy', 'full_buy')
 
@@ -234,11 +265,14 @@ def resultados_partidos():
     Además devuelve `partidos` (por match_id) con la identidad de los equipos
     (ids/tags para los logos) y un resumen **predicción vs realidad** en la
     orientación de la predicción (`equipo_a`/`equipo_b` del motor): marcador
-    real de la serie, P del motor por mapa (`p_a`), P media que el motor dio a
-    los ganadores reales (`p_real_media`) y aciertos del favorito
-    (`favoritos_ok`/`n_mapas`), más el detalle por mapa (`mapas[]`). Si las
-    tablas del servicio ALETHEIA_PREDICT no existen (DB local vieja) se degrada
-    a solo la identidad y el resultado real.
+    real de la serie, P **ESC por mapa/lado** que se dio al ganador real
+    (`p_real_media`) y aciertos del favorito (`favoritos_ok`/`n_mapas`), más el
+    detalle por mapa (`mapas[]`, con `p_ganador` de cada mapa). El ESC de cada
+    mapa se toma del lado en que `equipo_a` de la predicción empezó el mapa real
+    (`side_top_start` del equipo top de `rounds`). La P del motor no se persiste
+    en `predicciones_mapa` (vive en la raíz de `/api/serie`), así que este
+    endpoint no la expone. Si las tablas del servicio ALETHEIA_PREDICT no existen
+    (DB local vieja) se degrada a solo la identidad y el resultado real.
     """
     try:
         crudos = request.args.get('match_ids', '')
@@ -260,24 +294,29 @@ def resultados_partidos():
         filas = query(f"SELECT DISTINCT match_id FROM maps WHERE match_id IN ({marks})", ids)
         con_resultado = [f['match_id'] for f in filas]
 
-        # Predicciones del motor para cualquier id (aunque no tenga resultado):
-        # dan la identidad (nombres/ids) y la P por mapa (constante en el partido).
+        # Predicciones ESC para cualquier id (aunque no tenga resultado): dan la
+        # identidad (nombres/ids) y la P ESC de cada (mapa, lado). La P del motor
+        # no se persiste por mapa (solo en la raíz de /api/serie).
         preds = {}
         try:
             filas_pred = query(
-                f"SELECT match_id, equipo_a, equipo_b, equipo_a_id, equipo_b_id, prob_victoria_a "
+                f"SELECT match_id, equipo_a, equipo_b, equipo_a_id, equipo_b_id, "
+                f"map_name, lado_inicial_a, prob_victoria_a "
                 f"FROM predicciones_mapa WHERE match_id IN ({marks})", ids)
             for r in filas_pred:
                 p = preds.setdefault(r['match_id'], {
                     'nombre_a': r.get('equipo_a'), 'nombre_b': r.get('equipo_b'),
-                    'a_id': r.get('equipo_a_id'), 'b_id': r.get('equipo_b_id'), 'p_a': None,
+                    'a_id': r.get('equipo_a_id'), 'b_id': r.get('equipo_b_id'),
+                    'por_mapa': {},
                 })
                 p['nombre_a'] = p['nombre_a'] or r.get('equipo_a')
                 p['nombre_b'] = p['nombre_b'] or r.get('equipo_b')
                 p['a_id'] = p['a_id'] or r.get('equipo_a_id')
                 p['b_id'] = p['b_id'] or r.get('equipo_b_id')
-                if p['p_a'] is None:
-                    p['p_a'] = r.get('prob_victoria_a')
+                mapa = str(r.get('map_name') or '').strip().lower()
+                lado = str(r.get('lado_inicial_a') or '').strip().lower()
+                if mapa and r.get('prob_victoria_a') is not None:
+                    p['por_mapa'][(mapa, lado)] = r.get('prob_victoria_a')
         except Exception:
             preds = {}
 
@@ -289,12 +328,15 @@ def resultados_partidos():
                 info[p['match_id']] = p
 
         # Mapas reales (marcador por mapa) para medir la predicción mapa a mapa.
+        # `side_top_start` es el lado del equipo top; `team_top_id` se resuelve
+        # con `rounds` para elegir el lado correcto del ESC.
         mapas = {}
         if con_resultado:
             marcas_res = ",".join(["?"] * len(con_resultado))
             try:
                 for m in query(
-                        f"SELECT match_id, map_name, map_number, "
+                        f"SELECT map_id, match_id, map_name, map_number, side_top_start, "
+                        f"(SELECT r.team_top_id FROM rounds r WHERE r.map_id = maps.map_id LIMIT 1) AS team_top_id, "
                         f"score_a_attack, score_a_defense, score_b_attack, score_b_defense "
                         f"FROM maps WHERE match_id IN ({marcas_res}) ORDER BY map_number", con_resultado):
                     mapas.setdefault(m['match_id'], []).append(m)
@@ -364,7 +406,7 @@ def resultados_partidos():
                 score_a, score_b = pa.get('score_b'), pa.get('score_a')
             nombre_a = pr.get('nombre_a') or nombre_a
             nombre_b = pr.get('nombre_b') or nombre_b
-            p_a = pr.get('p_a')
+            por_mapa = pr.get('por_mapa') or {}
 
             detalle_mapas, p_reales, favoritos_ok = [], [], 0
             for m in mapas.get(mid, []):
@@ -374,8 +416,10 @@ def resultados_partidos():
                     continue
                 gano_a = (sa > sb) if mismo_lado else (sb > sa)
                 fila = {'map_name': m.get('map_name'), 'gano_a': 1 if gano_a else 0}
-                if p_a is not None:
-                    p_ganador = p_a if gano_a else 1 - p_a
+                # ESC del (mapa, lado) en que empezó `equipo_a` de la predicción.
+                p_esc = _esc_mapa(por_mapa, m, mismo_lado, a_id)
+                if p_esc is not None:
+                    p_ganador = p_esc if gano_a else 1 - p_esc
                     fila['p_ganador'] = round(p_ganador, 4)
                     p_reales.append(p_ganador)
                     if p_ganador >= 0.5:
@@ -391,7 +435,6 @@ def resultados_partidos():
                 'score_a': score_a, 'score_b': score_b,
                 'winner_id': pa.get('winner_id'),
                 'match_date': pa.get('match_date'),
-                'p_a': round(p_a, 4) if p_a is not None else None,
                 'p_real_media': round(sum(p_reales) / len(p_reales), 4) if p_reales else None,
                 'favoritos_ok': favoritos_ok,
                 'n_mapas': len(detalle_mapas),
