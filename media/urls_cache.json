@@ -3193,7 +3193,7 @@
 },
 "61050": {
 "u": null,
-"t": 1790525318
+"t": 1791240603
 },
 "61084": {
 "u": null,
@@ -3261,7 +3261,7 @@
 },
 "63508": {
 "u": null,
-"t": 1790525330
+"t": 1791240603
 },
 "64029": {
 "u": "https://owcdn.net/img/6a01732c154d2.png",
@@ -3413,6 +3413,216 @@
 "2978": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
 "t": 1790524805,
+"c": "#e83056",
+"d": true,
+"cv": 2
+},
+"n:valorant-champions-2025": {
+"u": "https://owcdn.net/img/63067806d167d.png",
+"t": 1791240183,
+"c": "#c4b074",
+"d": false,
+"cv": 2
+},
+"n:vct-2025-americas-stage-2": {
+"u": "https://owcdn.net/img/640f5ab71dfbb.png",
+"t": 1791240183,
+"c": "#ff570b",
+"d": true,
+"cv": 2
+},
+"2283": {
+"u": "https://owcdn.net/img/63067806d167d.png",
+"t": 1791240183,
+"c": "#c4b074",
+"d": false,
+"cv": 2
+},
+"2501": {
+"u": "https://owcdn.net/img/640f5ab71dfbb.png",
+"t": 1791240183,
+"c": "#ff570b",
+"d": true,
+"cv": 2
+},
+"n:vct-2025-emea-stage-2": {
+"u": "https://owcdn.net/img/65ab59620a233.png",
+"t": 1791240185,
+"c": "#000000",
+"d": true,
+"cv": 2
+},
+"2498": {
+"u": "https://owcdn.net/img/65ab59620a233.png",
+"t": 1791240185,
+"c": "#000000",
+"d": true,
+"cv": 2
+},
+"n:vct-2025-pacific-stage-2": {
+"u": "https://owcdn.net/img/640f5ae002674.png",
+"t": 1791240185,
+"c": "#00d3d8",
+"d": false,
+"cv": 2
+},
+"2500": {
+"u": "https://owcdn.net/img/640f5ae002674.png",
+"t": 1791240185,
+"c": "#00d3d8",
+"d": false,
+"cv": 2
+},
+"n:vct-2025-china-stage-2": {
+"u": "https://owcdn.net/img/65dd97cea9a25.png",
+"t": 1791240186,
+"c": "#e83056",
+"d": true,
+"cv": 2
+},
+"2499": {
+"u": "https://owcdn.net/img/65dd97cea9a25.png",
+"t": 1791240187,
+"c": "#e83056",
+"d": true,
+"cv": 2
+},
+"n:valorant-masters-toronto-2025": {
+"u": "https://owcdn.net/img/603bfd7bf3f54.png",
+"t": 1791240187,
+"c": "#9465f6",
+"d": true,
+"cv": 2
+},
+"2282": {
+"u": "https://owcdn.net/img/603bfd7bf3f54.png",
+"t": 1791240187,
+"c": "#9465f6",
+"d": true,
+"cv": 2
+},
+"n:vct-2025-emea-stage-1": {
+"u": "https://owcdn.net/img/65ab59620a233.png",
+"t": 1791240189,
+"c": "#000000",
+"d": true,
+"cv": 2
+},
+"2380": {
+"u": "https://owcdn.net/img/65ab59620a233.png",
+"t": 1791240189,
+"c": "#000000",
+"d": true,
+"cv": 2
+},
+"n:vct-2025-pacific-stage-1": {
+"u": "https://owcdn.net/img/640f5ae002674.png",
+"t": 1791240189,
+"c": "#00d3d8",
+"d": false,
+"cv": 2
+},
+"2379": {
+"u": "https://owcdn.net/img/640f5ae002674.png",
+"t": 1791240189,
+"c": "#00d3d8",
+"d": false,
+"cv": 2
+},
+"n:vct-2025-americas-stage-1": {
+"u": "https://owcdn.net/img/640f5ab71dfbb.png",
+"t": 1791240191,
+"c": "#ff570b",
+"d": true,
+"cv": 2
+},
+"2347": {
+"u": "https://owcdn.net/img/640f5ab71dfbb.png",
+"t": 1791240191,
+"c": "#ff570b",
+"d": true,
+"cv": 2
+},
+"n:vct-2025-china-stage-1": {
+"u": "https://owcdn.net/img/65dd97cea9a25.png",
+"t": 1791240191,
+"c": "#e83056",
+"d": true,
+"cv": 2
+},
+"2359": {
+"u": "https://owcdn.net/img/65dd97cea9a25.png",
+"t": 1791240191,
+"c": "#e83056",
+"d": true,
+"cv": 2
+},
+"n:valorant-masters-bangkok-2025": {
+"u": "https://owcdn.net/img/603bfd7bf3f54.png",
+"t": 1791240193,
+"c": "#9465f6",
+"d": true,
+"cv": 2
+},
+"2281": {
+"u": "https://owcdn.net/img/603bfd7bf3f54.png",
+"t": 1791240193,
+"c": "#9465f6",
+"d": true,
+"cv": 2
+},
+"n:vct-2025-emea-kickoff": {
+"u": "https://owcdn.net/img/65ab59620a233.png",
+"t": 1791240194,
+"c": "#000000",
+"d": true,
+"cv": 2
+},
+"2276": {
+"u": "https://owcdn.net/img/65ab59620a233.png",
+"t": 1791240194,
+"c": "#000000",
+"d": true,
+"cv": 2
+},
+"n:vct-2025-pacific-kickoff": {
+"u": "https://owcdn.net/img/640f5ae002674.png",
+"t": 1791240195,
+"c": "#00d3d8",
+"d": false,
+"cv": 2
+},
+"2277": {
+"u": "https://owcdn.net/img/640f5ae002674.png",
+"t": 1791240195,
+"c": "#00d3d8",
+"d": false,
+"cv": 2
+},
+"n:vct-2025-americas-kickoff": {
+"u": "https://owcdn.net/img/640f5ab71dfbb.png",
+"t": 1791240196,
+"c": "#ff570b",
+"d": true,
+"cv": 2
+},
+"2274": {
+"u": "https://owcdn.net/img/640f5ab71dfbb.png",
+"t": 1791240196,
+"c": "#ff570b",
+"d": true,
+"cv": 2
+},
+"n:vct-2025-china-kickoff": {
+"u": "https://owcdn.net/img/65dd97cea9a25.png",
+"t": 1791240197,
+"c": "#e83056",
+"d": true,
+"cv": 2
+},
+"2275": {
+"u": "https://owcdn.net/img/65dd97cea9a25.png",
+"t": 1791240197,
 "c": "#e83056",
 "d": true,
 "cv": 2

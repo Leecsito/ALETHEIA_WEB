@@ -1041,6 +1041,14 @@ Al recibir una nueva tarea o solicitud de cambio:
   - **Logos de equipos más grandes en el bloque VS** (`'big'`, 104px; 80px en
     móvil) y **nombre secundario** (`v-team-name` 28 → 15px, 13px en móvil):
     el protagonismo es del logo, no del nombre.
+  - **Halo de logos oscuros (F8 bis):** `on-light` ya no usa el fondo radial
+    (se recortaba como "caja" cuadrada alrededor del logo, sobre todo en T1,
+    FUT o DRX); ahora el halo sigue la **silueta** con `drop-shadow` blanco +
+    glow del color del equipo (`--c`), sin fondo. Mismo cambio en `.v-elogo`.
+  - **Watermark del banner:** la regla genérica vuelve a 2 capas (`--wm-a`/`--wm-b`)
+    para no mover el watermark de equipos/jugadores/eventos; el orden evento/A/B
+    vive solo en `.v-banner.vs::after` (partidos). Verificado con capturas
+    headless (equipos, evento/EMEA, partido y EN VIVO).
 - **2026-10-05 — Auditoría de rendimiento web (F1–F14, sin F10).** Correcciones de
   carga/estabilidad sin tocar lógica de predicción, modelos, ratings ni resultados.
   - **F1 (`aletheia/script.js`) cola de `/serie`:** `cargarSeriesLista()` (hasta 12

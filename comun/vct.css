@@ -388,9 +388,14 @@ main.v-main.wide { max-width: 1500px; }
 .v-lozenge.has-img { background: transparent; }
 .v-lozenge.has-img .v-lozenge-txt { display: none; }
 
-/* Logo oscuro: halo claro más intenso para que se vea */
-.v-lozenge.on-light { background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--txt-1) 50%, transparent), transparent 76%); }
-.v-lozenge.on-light .v-lozenge-fg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--txt-1) 70%, transparent)) drop-shadow(0 0 18px color-mix(in srgb, var(--txt-1) 40%, transparent)); }
+/* Logo oscuro: el halo sigue la silueta del logo (drop-shadow), sin fondo
+   radial: un radial grande se recorta como "caja" cuadrada alrededor. */
+.v-lozenge.on-light { background: none; }
+.v-lozenge.on-light .v-lozenge-fg {
+    filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--txt-1) 95%, transparent))
+            drop-shadow(0 0 7px color-mix(in srgb, var(--txt-1) 70%, transparent))
+            drop-shadow(0 0 16px color-mix(in srgb, var(--c, var(--txt-1)) 40%, transparent));
+}
 .v-lozenge.on-light .v-lozenge-txt { color: var(--bg); }
 
 .v-lozenge-txt { position: relative; z-index: 1; }
@@ -429,8 +434,12 @@ main.v-main.wide { max-width: 1500px; }
 .v-elogo.has-img { background: transparent; }
 .v-elogo.has-img .v-elogo-txt { display: none; }
 
-.v-elogo.on-light { background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--txt-1) 50%, transparent), transparent 76%); }
-.v-elogo.on-light .v-elogo-fg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--txt-1) 70%, transparent)) drop-shadow(0 0 18px color-mix(in srgb, var(--txt-1) 40%, transparent)); }
+.v-elogo.on-light { background: none; }
+.v-elogo.on-light .v-elogo-fg {
+    filter: drop-shadow(0 0 1.5px color-mix(in srgb, var(--txt-1) 95%, transparent))
+            drop-shadow(0 0 7px color-mix(in srgb, var(--txt-1) 70%, transparent))
+            drop-shadow(0 0 16px color-mix(in srgb, var(--c, var(--txt-1)) 40%, transparent));
+}
 .v-elogo.on-light .v-elogo-txt { color: var(--bg); }
 
 .v-elogo-txt { position: relative; z-index: 1; }
@@ -559,19 +568,26 @@ main.v-main.wide { max-width: 1500px; }
         color-mix(in srgb, var(--c2, var(--panel)) 22%, var(--bg)) 100%);
 }
 
-/* Watermarks: logo del evento a la izquierda, equipo A al centro, equipo B a
-   la derecha (mismo orden que el degradado). */
 .v-banner::after {
     content: '';
     position: absolute;
     inset: 0;
     pointer-events: none;
-    background-image: var(--wm-e, none), var(--wm-a, none), var(--wm-b, none);
-    background-position: left -34px center, center center, right -34px center;
-    background-size: 300px auto, 300px auto, 300px auto;
+    background-image: var(--wm-a, none), var(--wm-b, none);
+    background-position: left -34px center, right -34px center;
+    background-size: 300px auto, 300px auto;
     background-repeat: no-repeat;
     opacity: .07;
     filter: saturate(0);
+}
+
+/* VS (partidos): watermarks del evento (izq), equipo A (centro) y equipo B
+   (der), en el mismo orden que el degradado. Solo aplica al banner de partido
+   para no mover el watermark único de equipos/jugadores/eventos. */
+.v-banner.vs::after {
+    background-image: var(--wm-e, none), var(--wm-a, none), var(--wm-b, none);
+    background-position: left -34px center, center center, right -34px center;
+    background-size: 300px auto, 300px auto, 300px auto;
 }
 
 .v-banner > * { position: relative; z-index: 1; }
@@ -1082,5 +1098,6 @@ main.v-main.wide { max-width: 1500px; }
     .v-avatar.big { width: 110px; height: 110px; font-size: 38px; }
     .v-econ { grid-template-columns: 1fr; }
     .v-tabs { margin-left: -14px; margin-right: -14px; padding-left: 14px; }
-    .v-banner::after { background-size: 170px auto, 170px auto, 170px auto; }
+    .v-banner::after { background-size: 190px auto, 190px auto; }
+    .v-banner.vs::after { background-size: 170px auto, 170px auto, 170px auto; }
 }
