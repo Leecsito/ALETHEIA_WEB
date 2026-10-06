@@ -134,12 +134,13 @@
     padding: 16px 26px;
     border: none;
     color: color-mix(in srgb, var(--bg) 82%, transparent);
-    /* Acabado cristal SIN blur: un `backdrop-filter` sobre el canvas animado
-       se recalcula por frame y provocaba lag. Se simula con translucidez y un
-       rim light interior muy leve. */
-    background: color-mix(in srgb, var(--bg) 9%, transparent);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--txt-1) 16%, transparent),
-                inset 0 0 14px color-mix(in srgb, var(--txt-1) 5%, transparent);
+    /* Cristal esmerilado visible (7px) sin saturate/brightness extra para no
+       multiplicar pasadas. El canvas del header baja a DPR 1.5, así el muestreo
+       del fondo es ~2.8x más barato y no provoca lag. */
+    background: color-mix(in srgb, var(--txt-1) 7%, transparent);
+    -webkit-backdrop-filter: blur(7px);
+    backdrop-filter: blur(7px);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--txt-1) 28%, transparent);
     clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
     text-decoration: none;
     font-family: var(--mono);

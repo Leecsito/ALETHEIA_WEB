@@ -870,11 +870,13 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      oscuro sobre el lima.
    - **Botones del nav:** chips **angulares y altos** (esquina superior derecha
      cortada con `clip-path`, padding `16px 26px`, mono en mayúsculas con
-     tracking amplio) con acabado **cristal sin blur**: translucidez (9 %) y un
-     `rim light` interior (`inset 0 1px 0` + glow suave). Se probó
-     `backdrop-filter` y se descartó: sobre el canvas animado se recalcula por
-     frame y **producía lag**. En hover/activo el chip se oscurece y se enciende
-     el neón:
+     tracking amplio) con **cristal esmerilado**: translucidez (7 %) +
+     `backdrop-filter: blur(7px)` + `rim light` interior. El blur se retiró una
+     vez por lag; volvió con dos mitigaciones: sin `saturate`/`brightness`
+     extra (menos pasadas) y con el **canvas del header a DPR 1.5**, que abarata
+     el muestreo del fondo ~2.8x. Si en algún equipo se notara lag, el
+     siguiente paso es limitar el blur a `:hover`/`.active`. En hover/activo el
+     chip se oscurece y se enciende el neón:
      **barra de acento** a la izquierda, `box-shadow: inset` (brillo interior +
      rim superior + línea inferior en el activo), `text-shadow` lima en dos
      capas y un **barrido de luz diagonal** (`::after` con `skewX`). El glow
@@ -1048,10 +1050,12 @@ Al recibir una nueva tarea o solicitud de cambio:
 ## 8. Registro de Cambios
 
 - **2026-10-05 — Botones altos con cristal + más nodos en el fondo.**
-  - `header/header.css`: botones más altos (`16px 26px`) y acabado **cristal
-    sin blur**: translucidez (9 %) + `rim light` interior. Se probó
-    `backdrop-filter: blur(9px)` y se **revirtió por lag** (el canvas animado
-    detrás obliga a recalcular el desenfoque en cada frame).
+  - `header/header.css`: botones más altos (`16px 26px`). El cristal
+    (`backdrop-filter`) se probó a 9px y se revirtió por lag; vuelve a **7px sin
+    saturate/brightness** y con el **canvas del header a DPR 1.5**
+    (`header-nodes.js`), que reduce ~2.8x el muestreo del fondo. El blur se ve
+    (nodos difuminados dentro del chip); si hubiera lag, limitarlo a
+    `:hover`/`.active` es el siguiente paso.
   - `header/header-nodes.js`: el fondo sube a **64–190 nodos** (`W/9`) y la
     interacción del cursor se amplía (`cursorDist` 220, `cursorAlpha` 0.7,
     `repulse` 150, `speed` 5–13): el efecto del mouse sobre la red se percibe
