@@ -43,15 +43,16 @@
            aunque la densidad suba: el glow se hace con composición `lighter`. */
         bg: {
             vars: { a: '--g2', b: '--g3', hot: '--g3', spark: '--g3' },
-            count: { div: 12, min: 36, max: 140 },
-            linkDist: 125,
-            linkAlpha: 0.27,
-            linkHeat: 0.2,
-            cursorDist: 180,
-            cursorAlpha: 0.6,
-            speed: [4, 11],
+            count: { div: 9, min: 64, max: 190 },
+            linkDist: 120,
+            linkAlpha: 0.28,
+            linkHeat: 0.22,
+            cursorDist: 220,
+            cursorAlpha: 0.7,
+            speed: [5, 13],
             radius: [0.8, 2],
             rPulse: 0.14,
+            repulse: 150,
             nodeAlpha: 0.74,
             halo: 0.15,
             glow: true,
@@ -172,7 +173,7 @@
         }
 
         function step(dt) {
-            const repulse = mode.fixed ? 120 : 110;
+            const repulse = mode.repulse || (mode.fixed ? 120 : 110);
             const force = mode.fixed ? 34 : 46;
             const kick = mode.speed[0] * 0.6;
             for (const n of nodes) {

@@ -868,22 +868,24 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      agrandada casi transparente detrás (marca de agua, sin difuminar) y el
      wordmark en segundo plano. Todos los controles del header usan texto
      oscuro sobre el lima.
-   - **Botones del nav:** chips **angulares** (esquina superior derecha cortada
-     con `clip-path`), mono en mayúsculas con tracking amplio, padding amplio
-     (`11px 24px`) y tinte oscuro sutil en reposo. En hover/activo el chip se
-     vuelve oscuro y se enciende el neón: **barra de acento** a la izquierda,
-     `box-shadow: inset` (brillo interior + rim superior + línea inferior en el
-     activo), `text-shadow` lima en dos capas y un **barrido de luz diagonal**
-     (`::after` con `skewX`) al pasar el cursor. El glow exterior usa
-     `filter: drop-shadow` (un `box-shadow` exterior quedaría recortado por el
-     `clip-path`); el interior sí usa `inset`, que se ve.
+   - **Botones del nav:** chips **angulares y altos** (esquina superior derecha
+     cortada con `clip-path`, padding `16px 26px`, mono en mayúsculas con
+     tracking amplio) con **frosted glass**: `backdrop-filter: blur(9px)
+     saturate(1.6) brightness(1.04)` desenfoca lo que pasa por detrás (lima y
+     nodos) sin tocar el texto. En hover/activo el chip se oscurece (mantiene
+     translucidez para que el cristal siga viéndose) y se enciende el neón:
+     **barra de acento** a la izquierda, `box-shadow: inset` (brillo interior +
+     rim superior + línea inferior en el activo), `text-shadow` lima en dos
+     capas y un **barrido de luz diagonal** (`::after` con `skewX`). El glow
+     exterior usa `filter: drop-shadow` (un `box-shadow` exterior quedaría
+     recortado por el `clip-path`); el interior sí usa `inset`, que se ve.
    - **`header-nodes.js` (efecto de nodos reutilizable):**
       - Monta un `<canvas>` detrás del contenido del header (nodos verde oscuro
         que se funden a negro cerca del cursor) y un canvas fijo de fondo en
         toda la página (`body > .ae-nodes-bg`), visible (opacidad .9), con nodos
         verdes `--g2`/`--g3` (halo suave para que se lean sobre el fondo negro),
         líneas tenues y encendido verde al pasar el cursor.
-      - Nodos 44–105 en el header y **36–140 en el fondo** (`W/14` y `W/12`)
+      - Nodos 44–105 en el header y **64–190 en el fondo** (`W/14` y `W/9`)
         según el ancho; **rebotan en los bordes reflejando también la deriva
         base** (nunca se quedan pegados a la pared); líneas solo entre nodos
         cercanos con opacidad decreciente; repulsión suave con easing en el
@@ -892,7 +894,9 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         `.ae-nodes-bg` lleva `contain: strict`. **Neón:** cada nodo tiene un
         **pulso de tamaño muy leve** (±10–14 %, fase propia) y, en el fondo, un
         glow sutil con composición `lighter`, halo doble y núcleo casi blanco
-        (sin `shadowBlur`, para no encarecer el frame).
+        (sin `shadowBlur`, para no encarecer el frame). La interacción del
+        cursor llega más lejos (`cursorDist` 220, `repulse` 150) para que el
+        enjambre reaccione alrededor del mouse.
      - `requestAnimationFrame`, `devicePixelRatio`, `ResizeObserver`, pausa
        con la pestaña oculta y `prefers-reduced-motion` (nodos estáticos).
      - Se puede desactivar el fondo por página con `window.AE_NODES_BG = false;`
@@ -1042,6 +1046,16 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-05 — Botones altos con cristal + más nodos en el fondo.**
+  - `header/header.css`: botones más altos (`16px 26px`) y **frosted glass**
+    (`backdrop-filter: blur(9px) saturate(1.6) brightness(1.04)`); hover/activo
+    mantienen translucidez para que el cristal siga visible bajo el relleno
+    oscuro. Verificado con capturas headless (se ve la línea de nodos
+    difuminada dentro del chip).
+  - `header/header-nodes.js`: el fondo sube a **64–190 nodos** (`W/9`) y la
+    interacción del cursor se amplía (`cursorDist` 220, `cursorAlpha` 0.7,
+    `repulse` 150, `speed` 5–13): el efecto del mouse sobre la red se percibe
+    bastante más. Se mantienen DPR 1.25, rejilla espacial y `glow` barato.
 - **2026-10-05 — Nodos neón + rediseño de los botones del header.**
   - `header/header-nodes.js`: más densidad (header 44–105, fondo 36–140),
     **pulso de tamaño muy leve** (±10–14 % por nodo, con fase propia) y, en el
