@@ -125,40 +125,69 @@
     justify-content: flex-end;
 }
 
+/* Botones del nav: chips angulares (esquina superior derecha cortada) con una
+   barra de acento que crece al pasar el cursor. El glow se hace con
+   `drop-shadow` porque `clip-path` recortaría un `box-shadow`. */
 .ae-btn {
-    padding: 7px 16px;
-    border: 1px solid color-mix(in srgb, var(--bg) 40%, transparent);
-    color: color-mix(in srgb, var(--bg) 78%, transparent);
-    background: color-mix(in srgb, var(--txt-1) 10%, transparent);
+    position: relative;
+    padding: 8px 16px;
+    border: none;
+    color: color-mix(in srgb, var(--bg) 82%, transparent);
+    background: color-mix(in srgb, var(--bg) 7%, transparent);
+    clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
     text-decoration: none;
-    font-family: inherit;
-    font-size: 12px;
-    letter-spacing: 1px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
     cursor: pointer;
-    transition: border-color .2s, color .2s, background .2s, box-shadow .2s;
+    transition: color .18s, background .18s, filter .18s;
     white-space: nowrap;
 }
 
+.ae-btn::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 3px;
+    height: 0;
+    background: var(--bg);
+    transform: translateY(-50%);
+    transition: height .2s, background .2s, box-shadow .2s;
+}
+
 .ae-btn:hover {
-    border-color: var(--bg);
     color: var(--bg);
-    background: color-mix(in srgb, var(--txt-1) 35%, transparent);
+    background: color-mix(in srgb, var(--bg) 16%, transparent);
+    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--bg) 35%, transparent));
+}
+
+.ae-btn:hover::before {
+    height: 58%;
 }
 
 .ae-btn:focus-visible {
     outline: 2px solid var(--bg);
-    outline-offset: 2px;
+    outline-offset: 3px;
 }
 
 .ae-btn:active {
     transform: translateY(1px);
 }
 
+/* Activo: bloque oscuro con la barra de acento encendida (neón). */
 .ae-btn.active {
-    border-color: var(--bg);
     color: var(--accent);
     background: var(--bg);
-    box-shadow: 0 0 14px color-mix(in srgb, var(--bg) 35%, transparent);
+    filter: drop-shadow(0 0 7px color-mix(in srgb, var(--bg) 45%, transparent));
+    text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+.ae-btn.active::before {
+    height: 68%;
+    background: var(--accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 /* Título de página que se coloca justo debajo del header. */
@@ -192,9 +221,9 @@
     }
 
     .ae-btn {
-        padding: 5px 9px;
-        font-size: 10px;
-        letter-spacing: .5px;
+        padding: 6px 11px;
+        font-size: 9.5px;
+        letter-spacing: 1px;
     }
 }
 

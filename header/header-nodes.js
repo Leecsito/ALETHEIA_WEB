@@ -27,31 +27,34 @@
         /* Header lima: nodos oscuros que se funden a negro al acercarse. */
         header: {
             vars: { a: '--g1', b: '--g2', hot: '--bg' },
-            count: { div: 16, min: 40, max: 90 },
+            count: { div: 14, min: 44, max: 105 },
             linkDist: 80,
             linkAlpha: 0.2,
             linkHeat: 0.14,
             cursorDist: 150,
             cursorAlpha: 0.55,
             speed: [6, 15],
-            radius: [0.9, 1.8],
+            radius: [0.8, 1.9],
+            rPulse: 0.1,
             fixed: false,
         },
         /* Fondo oscuro: red VERDE visible detrás del contenido; el cursor la enciende.
-           Densidad acotada y DPR máximo 1.25 (el fondo es decorativo): baja ~6x
-           los píxeles por frame y los pares de enlaces respecto a 300 nodos/DPR 2.5. */
+           DPR máximo 1.25 y enlaces por rejilla (F2) mantienen el coste a raya
+           aunque la densidad suba: el glow se hace con composición `lighter`. */
         bg: {
             vars: { a: '--g2', b: '--g3', hot: '--g3', spark: '--g3' },
-            count: { div: 14, min: 32, max: 110 },
+            count: { div: 12, min: 36, max: 140 },
             linkDist: 125,
-            linkAlpha: 0.26,
+            linkAlpha: 0.27,
             linkHeat: 0.2,
             cursorDist: 180,
             cursorAlpha: 0.6,
             speed: [4, 11],
-            radius: [0.9, 1.9],
-            nodeAlpha: 0.72,
-            halo: 0.13,
+            radius: [0.8, 2],
+            rPulse: 0.14,
+            nodeAlpha: 0.74,
+            halo: 0.15,
+            glow: true,
             dprMax: 1.25,
             fixed: true,
         },
@@ -116,10 +119,16 @@
             const speed = rand(mode.speed[0], mode.speed[1]);
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
+            const r = rand(mode.radius[0], mode.radius[1]);
             return {
                 x: rand(0, W),
                 y: rand(0, H),
-                r: rand(mode.radius[0], mode.radius[1]),
+                r,
+                rBase: r,
+                /* Pulso de tamaño muy leve, con fase propia por nodo. */
+                t: rand(0, 10),
+                pulse: rand(0.45, 1.1),
+                phase: rand(0, Math.PI * 2),
                 vx,
                 vy,
                 bvx: vx,
@@ -201,6 +210,10 @@
                     if (d < repulse + 40) targetHeat = Math.max(0, 1 - d / (repulse + 40));
                 }
                 n.heat += (targetHeat - n.heat) * Math.min(1, dt * 6);
+
+                /* Pulso de tamaño muy leve (±mode.rPulse), con fase propia. */
+                n.t += dt;
+                n.r = n.rBase * (1 + (mode.rPulse || 0) * Math.sin(n.t * n.pulse + n.phase));
             }
         }
 
@@ -277,27 +290,45 @@
                 ctx.fill();
             }
 
-            /* Nodos. */
+            /* Nodos. En el fondo (`glow`) se pinta con composición aditiva y un
+               núcleo caliente: un neón suave sin `shadowBlur` (más barato). */
             const nodeAlpha = mode.nodeAlpha || 0.55;
+            const TAU = Math.PI * 2;
+            if (mode.glow) ctx.globalCompositeOperation = 'lighter';
             for (const n of nodes) {
                 const c = nodeColor(n);
                 if (mode.halo) {
                     ctx.fillStyle = rgba(c, mode.halo);
                     ctx.beginPath();
-                    ctx.arc(n.x, n.y, n.r + 2.6, 0, Math.PI * 2);
+                    ctx.arc(n.x, n.y, n.r + (mode.glow ? 3.6 : 2.6), 0, TAU);
                     ctx.fill();
+                    if (mode.glow) {
+                        ctx.fillStyle = rgba(c, mode.halo * 0.55);
+                        ctx.beginPath();
+                        ctx.arc(n.x, n.y, n.r + 1.6, 0, TAU);
+                        ctx.fill();
+                    }
                 }
                 if (n.heat > 0.15) {
                     ctx.fillStyle = rgba(c, 0.12 * n.heat);
                     ctx.beginPath();
-                    ctx.arc(n.x, n.y, n.r + 3.5 * n.heat, 0, Math.PI * 2);
+                    ctx.arc(n.x, n.y, n.r + 3.5 * n.heat, 0, TAU);
                     ctx.fill();
                 }
                 ctx.fillStyle = rgba(c, nodeAlpha + (1 - nodeAlpha) * n.heat);
                 ctx.beginPath();
-                ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+                ctx.arc(n.x, n.y, n.r, 0, TAU);
                 ctx.fill();
+                if (mode.glow) {
+                    /* Núcleo casi blanco, apenas perceptible: chispa neón. */
+                    const core = mix(c, [255, 255, 255], 0.55);
+                    ctx.fillStyle = rgba(core, 0.18 + 0.3 * n.heat);
+                    ctx.beginPath();
+                    ctx.arc(n.x, n.y, n.r * 0.55, 0, TAU);
+                    ctx.fill();
+                }
             }
+            if (mode.glow) ctx.globalCompositeOperation = 'source-over';
         }
 
         function loop(ts) {

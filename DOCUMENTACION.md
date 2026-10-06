@@ -868,19 +868,29 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      agrandada casi transparente detrás (marca de agua, sin difuminar) y el
      wordmark en segundo plano. Todos los controles del header usan texto
      oscuro sobre el lima.
+   - **Botones del nav:** chips **angulares** (esquina superior derecha cortada
+     con `clip-path`), mono en mayúsculas con tracking amplio y tinte oscuro
+     sutil en reposo. En hover se oscurecen, crece una **barra de acento** a la
+     izquierda y aplican un `drop-shadow` suave; el activo es un bloque oscuro
+     con la barra encendida (neón) y `text-shadow` lima. El glow usa
+     `filter: drop-shadow` porque `box-shadow` quedaría recortado por el
+     `clip-path`.
    - **`header-nodes.js` (efecto de nodos reutilizable):**
       - Monta un `<canvas>` detrás del contenido del header (nodos verde oscuro
         que se funden a negro cerca del cursor) y un canvas fijo de fondo en
         toda la página (`body > .ae-nodes-bg`), visible (opacidad .9), con nodos
         verdes `--g2`/`--g3` (halo suave para que se lean sobre el fondo negro),
         líneas tenues y encendido verde al pasar el cursor.
-      - Nodos 40–90 en el header y **32–110 en el fondo** (`W/14`, tope 110
-        desde F2) según el ancho; **rebotan en los bordes reflejando también
-        la deriva base** (nunca se quedan pegados a la pared); líneas solo entre
-        nodos cercanos con opacidad decreciente; repulsión suave con easing en
-        el header y en el fondo. **F2:** el fondo usa `dprMax 1.25` (menos
-        píxeles por frame) y los enlaces se calculan con **rejilla espacial**
-        (no O(n²)); `.ae-nodes-bg` lleva `contain: strict`.
+      - Nodos 44–105 en el header y **36–140 en el fondo** (`W/14` y `W/12`)
+        según el ancho; **rebotan en los bordes reflejando también la deriva
+        base** (nunca se quedan pegados a la pared); líneas solo entre nodos
+        cercanos con opacidad decreciente; repulsión suave con easing en el
+        header y en el fondo. **F2:** el fondo usa `dprMax 1.25` (menos píxeles
+        por frame) y los enlaces se calculan con **rejilla espacial** (no O(n²));
+        `.ae-nodes-bg` lleva `contain: strict`. **Neón:** cada nodo tiene un
+        **pulso de tamaño muy leve** (±10–14 %, fase propia) y, en el fondo, un
+        glow sutil con composición `lighter`, halo doble y núcleo casi blanco
+        (sin `shadowBlur`, para no encarecer el frame).
      - `requestAnimationFrame`, `devicePixelRatio`, `ResizeObserver`, pausa
        con la pestaña oculta y `prefers-reduced-motion` (nodos estáticos).
      - Se puede desactivar el fondo por página con `window.AE_NODES_BG = false;`
@@ -1030,6 +1040,17 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-05 — Nodos neón + rediseño de los botones del header.**
+  - `header/header-nodes.js`: más densidad (header 44–105, fondo 36–140),
+    **pulso de tamaño muy leve** (±10–14 % por nodo, con fase propia) y, en el
+    fondo, un **glow neón sutil** con composición `lighter`, halo doble y
+    núcleo casi blanco (sin `shadowBlur`). Se mantienen el tope de DPR 1.25 y
+    la rejilla espacial de F2.
+  - `header/header.css`: los botones del nav pasan a **chips angulares**
+    (esquina superior derecha cortada con `clip-path`), mono en mayúsculas con
+    tracking amplio y tinte oscuro sutil en reposo; hover con barra de acento
+    creciente y `drop-shadow`, activo oscuro con barra encendida y
+    `text-shadow` lima. Verificado con capturas headless (EN VIVO y EQUIPOS).
 - **2026-10-05 — Fix visual del detalle de PARTIDOS (post-auditoría).**
   - `partidos/script.js`: el banner del partido pintaba el logo de `team_a` en
     grande (`'big'`) junto al título del evento, mientras que el bloque VS pinta
