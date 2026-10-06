@@ -871,7 +871,9 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
    - **Botones del nav:** chips **angulares y altos** (esquina superior derecha
      cortada con `clip-path`, padding `16px 26px`, mono en mayúsculas con
      tracking amplio) con **cristal esmerilado**: translucidez (7 %) +
-     `backdrop-filter: blur(7px)` + `rim light` interior. El blur se retiró una
+     `backdrop-filter: blur(7px)` + **hairline interior** oscuro
+     (`inset 0 0 0 1px`, 20 %) que delinea la forma angular + `rim light`
+     superior claro. El blur se retiró una
      vez por lag; volvió con dos mitigaciones: sin `saturate`/`brightness`
      extra (menos pasadas) y con el **canvas del header a DPR 1.5**, que abarata
      el muestreo del fondo ~2.8x. Si en algún equipo se notara lag, el
@@ -1055,7 +1057,9 @@ Al recibir una nueva tarea o solicitud de cambio:
     saturate/brightness** y con el **canvas del header a DPR 1.5**
     (`header-nodes.js`), que reduce ~2.8x el muestreo del fondo. El blur se ve
     (nodos difuminados dentro del chip); si hubiera lag, limitarlo a
-    `:hover`/`.active` es el siguiente paso.
+    `:hover`/`.active` es el siguiente paso. Se añade un **hairline interior**
+    (20 %) + rim superior para que la forma del botón se distinga sobre el
+    cristal.
   - `header/header-nodes.js`: el fondo sube a **64–190 nodos** (`W/9`) y la
     interacción del cursor se amplía (`cursorDist` 220, `cursorAlpha` 0.7,
     `repulse` 150, `speed` 5–13): el efecto del mouse sobre la red se percibe
