@@ -386,11 +386,11 @@ main.v-main.wide { max-width: 1500px; }
 .v-lozenge.has-img { background: transparent; }
 .v-lozenge.has-img .v-lozenge-txt { display: none; }
 
-/* Logo negro-sin-croma (`bl`): tarjeta clara sólida para que el trazo se lea
-   sobre cualquier fondo. No es un halo: es una superficie plana consistente. */
-.v-lozenge.on-light { background: var(--txt-1); }
-.v-lozenge.on-light .v-lozenge-fg { inset: 12%; width: 76%; height: 76%; filter: none; }
-.v-lozenge.on-light .v-lozenge-txt { color: var(--bg); }
+/* Logo negro-sin-croma (`bl`): se invierte para que se lea sobre el fondo
+   oscuro (un logo negro tal cual quedaría invisible). No cambia el tamaño. */
+.v-lozenge.on-light { background: none; }
+.v-lozenge.on-light .v-lozenge-fg { filter: invert(1); }
+.v-lozenge.on-light .v-lozenge-txt { color: var(--txt-1); }
 
 .v-lozenge-txt { position: relative; z-index: 1; }
 
@@ -428,9 +428,9 @@ main.v-main.wide { max-width: 1500px; }
 .v-elogo.has-img { background: transparent; }
 .v-elogo.has-img .v-elogo-txt { display: none; }
 
-.v-elogo.on-light { background: var(--txt-1); }
-.v-elogo.on-light .v-elogo-fg { inset: 12%; width: 76%; height: 76%; filter: none; }
-.v-elogo.on-light .v-elogo-txt { color: var(--bg); }
+.v-elogo.on-light { background: none; }
+.v-elogo.on-light .v-elogo-fg { filter: invert(1); }
+.v-elogo.on-light .v-elogo-txt { color: var(--txt-1); }
 
 .v-elogo-txt { position: relative; z-index: 1; }
 
