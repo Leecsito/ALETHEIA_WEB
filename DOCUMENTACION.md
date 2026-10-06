@@ -546,13 +546,13 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
 - `GET /api/evento?event_id=<id>` o `?torneo=<nombre>`: detalle. Devuelve `evento` (nombre, torneos/aliases, fechas, partidos, equipos), `partidos`, `equipos` (récord y mapas V-D), `mapas` (jugados, picks, bans, deciders; `atk_win_pct`/`def_win_pct` solo si hay `event_map_stats`) y `agentes` (pickrate por mapa desde `event_agent_pickrate`; si el torneo no tiene meta, se **calcula** la presencia % desde `player_stats`).
 
 ### 4.9. Módulo Media (`media_bp`) — logos y fotos por enlace (no es una página)
-- **No guarda imágenes.** Resuelve el enlace directo desde vlr.gg y hace `302 redirect` para que el navegador cargue la imagen desde el CDN (`owcdn.net`). Solo se cachean **metadatos** en `media/urls_cache.json` (~100 bytes por entidad, regenerable): enlace (`u`), color medio (`c`), si es oscuro (`d`) y marca de color calculado (`cc`).
-- **Color medio sin guardar la imagen:** para equipos y eventos se lee la imagen UNA vez **en memoria** (Pillow, máx 48×48, ignorando transparencia), se calcula el color medio y la luminancia, y se descarta. `d:true` (luminancia < **0.5**) indica logo oscuro → el frontend usa halo claro (`on-light`). No aplica a jugadores. Los colores guardan `cv` (`COLOR_VERSION`): al subir la versión se recalculan solos (evita quedar con umbrales viejos).
+- **No guarda imágenes.** Resuelve el enlace directo desde vlr.gg y hace `302 redirect` para que el navegador cargue la imagen desde el CDN (`owcdn.net`). Solo se cachean **metadatos** en `media/urls_cache.json` (~100 bytes por entidad, regenerable): enlace (`u`), color medio (`c`), si es oscuro (`d`), si es **negro-sin-croma** (`bl`) y marca de color calculado (`cc`).
+- **Color medio sin guardar la imagen:** para equipos y eventos se lee la imagen UNA vez **en memoria** (Pillow, máx 48×48, ignorando transparencia), se calcula el color medio, la luminancia y el ratio de píxeles negros, y se descarta. `d:true` (luminancia < **0.5**) marca logo oscuro; `bl:true` (ratio de píxeles con `max(R,G,B) < 70` y chroma `< 35` ≥ **85%**) marca logo **negro de verdad** → el frontend le pone una **tarjeta clara** (`on-light`). No aplica a jugadores. Los colores guardan `cv` (`COLOR_VERSION`, hoy **3**): al subir la versión se recalculan solos en 2º plano (evita quedar con umbrales viejos).
 - `GET /api/media/equipo/<team_id>`: si no hay enlace resuelto, baja **bajo demanda** la página `vlr.gg/team/<id>` (mismo id que `teams.team_id`), extrae la imagen de `team-header-logo` (fallback `og:image`) y redirige. `404` con `{"ok":false,"estado":"miss|busy|error"}` si no hay imagen.
 - `GET /api/media/jugador/<player_id>`: igual para la foto (`player-header`, fallback `og:image`).
 - `GET /api/media/evento/<event_id>`: igual para el logo del evento (`event-header`, fallback `og:image`).
 - `GET /api/media/evento?nombre=<torneo>`: para torneos **sin `event_id`** (p. ej. *Valorant Champions 2026*). Busca el evento en `vlr.gg/search/?q=...`, extrae el primer resultado `/search/r/event/<id>/idx` + su thumbnail, y lo cachea por nombre (`n:<slug>`) y por id.
-- `GET /api/media/meta?equipos=1,2&jugadores=4&eventos=2766&nombres=A|B`: devuelve **enlaces ya resueltos** (`u`) + color (`c`) + flag oscuro (`d`), sin bloquear la carga. El frontend apunta los `<img>` **directo al CDN** con esto (cero requests de imagen a este backend) y pinta colores/watermarks. Si la entidad no tiene imagen en origen devuelve `{"miss": true}` y el frontend se queda con siglas/iniciales **sin pedir la imagen** (nada de iconos rotos). **F5:** si la entidad no tiene entrada, responde `{"pending": true}` y la resuelve en un **hilo de fondo** (mismo semáforo 2 + throttle; `_resoluciones_en_proceso` evita duplicados): la primera carga no paga el scrape de 1,6 s; el frontend **reintenta solo las pendientes** (F6) y recibe el enlace o `miss`. Los enlaces cacheados sin color lo calculan también en un hilo de fondo (`cc` evita reintentos infinitos).
+- `GET /api/media/meta?equipos=1,2&jugadores=4&eventos=2766&nombres=A|B`: devuelve **enlaces ya resueltos** (`u`) + color (`c`) + flag oscuro (`d`) + flag **negro-sin-croma** (`bl`, usado para la tarjeta clara de logos negros), sin bloquear la carga. El frontend apunta los `<img>` **directo al CDN** con esto (cero requests de imagen a este backend) y pinta colores/watermarks. Si la entidad no tiene imagen en origen devuelve `{"miss": true}` y el frontend se queda con siglas/iniciales **sin pedir la imagen** (nada de iconos rotos). **F5:** si la entidad no tiene entrada, responde `{"pending": true}` y la resuelve en un **hilo de fondo** (mismo semáforo 2 + throttle; `_resoluciones_en_proceso` evita duplicados): la primera carga no paga el scrape de 1,6 s; el frontend **reintenta solo las pendientes** (F6) y recibe el enlace o `miss`. Los enlaces cacheados sin color lo calculan también en un hilo de fondo (`cc` evita reintentos infinitos).
 - **Sin imagen real:** vlr.gg usa rutas relativas para placeholders (`/img/base/ph/sil.png` en jugadores, `/img/vlr/tmp/vlr.png` en equipos) y `og:image` genérica (`vlr/card.png`); `_extraer_imagen` las descarta (solo acepta `http(s)`), así que se marcan como miss y el fallback es el monograma/iniciales. Verificado con precarga completa: equipos 70/79 (9 sin logo real), eventos 16/16, jugadores 524/688 (164 sin foto), **0 errores**.
 - `GET /api/media/estado`: conteo de resueltas / sin imagen / con color por tipo y tamaño del JSON.
 - **Reglas:** máximo 2 resoluciones simultáneas y 0.3 s entre requests a vlr.gg; los "sin imagen"/404 reales se marcan y no se reintentan por 24 h; los errores de red **no** se marcan (se reintenta en la próxima visita); el redirect se cachea 7 días en el navegador. Al guardar `urls_cache.json` se hace **merge por `t`** con lo que haya en disco, para que el servidor y `cachear_media.py` (u otro worker) nunca se pisen. **F5:** `urls_cache.json` se versiona (deja de estar gitignored) para que los enlaces sobrevivan a los deploys de Render; solo se ignora `urls_cache.json.tmp`.
@@ -939,10 +939,10 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      `VCT.eventLogo(eventId, name, cls, prioridad)`. Desde **F8** cada uno pinta
      **una sola** `<img>` (`*-fg`) con `object-fit: contain` (nunca recorta;
      antes eran dos `<img>` fg+bg con la misma URL: doble decodificación/pintura).
-     **Sin glow ni fondos**: el logo se muestra tal cual (los halos amplificaban
-     los logos brillantes y hacían "caja" en los oscuros). No hay cuadros ni
-     bordes; la clase `on-light` ya solo se usa para el color del texto de
-     respaldo.
+     **Sin glow**: el logo se muestra tal cual (los halos amplificaban los
+     logos brillantes y hacían "caja" en los oscuros). No hay bordes; la clase
+     `on-light` (flag `bl` del backend) pone una **tarjeta clara sólida** solo
+     cuando el logo es mayoritariamente **negro sin croma**, para que se lea.
      `prioridad=true` (primera fila de EN VIVO) usa `loading="eager"` +
      `fetchpriority="high"` para el LCP. Fallback: siglas/iniciales/monograma
      (`VCT.imgError`). Los agentes (`VCT.agentIcon`) y mapas (`VCT.mapIcon`)
@@ -1043,12 +1043,19 @@ Al recibir una nueva tarea o solicitud de cambio:
     móvil) y **nombre secundario** (`v-team-name` 28 → 15px, 13px en móvil):
     el protagonismo es del logo, no del nombre.
   - **Logos sin glow (F8 bis, decisión final):** se eliminaron los halos
-    (`drop-shadow`) de `.v-lozenge-fg`/`.v-elogo-fg` y sus variantes
-    `on-light`. El glow del color del equipo amplificaba los logos ya
-    brillantes (XI LAI cian, VCT naranja/rojo/púrpura) y el halo blanco se
-    recortaba como "caja" en logos oscuros (T1, FUT, DRX, EMEA). Ahora el
-    logo se muestra **tal cual**, sin filtros: consistente para cualquier
-    diseño/color. Verificado con capturas headless (equipos, eventos y partido).
+    (`drop-shadow`) de `.v-lozenge-fg`/`.v-elogo-fg`. El glow del color del
+    equipo amplificaba los logos ya brillantes (XI LAI cian, VCT
+    naranja/rojo/púrpura) y el halo blanco se recortaba como "caja" en logos
+    oscuros. Ahora los logos se muestran **tal cual**, sin filtros.
+    Verificado con capturas headless (equipos, eventos y partido).
+  - **Tile claro para logos negros (`bl`):** `media.py` mide el ratio de
+    píxeles **negros sin croma** (`max(R,G,B) < 70` y chroma `< 35`; así el
+    rojo/azul/púrpura saturados no cuentan) y expone `bl` en `/media/meta`
+    con un umbral del **85%**; si un logo es negro, `.on-light` le pone una
+    **tarjeta clara sólida** (`--txt-1`) con el logo al 76% para que el trazo
+    se lea sobre cualquier fondo. `COLOR_VERSION = 3` recalcula la caché de
+    colores en 2º plano. Quedan con tile 18 equipos (p. ej. Paper Rex, FUT) y
+    9 eventos (VCT EMEA); T1, DRX o los VCT naranja/púrpura quedan fuera.
   - **Watermark del banner:** la regla genérica vuelve a 2 capas (`--wm-a`/`--wm-b`)
     para no mover el watermark de equipos/jugadores/eventos; el orden evento/A/B
     vive solo en `.v-banner.vs::after` (partidos). Verificado con capturas

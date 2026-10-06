@@ -6,7 +6,8 @@
 "c": "#912829",
 "d": true,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "2": {
 "u": "https://owcdn.net/img/62875027c8e06.png",
@@ -14,7 +15,8 @@
 "c": "#ce0036",
 "d": true,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "14": {
 "u": "https://owcdn.net/img/62fe0b8f6b084.png",
@@ -22,7 +24,8 @@
 "c": "#e4002d",
 "d": true,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "11058": {
 "u": "https://owcdn.net/img/633822848a741.png",
@@ -30,329 +33,422 @@
 "c": "#949494",
 "d": false,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "427": {
 "u": "https://owcdn.net/img/5f3ca822464a3.png",
 "t": 1790523412,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "13581": {
 "u": "https://owcdn.net/img/671742f863b9b.png",
 "t": 1790523414,
 "c": "#0297ad",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "17": {
 "u": "https://owcdn.net/img/6970c986eddc6.png",
 "t": 1790524677,
 "c": "#d3ba84",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "188": {
 "u": "https://owcdn.net/img/628addcbd509e.png",
 "t": 1790524679,
 "c": "#26ade3",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "278": {
 "u": "https://owcdn.net/img/63972e548cdc9.png",
 "t": 1790524680,
 "c": "#152f66",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "397": {
 "u": "https://owcdn.net/img/65b8ccef5e273.png",
 "t": 1790524682,
 "c": "#c5930e",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "466": {
 "u": "https://owcdn.net/img/629f1bdae82ab.png",
 "t": 1790524684,
 "c": "#4e2f37",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "474": {
 "u": "https://owcdn.net/img/640c381f0603f.png",
 "t": 1790524685,
 "c": "#a2a6b1",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "623": {
 "u": "https://owcdn.net/img/698dc40a29cda.png",
 "t": 1790524687,
 "c": "#615787",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "624": {
 "u": "https://owcdn.net/img/62bbeba74d5cb.png",
 "t": 1790524689,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "731": {
 "u": "https://owcdn.net/img/63eb60fb08390.png",
 "t": 1790524690,
 "c": "#894a48",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "876": {
 "u": "https://owcdn.net/img/68643d0b1c72b.png",
 "t": 1790524692,
 "c": "#e81f42",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "878": {
 "u": "https://owcdn.net/img/629f17f51e7a3.png",
 "t": 1790524694,
 "c": "#f4aa36",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "918": {
 "u": "https://owcdn.net/img/629f316ddd4dd.png",
 "t": 1790524695,
 "c": "#b394ad",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "1001": {
 "u": "https://owcdn.net/img/637b755224c12.png",
 "t": 1790524697,
 "c": "#6a6450",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "1034": {
 "u": "https://owcdn.net/img/6610f026c1a9e.png",
 "t": 1790524698,
 "c": "#f93d09",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "1119": {
 "u": "https://owcdn.net/img/6549c2b905061.png",
 "t": 1790524700,
 "c": "#db251c",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "1120": {
 "u": "https://owcdn.net/img/62c82049253b2.png",
 "t": 1790524702,
 "c": "#373839",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "1184": {
 "u": "https://owcdn.net/img/632be9976b8fe.png",
 "t": 1790524703,
 "c": "#1a1825",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "2059": {
 "u": "https://owcdn.net/img/6466d79e1ed40.png",
 "t": 1790524705,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "2355": {
 "u": "https://owcdn.net/img/63976677069e1.png",
 "t": 1790524706,
 "c": "#ff198f",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2359": {
 "u": "https://owcdn.net/img/61b8888cc3860.png",
 "t": 1790524708,
 "c": "#69acde",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2406": {
 "u": "https://owcdn.net/img/632be843b7d51.png",
 "t": 1790524710,
 "c": "#464646",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2593": {
 "u": "https://owcdn.net/img/62a40cc2b5e29.png",
 "t": 1790524711,
 "c": "#ff5900",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "3478": {
 "u": "https://owcdn.net/img/656e2ae2b8a48.png",
 "t": 1790524713,
 "c": "#26a6c2",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "4050": {
 "u": "https://owcdn.net/img/6537a7954d915.png",
 "t": 1790524714,
 "c": "#fd7b00",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "4915": {
 "u": "https://owcdn.net/img/62a4109ddbd7f.png",
 "t": 1790524716,
 "c": "#756f02",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "5248": {
 "u": "https://owcdn.net/img/667462f046618.png",
 "t": 1790524718,
 "c": "#202d5a",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "5448": {
 "u": "https://owcdn.net/img/62a411783d94d.png",
 "t": 1790524719,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "6199": {
 "u": "https://owcdn.net/img/629f13085ead6.png",
 "t": 1790524721,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "6392": {
 "u": "https://owcdn.net/img/6628980dcdaea.png",
 "t": 1790524723,
 "c": "#9e906d",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "6961": {
 "u": "https://owcdn.net/img/62bbec8dc1b9f.png",
 "t": 1790524725,
 "c": "#12ff00",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "7035": {
 "u": "https://owcdn.net/img/67667c7a563be.png",
 "t": 1790524730,
 "c": "#009ddf",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "7386": {
 "u": "https://owcdn.net/img/632be7626d6d9.png",
 "t": 1790524731,
 "c": "#040607",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "8185": {
 "u": "https://owcdn.net/img/6a353ee73ab25.png",
 "t": 1790524733,
 "c": "#552066",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "8304": {
 "u": "https://owcdn.net/img/6226f3d764e03.png",
 "t": 1790524735,
 "c": "#e50041",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "8877": {
 "u": "https://owcdn.net/img/627403a0d9e48.png",
 "t": 1790524737,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "11001": {
 "u": "https://owcdn.net/img/6945c73504452.png",
 "t": 1790524738,
 "c": "#8f9b46",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "11060": {
 "u": "https://owcdn.net/img/6399bb707aacb.png",
 "t": 1790524740,
 "c": "#772c29",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "11229": {
 "u": "https://owcdn.net/img/63a74624cc76a.png",
 "t": 1790524742,
 "c": "#0a0a0a",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "11232": {
 "u": "https://owcdn.net/img/63a944e6cbe49.png",
 "t": 1790524743,
 "c": "#101010",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "11328": {
 "u": "https://owcdn.net/img/65a17b313b131.png",
 "t": 1790524745,
 "c": "#ff0500",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "11479": {
 "u": "https://owcdn.net/img/63bd4a379f758.png",
 "t": 1790524746,
 "c": "#00112f",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "11981": {
 "u": "https://owcdn.net/img/642233fc01f26.png",
 "t": 1790524748,
 "c": "#438bcb",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "12010": {
 "u": "https://owcdn.net/img/63f25d72216c1.png",
 "t": 1790524750,
 "c": "#4ec6eb",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "12064": {
 "u": "https://owcdn.net/img/6404c0174250b.png",
 "t": 1790524751,
 "c": "#a555bc",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "12065": {
 "u": null,
@@ -363,63 +459,81 @@
 "t": 1790524753,
 "c": "#535165",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "12694": {
 "u": "https://owcdn.net/img/6670153fa9120.png",
 "t": 1790524755,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "12784": {
 "u": "https://owcdn.net/img/64461a1131da5.png",
 "t": 1790524757,
 "c": "#9b6f64",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "13576": {
 "u": "https://owcdn.net/img/64f9825408326.png",
 "t": 1790524758,
 "c": "#c90f2e",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "13790": {
 "u": "https://owcdn.net/img/651d33f8e6a1f.png",
 "t": 1790524760,
 "c": "#725627",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "14137": {
 "u": "https://owcdn.net/img/65487414b8562.png",
 "t": 1790524762,
 "c": "#dc2b19",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "14419": {
 "u": "https://owcdn.net/img/657b2f3fcd199.png",
 "t": 1790524763,
 "c": "#171717",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "14478": {
 "u": "https://owcdn.net/img/659d1013d5cf5.png",
 "t": 1790524765,
 "c": "#ec6c70",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "15072": {
 "u": "https://owcdn.net/img/67725c368d524.png",
 "t": 1790524766,
 "c": "#794afa",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "15315": {
 "u": null,
@@ -430,7 +544,9 @@
 "t": 1790524769,
 "c": "#5f0000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "17715": {
 "u": null,
@@ -441,14 +557,18 @@
 "t": 1790524771,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "18299": {
 "u": "https://owcdn.net/img/67f4e2e7b3802.png",
 "t": 1790524773,
 "c": "#de0318",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "19008": {
 "u": null,
@@ -459,14 +579,18 @@
 "t": 1790524775,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "19507": {
 "u": "https://owcdn.net/img/691c3df1b4daa.png",
 "t": 1790524776,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "19550": {
 "u": null,
@@ -493,42 +617,54 @@
 "t": 1790524782,
 "c": "#9f6a94",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "19722": {
 "u": "https://owcdn.net/img/68ac7561885f2.png",
 "t": 1790524783,
 "c": "#083795",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "20085": {
 "u": "https://owcdn.net/img/68e6e1bcca45d.png",
 "t": 1790524785,
 "c": "#7ad3f1",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "20603": {
 "u": "https://owcdn.net/img/6a70722c7c24b.png",
 "t": 1790524786,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "22142": {
 "u": "https://owcdn.net/img/69ea66a9d008c.png",
 "t": 1790524788,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "23141": {
 "u": "https://owcdn.net/img/6a76a37807aad.png",
 "t": 1790524790,
 "c": "#382439",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "1": {
 "u": null,
@@ -539,7 +675,9 @@
 "t": 1791222624,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 }
 },
 "jugadores": {
@@ -3303,7 +3441,8 @@
 "c": "#ff570b",
 "d": true,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "2977": {
 "u": "https://owcdn.net/img/640f5ab71dfbb.png",
@@ -3311,7 +3450,8 @@
 "c": "#ff570b",
 "d": true,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "n:valorant-champions-2026": {
 "u": "https://owcdn.net/img/692fc60a022bb.png",
@@ -3319,7 +3459,8 @@
 "c": "#c7b375",
 "d": false,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "2766": {
 "u": "https://owcdn.net/img/692fc60a022bb.png",
@@ -3327,7 +3468,8 @@
 "c": "#c7b375",
 "d": false,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "2683": {
 "u": "https://owcdn.net/img/640f5ae002674.png",
@@ -3335,7 +3477,8 @@
 "c": "#00d3d8",
 "d": false,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "2684": {
 "u": "https://owcdn.net/img/65ab59620a233.png",
@@ -3343,7 +3486,8 @@
 "c": "#000000",
 "d": true,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": true
 },
 "2685": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
@@ -3351,7 +3495,8 @@
 "c": "#e83056",
 "d": true,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "2760": {
 "u": "https://owcdn.net/img/692fc18a04f4a.png",
@@ -3359,273 +3504,350 @@
 "c": "#9564f8",
 "d": true,
 "cc": true,
-"cv": 2
+"cv": 3,
+"bl": false
 },
 "2765": {
 "u": "https://owcdn.net/img/692fc18a04f4a.png",
 "t": 1790524794,
 "c": "#9564f8",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2775": {
 "u": "https://owcdn.net/img/640f5ae002674.png",
 "t": 1790524795,
 "c": "#00d3d8",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2776": {
 "u": "https://owcdn.net/img/640f5ae002674.png",
 "t": 1790524797,
 "c": "#00d3d8",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2860": {
 "u": "https://owcdn.net/img/640f5ab71dfbb.png",
 "t": 1790524798,
 "c": "#ff570b",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2863": {
 "u": "https://owcdn.net/img/65ab59620a233.png",
 "t": 1790524800,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "2864": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
 "t": 1790524801,
 "c": "#e83056",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2976": {
 "u": "https://owcdn.net/img/65ab59620a233.png",
 "t": 1790524803,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "2978": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
 "t": 1790524805,
 "c": "#e83056",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:valorant-champions-2025": {
 "u": "https://owcdn.net/img/63067806d167d.png",
 "t": 1791240183,
 "c": "#c4b074",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:vct-2025-americas-stage-2": {
 "u": "https://owcdn.net/img/640f5ab71dfbb.png",
 "t": 1791240183,
 "c": "#ff570b",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2283": {
 "u": "https://owcdn.net/img/63067806d167d.png",
 "t": 1791240183,
 "c": "#c4b074",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2501": {
 "u": "https://owcdn.net/img/640f5ab71dfbb.png",
 "t": 1791240183,
 "c": "#ff570b",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:vct-2025-emea-stage-2": {
 "u": "https://owcdn.net/img/65ab59620a233.png",
 "t": 1791240185,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "2498": {
 "u": "https://owcdn.net/img/65ab59620a233.png",
 "t": 1791240185,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "n:vct-2025-pacific-stage-2": {
 "u": "https://owcdn.net/img/640f5ae002674.png",
 "t": 1791240185,
 "c": "#00d3d8",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2500": {
 "u": "https://owcdn.net/img/640f5ae002674.png",
 "t": 1791240185,
 "c": "#00d3d8",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:vct-2025-china-stage-2": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
 "t": 1791240186,
 "c": "#e83056",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2499": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
 "t": 1791240187,
 "c": "#e83056",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:valorant-masters-toronto-2025": {
 "u": "https://owcdn.net/img/603bfd7bf3f54.png",
 "t": 1791240187,
 "c": "#9465f6",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2282": {
 "u": "https://owcdn.net/img/603bfd7bf3f54.png",
 "t": 1791240187,
 "c": "#9465f6",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:vct-2025-emea-stage-1": {
 "u": "https://owcdn.net/img/65ab59620a233.png",
 "t": 1791240189,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "2380": {
 "u": "https://owcdn.net/img/65ab59620a233.png",
 "t": 1791240189,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "n:vct-2025-pacific-stage-1": {
 "u": "https://owcdn.net/img/640f5ae002674.png",
 "t": 1791240189,
 "c": "#00d3d8",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2379": {
 "u": "https://owcdn.net/img/640f5ae002674.png",
 "t": 1791240189,
 "c": "#00d3d8",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:vct-2025-americas-stage-1": {
 "u": "https://owcdn.net/img/640f5ab71dfbb.png",
 "t": 1791240191,
 "c": "#ff570b",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2347": {
 "u": "https://owcdn.net/img/640f5ab71dfbb.png",
 "t": 1791240191,
 "c": "#ff570b",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:vct-2025-china-stage-1": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
 "t": 1791240191,
 "c": "#e83056",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2359": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
 "t": 1791240191,
 "c": "#e83056",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:valorant-masters-bangkok-2025": {
 "u": "https://owcdn.net/img/603bfd7bf3f54.png",
 "t": 1791240193,
 "c": "#9465f6",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2281": {
 "u": "https://owcdn.net/img/603bfd7bf3f54.png",
 "t": 1791240193,
 "c": "#9465f6",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:vct-2025-emea-kickoff": {
 "u": "https://owcdn.net/img/65ab59620a233.png",
 "t": 1791240194,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "2276": {
 "u": "https://owcdn.net/img/65ab59620a233.png",
 "t": 1791240194,
 "c": "#000000",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": true,
+"cc": true
 },
 "n:vct-2025-pacific-kickoff": {
 "u": "https://owcdn.net/img/640f5ae002674.png",
 "t": 1791240195,
 "c": "#00d3d8",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2277": {
 "u": "https://owcdn.net/img/640f5ae002674.png",
 "t": 1791240195,
 "c": "#00d3d8",
 "d": false,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:vct-2025-americas-kickoff": {
 "u": "https://owcdn.net/img/640f5ab71dfbb.png",
 "t": 1791240196,
 "c": "#ff570b",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2274": {
 "u": "https://owcdn.net/img/640f5ab71dfbb.png",
 "t": 1791240196,
 "c": "#ff570b",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "n:vct-2025-china-kickoff": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
 "t": 1791240197,
 "c": "#e83056",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 },
 "2275": {
 "u": "https://owcdn.net/img/65dd97cea9a25.png",
 "t": 1791240197,
 "c": "#e83056",
 "d": true,
-"cv": 2
+"cv": 3,
+"bl": false,
+"cc": true
 }
 }
 }

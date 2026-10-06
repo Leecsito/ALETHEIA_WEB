@@ -189,7 +189,8 @@ const VCT = (() => {
             const aplicar = (el, info, t, v) => {
                 if (!info) { marcar(t, v); return; }
                 if (info.c) el.style.setProperty('--c', info.c);
-                el.classList.toggle('on-light', !!info.d);
+                // `bl` = logo negro-sin-croma: tarjeta clara para leerlo.
+                el.classList.toggle('on-light', !!info.bl);
                 if (info.pending) marcar(t, v);
             };
             root.querySelectorAll('[data-c-equipo]').forEach(el => {

@@ -55,8 +55,13 @@ PAGE_TIMEOUT = 20
 IMG_TIMEOUT = 25
 MAX_BYTES = 8 * 1024 * 1024   # 8 MB de tope
 REDIRECT_MAX_AGE = 7 * 24 * 3600
-COLOR_DARK_LUM = 0.5          # debajo de esto el logo es oscuro -> halo claro (contraste)
-COLOR_VERSION = 2             # subir si cambia el cálculo: invalida colores cacheados
+COLOR_DARK_LUM = 0.5          # debajo de esto el logo es oscuro (flag `d`)
+COLOR_VERSION = 3             # subir si cambia el cálculo: invalida colores cacheados
+# Logo "negro de verdad" (sin croma): píxeles opacos con canal máximo < 70 y
+# diferencia entre canales < 35. Así el rojo/azul/púrpura saturados NO cuentan.
+BLACK_MAX_CHANNEL = 70
+BLACK_MAX_CHROMA = 35
+BLACK_RATIO = 0.85            # >=85% de píxeles negros -> tile claro (flag `bl`)
 
 SEM = threading.BoundedSemaphore(2)
 RATE_LOCK = threading.Lock()
@@ -183,7 +188,10 @@ def media_meta():
             # Enlace resuelto pero sin color (o con versión vieja): recalcular en 2º plano.
             if _color_pendiente(kind, e):
                 _lanzar_color(kind, eid, e['u'])
-            return {'u': e['u'], 'c': e.get('c'), 'd': bool(e.get('d'))}
+            return {
+                'u': e['u'], 'c': e.get('c'), 'd': bool(e.get('d')),
+                'bl': bool(e.get('bl')),   # negro-sin-croma -> tile claro
+            }
         if _miss_vigente(e):
             return {'miss': True}          # sin imagen conocida: no pedirla de nuevo
         # Sin entrada: resolver en 2º plano (con el semáforo y el throttle
@@ -245,13 +253,15 @@ def _entrada(kind, eid):
         return (_cache.get(kind) or {}).get(str(eid))
 
 
-def _guardar(kind, eid, url, color=None, dark=None):
+def _guardar(kind, eid, url, color=None, dark=None, negro=None):
     with CACHE_LOCK:
         entrada = {'u': url, 't': int(time.time())}
         if color:
             entrada['c'] = color
             entrada['d'] = bool(dark)
             entrada['cv'] = COLOR_VERSION
+            # `bl`: logo negro-sin-croma -> el frontend le pone tile claro.
+            entrada['bl'] = bool(negro) if negro is not None else False
         _cache.setdefault(kind, {})[str(eid)] = entrada
         _guardar_cache()
 
@@ -302,24 +312,33 @@ def _extraer_imagen(html, kind):
 
 
 def _color_medio(data):
-    """Color medio y si el logo es oscuro. Se calcula EN MEMORIA, no se guarda."""
+    """Color medio, flag oscuro y ratio de píxeles negros-sin-croma.
+
+    Devuelve (color|None, es_oscuro, ratio_negro). Se calcula EN MEMORIA, no se
+    guarda la imagen. El ratio `bl` distingue un logo negro de un color saturado
+    oscuro (el rojo puro tiene luminancia baja pero no es "negro").
+    """
     if Image is None or not data:
-        return None, False
+        return None, False, 0.0
     try:
         im = Image.open(io.BytesIO(data)).convert('RGBA')
         im.thumbnail((48, 48))
-        r = g = b = n = 0
+        r = g = b = n = negros = 0
         for pr, pg, pb, pa in im.getdata():
             if pa < 40:                     # ignorar píxeles transparentes
                 continue
             r += pr; g += pg; b += pb; n += 1
+            maxc = max(pr, pg, pb)
+            minc = min(pr, pg, pb)
+            if maxc < BLACK_MAX_CHANNEL and (maxc - minc) < BLACK_MAX_CHROMA:
+                negros += 1
         if not n:
-            return None, True
+            return None, True, 1.0
         r //= n; g //= n; b //= n
         lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255
-        return f'#{r:02x}{g:02x}{b:02x}', lum < COLOR_DARK_LUM
+        return f'#{r:02x}{g:02x}{b:02x}', lum < COLOR_DARK_LUM, negros / n
     except Exception:
-        return None, False
+        return None, False, 0.0
 
 
 def _color_de_url(img_url):
@@ -330,7 +349,7 @@ def _color_de_url(img_url):
             return _color_medio(r.content)
     except requests.RequestException:
         pass
-    return None, False
+    return None, False, 0.0
 
 
 def _resolver_evento_nombre(nombre):
@@ -357,12 +376,13 @@ def _completar_color(kind, eid, url):
             return
         try:
             _throttle()
-            color, dark = _color_de_url(url)
+            color, dark, ratio = _color_de_url(url)
             with CACHE_LOCK:
                 entrada = (_cache.get(kind) or {}).get(str(eid))
                 if entrada and entrada.get('u') == url:
                     entrada['c'] = color
                     entrada['d'] = bool(dark)
+                    entrada['bl'] = bool(color) and ratio >= BLACK_RATIO
                     entrada['cc'] = True
                     if color:
                         entrada['cv'] = COLOR_VERSION
@@ -453,10 +473,10 @@ def ensure(kind, eid, page_url):
             _guardar(kind, eid, None)
             return 'miss', None
 
-        color, dark = (None, False)
+        color, dark, ratio = (None, False, 0.0)
         if kind in ('equipos', 'eventos'):
-            color, dark = _color_de_url(url)
-        _guardar(kind, eid, url, color, dark)
+            color, dark, ratio = _color_de_url(url)
+        _guardar(kind, eid, url, color, dark, bool(color) and ratio >= BLACK_RATIO)
         return 'ok', url
     except Exception:
         return 'error', None
@@ -492,10 +512,11 @@ def ensure_evento_nombre(nombre):
             _guardar('eventos', key, None)
             return 'miss', None
 
-        color, dark = _color_de_url(img)
-        _guardar('eventos', key, img, color, dark)
+        color, dark, ratio = _color_de_url(img)
+        negro = bool(color) and ratio >= BLACK_RATIO
+        _guardar('eventos', key, img, color, dark, negro)
         if eid:                                     # alias numérico para futuras visitas
-            _guardar('eventos', eid, img, color, dark)
+            _guardar('eventos', eid, img, color, dark, negro)
         return 'ok', img
     except Exception:
         return 'error', None
