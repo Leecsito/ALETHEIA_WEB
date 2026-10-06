@@ -20,8 +20,25 @@ Notas de seguridad:
 import hashlib
 import os
 import re
+import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def escribir_con_reintento(ruta, texto, intentos=6):
+    """Escribe el archivo reintentando ante bloqueos transitorios de Windows
+    (`OSError: [Errno 22]` al reescribir un HTML mientras otro proceso lo
+    tiene abierto un instante)."""
+    ultimo = None
+    for i in range(intentos):
+        try:
+            with open(ruta, 'w', encoding='utf-8', newline='\n') as fh:
+                fh.write(texto)
+            return
+        except OSError as exc:
+            ultimo = exc
+            time.sleep(0.25 * (i + 1))
+    raise ultimo
 
 ASSETS = [
     'comun/theme.css',
@@ -129,8 +146,7 @@ def procesar_html(ruta_html, mapa):
 
     nuevo = RE_REF.sub(reemplazo, html)
     if nuevo != html:
-        with open(ruta_html, 'w', encoding='utf-8', newline='\n') as fh:
-            fh.write(nuevo)
+        escribir_con_reintento(ruta_html, nuevo)
         return True
     return False
 
@@ -149,8 +165,7 @@ def main():
         raiz, ext = os.path.splitext(rel)
         rel_min = f'{raiz}.min{ext}'
         destino = os.path.join(ROOT, rel_min)
-        with open(destino, 'w', encoding='utf-8', newline='\n') as fh:
-            fh.write(minificado)
+        escribir_con_reintento(destino, minificado)
         mapa[rel] = {'min': rel_min, 'hash': hash8(destino)}
         print(f'  {rel}  {len(texto):>7} -> {len(minificado):>7} B  v={mapa[rel]["hash"]}')
     print('Versionando HTML:')

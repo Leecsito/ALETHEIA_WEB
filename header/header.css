@@ -125,26 +125,29 @@
     justify-content: flex-end;
 }
 
-/* Botones del nav: chips angulares (esquina superior derecha cortada) con una
-   barra de acento que crece al pasar el cursor. El glow se hace con
-   `drop-shadow` porque `clip-path` recortaría un `box-shadow`. */
+/* Botones del nav: chips angulares (esquina superior derecha cortada). El
+   glow exterior usa `drop-shadow` (un `box-shadow` exterior quedaría recortado
+   por `clip-path`); el brillo interior usa `box-shadow: inset`, que sí se ve.
+   En hover/activo el chip se vuelve oscuro para que el neón (acento) luzca. */
 .ae-btn {
     position: relative;
-    padding: 8px 16px;
+    padding: 11px 24px;
     border: none;
     color: color-mix(in srgb, var(--bg) 82%, transparent);
     background: color-mix(in srgb, var(--bg) 7%, transparent);
-    clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 0 100%);
+    clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
     text-decoration: none;
     font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 2px;
+    font-size: 12.5px;
+    letter-spacing: 2.5px;
     text-transform: uppercase;
     cursor: pointer;
-    transition: color .18s, background .18s, filter .18s;
+    overflow: hidden;
+    transition: color .18s, background .18s, filter .18s, box-shadow .25s;
     white-space: nowrap;
 }
 
+/* Barra de acento a la izquierda (se enciende en hover/activo). */
 .ae-btn::before {
     content: '';
     position: absolute;
@@ -155,16 +158,46 @@
     background: var(--bg);
     transform: translateY(-50%);
     transition: height .2s, background .2s, box-shadow .2s;
+    z-index: 1;
+}
+
+/* Barrido de luz diagonal al pasar el cursor (sheen). */
+.ae-btn::after {
+    content: '';
+    position: absolute;
+    top: -30%;
+    bottom: -30%;
+    left: -55%;
+    width: 45%;
+    background: linear-gradient(100deg,
+            transparent,
+            color-mix(in srgb, var(--accent) 55%, transparent) 50%,
+            transparent);
+    transform: skewX(-18deg);
+    opacity: 0;
+    pointer-events: none;
+    transition: transform .5s ease, opacity .15s;
 }
 
 .ae-btn:hover {
-    color: var(--bg);
-    background: color-mix(in srgb, var(--bg) 16%, transparent);
-    filter: drop-shadow(0 0 6px color-mix(in srgb, var(--bg) 35%, transparent));
+    color: var(--accent);
+    background: var(--bg);
+    box-shadow: inset 0 0 18px color-mix(in srgb, var(--accent) 18%, transparent),
+                inset 0 1px 0 color-mix(in srgb, var(--accent) 30%, transparent);
+    filter: drop-shadow(0 0 3px color-mix(in srgb, var(--bg) 55%, transparent))
+            drop-shadow(0 0 12px color-mix(in srgb, var(--bg) 28%, transparent));
+    text-shadow: 0 0 6px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 
 .ae-btn:hover::before {
-    height: 58%;
+    height: 60%;
+    background: var(--accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.ae-btn:hover::after {
+    opacity: 1;
+    transform: skewX(-18deg) translateX(330%);
 }
 
 .ae-btn:focus-visible {
@@ -176,18 +209,24 @@
     transform: translateY(1px);
 }
 
-/* Activo: bloque oscuro con la barra de acento encendida (neón). */
+/* Activo: bloque oscuro con brillo interno de acento, barra encendida y
+   texto con glow (neón). */
 .ae-btn.active {
     color: var(--accent);
     background: var(--bg);
-    filter: drop-shadow(0 0 7px color-mix(in srgb, var(--bg) 45%, transparent));
-    text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 45%, transparent);
+    box-shadow: inset 0 0 26px color-mix(in srgb, var(--accent) 30%, transparent),
+                inset 0 1px 0 color-mix(in srgb, var(--accent) 45%, transparent),
+                inset 0 -2px 0 color-mix(in srgb, var(--accent) 85%, transparent);
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--bg) 60%, transparent))
+            drop-shadow(0 0 14px color-mix(in srgb, var(--bg) 32%, transparent));
+    text-shadow: 0 0 5px color-mix(in srgb, var(--accent) 65%, transparent),
+                 0 0 14px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .ae-btn.active::before {
-    height: 68%;
+    height: 70%;
     background: var(--accent);
-    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 60%, transparent);
+    box-shadow: 0 0 9px color-mix(in srgb, var(--accent) 65%, transparent);
 }
 
 /* Título de página que se coloca justo debajo del header. */
@@ -221,9 +260,9 @@
     }
 
     .ae-btn {
-        padding: 6px 11px;
-        font-size: 9.5px;
-        letter-spacing: 1px;
+        padding: 9px 15px;
+        font-size: 10.5px;
+        letter-spacing: 1.5px;
     }
 }
 
@@ -253,5 +292,12 @@
 
     .ae-nav {
         justify-content: flex-start;
+        gap: 6px;
+    }
+
+    .ae-btn {
+        padding: 9px 16px;
+        font-size: 11px;
+        letter-spacing: 1.5px;
     }
 }

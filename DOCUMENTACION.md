@@ -869,12 +869,14 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      wordmark en segundo plano. Todos los controles del header usan texto
      oscuro sobre el lima.
    - **Botones del nav:** chips **angulares** (esquina superior derecha cortada
-     con `clip-path`), mono en mayúsculas con tracking amplio y tinte oscuro
-     sutil en reposo. En hover se oscurecen, crece una **barra de acento** a la
-     izquierda y aplican un `drop-shadow` suave; el activo es un bloque oscuro
-     con la barra encendida (neón) y `text-shadow` lima. El glow usa
-     `filter: drop-shadow` porque `box-shadow` quedaría recortado por el
-     `clip-path`.
+     con `clip-path`), mono en mayúsculas con tracking amplio, padding amplio
+     (`11px 24px`) y tinte oscuro sutil en reposo. En hover/activo el chip se
+     vuelve oscuro y se enciende el neón: **barra de acento** a la izquierda,
+     `box-shadow: inset` (brillo interior + rim superior + línea inferior en el
+     activo), `text-shadow` lima en dos capas y un **barrido de luz diagonal**
+     (`::after` con `skewX`) al pasar el cursor. El glow exterior usa
+     `filter: drop-shadow` (un `box-shadow` exterior quedaría recortado por el
+     `clip-path`); el interior sí usa `inset`, que se ve.
    - **`header-nodes.js` (efecto de nodos reutilizable):**
       - Monta un `<canvas>` detrás del contenido del header (nodos verde oscuro
         que se funden a negro cerca del cursor) y un canvas fijo de fondo en
@@ -1047,10 +1049,16 @@ Al recibir una nueva tarea o solicitud de cambio:
     núcleo casi blanco (sin `shadowBlur`). Se mantienen el tope de DPR 1.25 y
     la rejilla espacial de F2.
   - `header/header.css`: los botones del nav pasan a **chips angulares**
-    (esquina superior derecha cortada con `clip-path`), mono en mayúsculas con
-    tracking amplio y tinte oscuro sutil en reposo; hover con barra de acento
-    creciente y `drop-shadow`, activo oscuro con barra encendida y
-    `text-shadow` lima. Verificado con capturas headless (EN VIVO y EQUIPOS).
+    (esquina superior derecha cortada con `clip-path`), más grandes
+    (`11px 24px`, 12,5px, tracking 2,5px), mono en mayúsculas y tinte oscuro
+    sutil en reposo. Hover/activo con relleno oscuro, **barra de acento**
+    creciente, brillo interior (`box-shadow: inset`), rim y línea inferior,
+    `text-shadow` lima en dos capas y **barrido de luz** diagonal (`::after`).
+    Verificado con capturas headless (reposo, hover y activo).
+  - `tools/minificar_assets.py`: escritura de archivos con **reintentos** ante
+    bloqueos transitorios de Windows (`OSError: [Errno 22]` al reescribir un
+    HTML que otro proceso tiene abierto un instante); ya no deja los hashes del
+    HTML a medias.
 - **2026-10-05 — Fix visual del detalle de PARTIDOS (post-auditoría).**
   - `partidos/script.js`: el banner del partido pintaba el logo de `team_a` en
     grande (`'big'`) junto al título del evento, mientras que el bloque VS pinta
