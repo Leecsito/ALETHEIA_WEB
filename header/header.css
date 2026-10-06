@@ -134,11 +134,12 @@
     padding: 16px 26px;
     border: none;
     color: color-mix(in srgb, var(--bg) 82%, transparent);
-    background: color-mix(in srgb, var(--bg) 6%, transparent);
-    /* Frosted glass: desenfoca lo que queda detrás del chip (lima + nodos)
-       sin tocar el texto, que queda nítido. */
-    -webkit-backdrop-filter: blur(9px) saturate(1.6) brightness(1.04);
-    backdrop-filter: blur(9px) saturate(1.6) brightness(1.04);
+    /* Acabado cristal SIN blur: un `backdrop-filter` sobre el canvas animado
+       se recalcula por frame y provocaba lag. Se simula con translucidez y un
+       rim light interior muy leve. */
+    background: color-mix(in srgb, var(--bg) 9%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--txt-1) 16%, transparent),
+                inset 0 0 14px color-mix(in srgb, var(--txt-1) 5%, transparent);
     clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
     text-decoration: none;
     font-family: var(--mono);
