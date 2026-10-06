@@ -547,7 +547,7 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
 
 ### 4.9. Módulo Media (`media_bp`) — logos y fotos por enlace (no es una página)
 - **No guarda imágenes.** Resuelve el enlace directo desde vlr.gg y hace `302 redirect` para que el navegador cargue la imagen desde el CDN (`owcdn.net`). Solo se cachean **metadatos** en `media/urls_cache.json` (~100 bytes por entidad, regenerable): enlace (`u`), color medio (`c`), si es oscuro (`d`), si es **negro-sin-croma** (`bl`) y marca de color calculado (`cc`).
-- **Color medio sin guardar la imagen:** para equipos y eventos se lee la imagen UNA vez **en memoria** (Pillow, máx 48×48, ignorando transparencia), se calcula el color medio, la luminancia y el ratio de píxeles negros, y se descarta. `d:true` (luminancia < **0.5**) marca logo oscuro; `bl:true` (ratio de píxeles con `max(R,G,B) < 70` y chroma `< 35` ≥ **85%**) marca logo **negro de verdad** → el frontend **invierte el logo** (`on-light` + `filter: invert(1)`) para que se lea sobre el fondo oscuro, sin cambiar su tamaño. No aplica a jugadores. Los colores guardan `cv` (`COLOR_VERSION`, hoy **3**): al subir la versión se recalculan solos en 2º plano (evita quedar con umbrales viejos).
+- **Color medio sin guardar la imagen:** para equipos y eventos se lee la imagen UNA vez **en memoria** (Pillow, máx 48×48, ignorando transparencia), se calcula el color medio, la luminancia y el ratio de píxeles negros, y se descarta. `d:true` (luminancia < **0.5**) marca logo oscuro; `bl:true` (ratio de píxeles con `max(R,G,B) < 70` y chroma `< 35` ≥ **85%**) marca logo **negro de verdad** → el frontend **invierte el logo** (`on-light` + `filter: invert(1) hue-rotate(180deg)`: el negro pasa a blanco y los tonos se conservan) para que se lea sobre el fondo oscuro, sin cambiar su tamaño. El watermark del banner también se invierte (`wm-inv-*`). No aplica a jugadores. Los colores guardan `cv` (`COLOR_VERSION`, hoy **3**): al subir la versión se recalculan solos en 2º plano (evita quedar con umbrales viejos).
 - `GET /api/media/equipo/<team_id>`: si no hay enlace resuelto, baja **bajo demanda** la página `vlr.gg/team/<id>` (mismo id que `teams.team_id`), extrae la imagen de `team-header-logo` (fallback `og:image`) y redirige. `404` con `{"ok":false,"estado":"miss|busy|error"}` si no hay imagen.
 - `GET /api/media/jugador/<player_id>`: igual para la foto (`player-header`, fallback `og:image`).
 - `GET /api/media/evento/<event_id>`: igual para el logo del evento (`event-header`, fallback `og:image`).
@@ -941,7 +941,8 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
      antes eran dos `<img>` fg+bg con la misma URL: doble decodificación/pintura).
      **Sin glow**: el logo se muestra tal cual (los halos amplificaban los
      logos brillantes y hacían "caja" en los oscuros). La clase `on-light`
-     (flag `bl` del backend) **invierte** (`filter: invert(1)`) solo los logos
+     (flag `bl` del backend) **invierte** (`filter: invert(1)
+     hue-rotate(180deg)`, conservando los tonos) solo los logos
      mayoritariamente **negros sin croma**, para que se lean sobre el fondo
      oscuro.
      `prioridad=true` (primera fila de EN VIVO) usa `loading="eager"` +
@@ -1053,11 +1054,14 @@ Al recibir una nueva tarea o solicitud de cambio:
     **negros sin croma** (`max(R,G,B) < 70` y chroma `< 35`; así el
     rojo/azul/púrpura saturados no cuentan) y expone `bl` en `/media/meta`
     con un umbral del **85%**; si un logo es negro, `.on-light` lo **invierte**
-    (`filter: invert(1)`, mismo tamaño) para que se lea sobre el fondo oscuro.
-    `COLOR_VERSION = 3` recalcula la caché de colores en 2º plano. Quedan
-    invertidos 18 equipos (p. ej. Paper Rex, FUT) y 9 eventos (VCT EMEA);
-    T1, DRX o los VCT naranja/púrpura quedan igual. Verificado con capturas
-    headless (equipos, eventos y partido FUT vs T1).
+    con `filter: invert(1) hue-rotate(180deg)` (mismo tamaño; el negro pasa a
+    blanco y los tonos se conservan: la estrella roja de FUT sigue roja). El
+    **watermark** del banner también se invierte (`wm-inv-a/b/e` sobre
+    `.v-banner::after`, sin tocar el degradado). `COLOR_VERSION = 3` recalcula
+    la caché de colores en 2º plano. Quedan invertidos 18 equipos (p. ej.
+    Paper Rex, FUT) y 9 eventos (VCT EMEA); T1, DRX o los VCT naranja/púrpura
+    quedan igual. Verificado con capturas headless (equipos, eventos y partido
+    FUT vs T1: logo claro con estrella roja y ambos watermarks visibles).
   - **Watermark del banner:** la regla genérica vuelve a 2 capas (`--wm-a`/`--wm-b`)
     para no mover el watermark de equipos/jugadores/eventos; el orden evento/A/B
     vive solo en `.v-banner.vs::after` (partidos). Verificado con capturas

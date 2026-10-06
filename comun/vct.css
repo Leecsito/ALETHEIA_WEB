@@ -387,9 +387,10 @@ main.v-main.wide { max-width: 1500px; }
 .v-lozenge.has-img .v-lozenge-txt { display: none; }
 
 /* Logo negro-sin-croma (`bl`): se invierte para que se lea sobre el fondo
-   oscuro (un logo negro tal cual quedaría invisible). No cambia el tamaño. */
+   oscuro. `hue-rotate(180deg)` tras el invert conserva los tonos (el negro
+   pasa a blanco pero el rojo sigue rojo, no cian). No cambia el tamaño. */
 .v-lozenge.on-light { background: none; }
-.v-lozenge.on-light .v-lozenge-fg { filter: invert(1); }
+.v-lozenge.on-light .v-lozenge-fg { filter: invert(1) hue-rotate(180deg); }
 .v-lozenge.on-light .v-lozenge-txt { color: var(--txt-1); }
 
 .v-lozenge-txt { position: relative; z-index: 1; }
@@ -429,7 +430,7 @@ main.v-main.wide { max-width: 1500px; }
 .v-elogo.has-img .v-elogo-txt { display: none; }
 
 .v-elogo.on-light { background: none; }
-.v-elogo.on-light .v-elogo-fg { filter: invert(1); }
+.v-elogo.on-light .v-elogo-fg { filter: invert(1) hue-rotate(180deg); }
 .v-elogo.on-light .v-elogo-txt { color: var(--txt-1); }
 
 .v-elogo-txt { position: relative; z-index: 1; }
@@ -579,6 +580,13 @@ main.v-main.wide { max-width: 1500px; }
     background-position: left -34px center, center center, right -34px center;
     background-size: 300px auto, 300px auto, 300px auto;
 }
+
+/* Watermark de un logo negro (`bl`): se invierte para que el fantasma se vea
+   sobre el fondo oscuro. Solo se invierte la capa de watermarks, no el
+   degradado del banner. */
+.v-banner.wm-inv-a::after,
+.v-banner.wm-inv-b::after,
+.v-banner.wm-inv-e::after { filter: saturate(0) invert(1); }
 
 .v-banner > * { position: relative; z-index: 1; }
 
