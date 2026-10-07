@@ -4336,3 +4336,248 @@ main {
     color: var(--dim);
     margin: 14px 0 8px;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   CAPAS L2/L3 DEL MOTOR (PLAN DE VETO + MICRO ECONÓMICO, EN VIVO)
+   Se calculan bajo demanda: los endpoints cargan el motor completo.
+   ───────────────────────────────────────────────────────────────────────────── */
+.plan-blocks {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 16px;
+}
+
+.plan-block {
+    border: 1px solid var(--border);
+    background: var(--bg);
+    padding: 14px 16px;
+}
+
+.plan-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.plan-hint {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--dim);
+}
+
+.plan-head .btn-nav {
+    cursor: pointer;
+    background: transparent;
+    font-family: var(--mono);
+}
+
+.plan-head .btn-nav:disabled {
+    opacity: .5;
+    cursor: wait;
+}
+
+.plan-body {
+    margin-top: 4px;
+}
+
+.plan-sum {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.plan-k {
+    font-size: 10px;
+    letter-spacing: 1px;
+    color: var(--dim);
+}
+
+.plan-k b {
+    color: var(--txt-1);
+}
+
+.plan-table {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 10px;
+}
+
+.plan-row {
+    display: grid;
+    grid-template-columns: 24px minmax(90px, 1fr) 54px 64px 104px 62px 108px;
+    gap: 8px;
+    align-items: center;
+    font-size: 10px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+}
+
+.plan-row-head {
+    border: none;
+    background: transparent;
+    font-size: 8px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    padding: 0 6px;
+}
+
+.plan-ord {
+    color: var(--dim);
+}
+
+.plan-map {
+    color: var(--txt-1);
+    letter-spacing: 1px;
+}
+
+.plan-side {
+    color: var(--dim);
+}
+
+.plan-p {
+    text-align: right;
+    color: var(--text);
+}
+
+.plan-ic,
+.plan-n {
+    text-align: right;
+    color: var(--dim);
+    font-size: 9px;
+}
+
+.plan-tags {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+
+.plan-tag {
+    font-size: 9px;
+    letter-spacing: 1px;
+    padding: 3px 8px;
+    border: 1px solid var(--border);
+    color: var(--txt-2);
+}
+
+.plan-tag.ok {
+    color: var(--ok);
+    border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+
+.plan-tag.bad {
+    color: var(--red);
+    border-color: color-mix(in srgb, var(--bad) 30%, transparent);
+}
+
+.plan-tag.info {
+    color: var(--blue);
+    border-color: color-mix(in srgb, var(--blue) 35%, transparent);
+}
+
+.plan-tag.warn {
+    color: var(--orange);
+    border-color: color-mix(in srgb, var(--orange) 35%, transparent);
+}
+
+.plan-note {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    margin-top: 2px;
+}
+
+.ev-badge {
+    display: inline-block;
+    font-size: 8px;
+    letter-spacing: 1px;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    color: var(--dim);
+    text-align: center;
+}
+
+.ev-badge.ev-fuerte {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.ev-badge.ev-publicable {
+    color: var(--txt-2);
+}
+
+.ev-badge.ev-limitada {
+    color: var(--orange);
+    border-color: color-mix(in srgb, var(--orange) 30%, transparent);
+}
+
+.ev-badge.ev-sin-datos {
+    color: var(--red);
+    border-color: color-mix(in srgb, var(--bad) 25%, transparent);
+}
+
+.micro-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+    margin-bottom: 10px;
+}
+
+.micro-team {
+    font-family: var(--display);
+    font-size: 14px;
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+    color: var(--txt-1);
+}
+
+.micro-team.micro-a {
+    color: var(--accent);
+}
+
+.micro-team.micro-b {
+    color: var(--blue);
+}
+
+.micro-sub {
+    font-size: 9px;
+    letter-spacing: 1px;
+    color: var(--dim);
+    border-top: 1px solid var(--border);
+    padding-top: 8px;
+    margin: 10px 0 6px;
+}
+
+.micro-casc {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 9px;
+    margin-bottom: 4px;
+}
+
+.micro-casc-val {
+    color: var(--text);
+    text-align: right;
+}
+
+@media (max-width: 860px) {
+    .micro-cols {
+        grid-template-columns: 1fr;
+    }
+
+    .plan-row {
+        grid-template-columns: 24px minmax(80px, 1fr) 44px 56px 84px 56px 92px;
+        font-size: 9px;
+    }
+}

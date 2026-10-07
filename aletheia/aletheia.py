@@ -36,6 +36,10 @@ Enrutado:
     GET  /api/aletheia/dataset?guardar=1 -> GET {BASE}/api/dataset?guardar=1
     POST /api/aletheia/predecir|serie con forzar:true -> {BASE}
 
+    Capas L2/L3 (cargan el motor completo; BASE_URL/ngrok, sin fallback):
+    POST /api/aletheia/recomendar      -> POST {BASE}/api/recomendar (L2: mapa/ban/lado)
+    GET  /api/aletheia/perfil          -> GET  {BASE}/api/perfil (L3: micro-económico PIT)
+
 Decisiones de diseño:
     · El servicio externo devuelve solo NOMBRES de equipo. Para no romper el
       grid del frontend, /equipos adapta la respuesta a
@@ -65,6 +69,16 @@ vez por enfrentamiento en la raíz de `POST /predecir` y `POST /serie`
 DB `prob_intervalo` y `escenario_mapa` quedan `null` (el escenario se
 recalcula en el servicio; la UI usa `prob_victoria_a` + `esc_peso` y oculta
 la confianza sin romper).
+
+Campos aditivos del motor por capas (2026-10-07, F1–F4): `mapas[].capa`
+(`"esc"`|`"motor"`) y `capa_serie` (`"motor_glicko"`) en las respuestas del
+servicio; `predicciones_serie.recomendacion_json` (recomendación L2
+persistida, best-effort). En modo DB `capa` se deriva de `esc_peso` y
+`capa_serie` es siempre `"motor_glicko"` (la P del motor no se persiste);
+`recomendacion` se expone parseada si la columna existe. Los endpoints L2/L3
+(`POST /api/aletheia/recomendar` y `GET /api/aletheia/perfil`) se enrutan
+siempre a BASE_URL: cargan el motor completo (1–2 min en frío) y no son
+cache-first ni tienen lectura directa a Turso.
 
 Clave API: si `ALETHEIA_API_KEY` está configurada en el entorno, este proxy
 añade **server-side** el header `X-API-Key` a todas las llamadas al servicio
@@ -386,6 +400,9 @@ def _derivar_fila(fila, tabla):
     if peso is None and isinstance(fila['escenario_mapa'], dict):
         peso = fila['escenario_mapa'].get('peso')
     fila['esc_peso'] = peso
+    # F1 (aditivo): capa que sirve `prob_victoria_a`. En modo DB no se persiste:
+    # se deriva de `esc_peso` (null = capa ESC apagada, se sirve la P motor).
+    fila['capa'] = 'esc' if peso is not None else 'motor'
     fila['analisis_mapa'] = _analisis_mapa_local(
         tabla, fila.get('equipo_a'), fila.get('equipo_b'), fila.get('map_name'), p)
     return fila
@@ -519,12 +536,22 @@ def _serie_desde_db(data):
         condicion, params = 'match_id = ?', [match_id]
     else:
         condicion, params = 'equipo_a = ? AND equipo_b = ?', [equipo_a, equipo_b]
-    filas = fetch_all(
-        'SELECT match_id, equipo_a, equipo_b, formato, mapas_json, prob_serie_a, '
-        'prob_serie_b, n_sim, modelo_version, created_at FROM predicciones_serie '
-        f'WHERE {condicion} ORDER BY created_at DESC',
-        params,
-    )
+    cols = ('match_id, equipo_a, equipo_b, formato, mapas_json, prob_serie_a, '
+            'prob_serie_b, n_sim, modelo_version, created_at')
+    try:
+        # F4 (aditivo): la recomendación L2 persistida (columna nueva). Si la DB
+        # es vieja/local y la columna no existe, se relee sin ella sin romper.
+        filas = fetch_all(
+            f'SELECT {cols}, recomendacion_json FROM predicciones_serie '
+            f'WHERE {condicion} ORDER BY created_at DESC',
+            params,
+        )
+    except Exception:  # noqa: BLE001 - columna ausente en DB vieja o local
+        filas = fetch_all(
+            f'SELECT {cols} FROM predicciones_serie '
+            f'WHERE {condicion} ORDER BY created_at DESC',
+            params,
+        )
     version, _ = _version_vigente_db()
     for fila in filas:
         if version and str(fila.get('modelo_version')) != version:
@@ -549,6 +576,12 @@ def _serie_desde_db(data):
         # la raíz la expone `null` y la UI no la pinta.
         formato, objetivo = _formato_de_serie(len(pedido))
         p_a = float(fila['prob_serie_a'])
+        # F1 (aditivo): `capa` por mapa derivada de `esc_peso` (el servicio no
+        # persiste `capa`); la raíz siempre decide con el motor Glicko.
+        for mapa in detalle:
+            if isinstance(mapa, dict):
+                mapa.setdefault(
+                    'capa', 'esc' if mapa.get('esc_peso') is not None else 'motor')
         return {
             'ok': True,
             'equipo_a': fila.get('equipo_a') or equipo_a,
@@ -559,6 +592,8 @@ def _serie_desde_db(data):
             'formato': fila.get('formato') or formato,
             'mapas_para_ganar': objetivo,
             'mapas': detalle,
+            'capa_serie': 'motor_glicko',
+            'recomendacion': _parse_json(fila.get('recomendacion_json')),
             'prob_motor_a': None,
             'prob_motor_b': None,
             'prob_serie_a': round(p_a, 4),
@@ -876,3 +911,27 @@ def serie():
 def borrar():
     """Proxy POST /api/borrar (borra las predicciones de un enfrentamiento)."""
     return _passthrough_post('/api/borrar', prefer='ngrok')
+
+
+@aletheia_bp.route('/api/aletheia/recomendar', methods=['POST'])
+def recomendar():
+    """L2: tier-list del pool + mejor mapa/ban/lado (capa ESC anclada al motor).
+
+    Carga el motor completo la primera vez (1–2 min en frío), así que va
+    siempre a BASE_URL/ngrok (`prefer='ngrok'`), sin fallback a READ_URL (en
+    Render aún no está el código L2 y su cold start free tarda igual). El body
+    es `{"equipo_a", "equipo_b", "mapas": [...]?}`; `mapas` es opcional (sin él
+    usa el pool vigente) y admite máx. 5. La P(serie) no la mueve esta capa.
+    """
+    return _passthrough_post('/api/recomendar', prefer='ngrok')
+
+
+@aletheia_bp.route('/api/aletheia/perfil', methods=['GET'])
+def perfil():
+    """L3: perfil económico PIT por equipo (`equipo_a`) o cruce (+`equipo_b`).
+
+    Carga el motor completo → BASE_URL/ngrok (`prefer='ngrok'`). Reenvía los
+    query params (`equipo_a`/`equipo_b`/`equipo`) tal cual. Los empates ~50/50
+    (pistols R1/R13, `full vs full`) son esperados, no señal fuerte.
+    """
+    return _passthrough_get('/api/perfil', prefer='ngrok')

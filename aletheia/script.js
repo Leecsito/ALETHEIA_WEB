@@ -34,6 +34,8 @@ let modelVersionError = null;    // error al leer /modelo_version (null = ok)
 const RECALC_POLL_MS = 2000;
 const RECALC_TIMEOUT_MS = 30 * 60 * 1000;
 const RECALC_POST_TIMEOUT_MS = 190000;  // el POST puede tardar (motor en frío)
+// Capas L2/L3: cargan el motor completo la primera vez (1-2 min en frío).
+const PLAN_TIMEOUT_MS = 190000;
 
 // Job de precálculo persistido por enfrentamiento (mismo esquema que PREPARAR):
 // permite reanudar el polling tras recargar/otra pestaña y adoptar el job
@@ -149,6 +151,14 @@ const scorecardAgregadoWrap = document.getElementById('scorecardAgregadoWrap');
 const btnScorecardAgregado = document.getElementById('btnScorecardAgregado');
 const btnExportDataset = document.getElementById('btnExportDataset');
 const cmpToolsStatus = document.getElementById('cmpToolsStatus');
+
+// Capas L2/L3 del motor (plan de veto + micro económico), bajo demanda.
+const btnPlanVeto = document.getElementById('btnPlanVeto');
+const planVetoStatus = document.getElementById('planVetoStatus');
+const planVetoBody = document.getElementById('planVetoBody');
+const btnPerfilMicro = document.getElementById('btnPerfilMicro');
+const microStatus = document.getElementById('microStatus');
+const microBody = document.getElementById('microBody');
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 // Devuelve el % redondeado o '—' si el dato falta (no lo convierte en 0%).
@@ -773,6 +783,7 @@ async function selectSim(s) {
     liveMap = null;
     liveBulk = null;
     ultimaSerie = null;   // el MOTOR/la serie se recalculan para este enfrentamiento
+    resetPlanBlocks();    // L2/L3 se piden de nuevo (son costosos y del enfrentamiento)
     liveSection.style.display = 'block';
     encolarSerie(s);      // la fila seleccionada siempre cuenta, esté o no a la vista
 
@@ -1269,6 +1280,265 @@ function renderEconomia(p) {
         ${filasM}
       </div>
     </div>`;
+}
+
+// ─── CAPAS L2/L3 (PLAN DE VETO + MICRO ECONÓMICO) ────────────────────────────
+// Los dos endpoints (`POST /api/aletheia/recomendar` y `GET /api/aletheia/perfil`)
+// cargan el motor completo la primera vez (1-2 min en frío), así que solo se
+// piden al pulsar su botón, nunca al seleccionar el enfrentamiento. Ninguno
+// mueve la P(serie): la decide el MOTOR Glicko.
+const PLAN_EVIDENCIA = {
+    fuerte: ['ev-fuerte', 'fuerte'],
+    publicable: ['ev-publicable', 'publicable'],
+    limitada: ['ev-limitada', 'limitada'],
+    sin_datos: ['ev-sin-datos', 'sin datos'],
+};
+const PLAN_CATS = [
+    ['full_buy', 'FULL-BUY'],
+    ['semi_buy', 'SEMI-BUY'],
+    ['semi_eco', 'SEMI-ECO'],
+    ['eco', 'ECO'],
+];
+
+function evidenciaBadge(ev) {
+    const par = PLAN_EVIDENCIA[ev] || ['ev-sin-datos', ev || 'sin datos'];
+    return `<span class="ev-badge ${par[0]}">${escapeHtml(par[1])}</span>`;
+}
+
+// Limpia las dos capas al cambiar de enfrentamiento (resultados y botones).
+function resetPlanBlocks() {
+    if (planVetoBody) planVetoBody.innerHTML = '';
+    if (microBody) microBody.innerHTML = '';
+    if (planVetoStatus) { planVetoStatus.className = 'live-status'; planVetoStatus.textContent = ''; }
+    if (microStatus) { microStatus.className = 'live-status'; microStatus.textContent = ''; }
+    if (btnPlanVeto) { btnPlanVeto.disabled = false; btnPlanVeto.textContent = 'CALCULAR PLAN DE VETO'; }
+    if (btnPerfilMicro) { btnPerfilMicro.disabled = false; btnPerfilMicro.textContent = 'CALCULAR PERFIL'; }
+}
+
+// L2 (POST /recomendar): tier-list del pool + mejor mapa/ban y lado. Se envía
+// solo el enfrentamiento: sin `mapas`, el motor usa el pool vigente.
+async function fetchPlanVeto() {
+    if (!current || !btnPlanVeto || btnPlanVeto.disabled) return;
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), PLAN_TIMEOUT_MS) : null;
+    btnPlanVeto.disabled = true;
+    btnPlanVeto.textContent = 'CALCULANDO…';
+    planVetoStatus.className = 'live-status warn';
+    planVetoStatus.textContent = 'Calculando plan de veto… el motor puede tardar 1-2 min en frío; no cierres la pestaña.';
+    try {
+        const res = await proxyFetch('/recomendar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ equipo_a: current.equipo_a, equipo_b: current.equipo_b }),
+            signal: ctrl ? ctrl.signal : undefined,
+        });
+        const d = await res.json();
+        if (!d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+        renderPlanVeto(d);
+        planVetoStatus.className = 'live-status ok';
+        planVetoStatus.textContent = '✓ plan de veto calculado · capa ESC; la P(serie) no la mueve (manda el MOTOR).';
+        btnPlanVeto.textContent = '↻ RECALCULAR PLAN';
+    } catch (e) {
+        planVetoStatus.className = 'live-status err';
+        planVetoStatus.textContent = (e && e.name === 'AbortError')
+            ? 'El motor tardó demasiado; vuelve a intentarlo.'
+            : `Error: ${e.message}`;
+        btnPlanVeto.textContent = 'CALCULAR PLAN DE VETO';
+    } finally {
+        if (timer) clearTimeout(timer);
+        btnPlanVeto.disabled = false;
+    }
+}
+
+function renderPlanVeto(d) {
+    if (!planVetoBody) return;
+    const mapas = Array.isArray(d.mapas) ? d.mapas : [];
+    const filas = mapas.map(m => {
+        const lado = m.lado_recomendado_a === 'defense' ? 'DEF' : 'ATK';
+        const n = `${m.n_a != null ? m.n_a : '—'}/${m.n_b != null ? m.n_b : '—'}`;
+        const ic = (m.p_lo != null && m.p_hi != null) ? `${pct(m.p_lo)}–${pct(m.p_hi)}` : '—';
+        const pl = m.por_lado || {};
+        const tt = (pl.attack || pl.defense)
+            ? ` title="ESC A por lado · attack ${pct((pl.attack || {}).prob_victoria_a)} · defense ${pct((pl.defense || {}).prob_victoria_a)}"`
+            : '';
+        return `<div class="plan-row"${tt}>
+            <span class="plan-ord">${m.orden != null ? m.orden : ''}</span>
+            <span class="plan-map">${escapeHtml(m.map_name || '—')}</span>
+            <span class="plan-side">${lado}</span>
+            <span class="plan-p ${probBandClass(m.prob_victoria_a)}">${pct(m.prob_victoria_a)}</span>
+            <span class="plan-ic">${ic}</span>
+            <span class="plan-n">${n}</span>
+            <span>${evidenciaBadge(m.evidencia)}</span>
+        </div>`;
+    }).join('');
+    const pick = (obj, cls, label) => (obj && obj.map_name)
+        ? `<span class="plan-tag ${cls}">${label}: ${escapeHtml(obj.map_name)}${obj.lado_recomendado_a ? ` · ${obj.lado_recomendado_a === 'defense' ? 'DEF' : 'ATK'}` : ''}</span>`
+        : '';
+    const fuerte = (d.recomendacion_fuerte_a && d.recomendacion_fuerte_a.map_name)
+        ? pick(d.recomendacion_fuerte_a, 'ok', 'RECOMENDACIÓN FUERTE A')
+        : '<span class="plan-tag warn">sin recomendación fuerte (ningún n_min ≥ 30)</span>';
+    planVetoBody.innerHTML = `
+    <div class="plan-sum">
+      <span class="plan-k">capa <b>${escapeHtml(String(d.capa || 'esc')).toUpperCase()}</b></span>
+      <span class="plan-k">MOTOR Glicko A <b>${pct(d.p_motor_a)}</b> · B <b>${pct(d.p_motor_b)}</b>
+        <span class="plan-hint">referencia; la serie no cambia</span></span>
+      ${d.lambda != null ? `<span class="plan-k">λ ${fmtNum(d.lambda, 2)} · k ${fmtNum(d.k, 1)} · peso k ${fmtNum(d.k_peso, 1)}</span>` : ''}
+    </div>
+    <div class="plan-table">
+      <div class="plan-row plan-row-head">
+        <span class="plan-ord">#</span><span class="plan-map">MAPA</span><span class="plan-side">LADO A</span>
+        <span class="plan-p">ESC A</span><span class="plan-ic">IC95%</span><span class="plan-n">n A/B</span><span>EVIDENCIA</span>
+      </div>
+      ${filas || '<div class="live-hint">sin mapas en la respuesta.</div>'}
+    </div>
+    <div class="plan-tags">
+      ${pick(d.mejor_mapa_a, 'ok', 'MEJOR MAPA A')}
+      ${pick(d.mejor_ban_a, 'bad', 'MEJOR BAN A')}
+      ${pick(d.mejor_mapa_b, 'info', 'MEJOR MAPA B')}
+      ${fuerte}
+    </div>
+    ${d.nota ? `<div class="plan-note">${escapeHtml(d.nota)}</div>` : ''}`;
+}
+
+// L3 (GET /perfil): perfil económico PIT. Con equipo_b devuelve el cruce
+// (perfiles A/B + 16 cruces); sin él, solo el perfil del equipo.
+async function fetchMicroPerfil() {
+    if (!current || !btnPerfilMicro || btnPerfilMicro.disabled) return;
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ctrl ? setTimeout(() => ctrl.abort(), PLAN_TIMEOUT_MS) : null;
+    btnPerfilMicro.disabled = true;
+    btnPerfilMicro.textContent = 'CALCULANDO…';
+    microStatus.className = 'live-status warn';
+    microStatus.textContent = 'Calculando perfil micro-económico… el motor puede tardar 1-2 min en frío; no cierres la pestaña.';
+    const params = new URLSearchParams({ equipo_a: current.equipo_a });
+    if (current.equipo_b) params.set('equipo_b', current.equipo_b);
+    try {
+        const res = await proxyFetch(`/perfil?${params.toString()}`, {
+            signal: ctrl ? ctrl.signal : undefined,
+        });
+        const d = await res.json();
+        if (!d.ok) throw new Error(d.error || `HTTP ${res.status}`);
+        renderMicroPerfil(d);
+        microStatus.className = 'live-status ok';
+        microStatus.textContent = '✓ perfil calculado · L3 (micro-eventos): pistols y full vs full ~50/50 son esperados, no señal fuerte.';
+        btnPerfilMicro.textContent = '↻ RECALCULAR PERFIL';
+    } catch (e) {
+        microStatus.className = 'live-status err';
+        microStatus.textContent = (e && e.name === 'AbortError')
+            ? 'El motor tardó demasiado; vuelve a intentarlo.'
+            : `Error: ${e.message}`;
+        btnPerfilMicro.textContent = 'CALCULAR PERFIL';
+    } finally {
+        if (timer) clearTimeout(timer);
+        btnPerfilMicro.disabled = false;
+    }
+}
+
+function microPerfilHtml(p, nombre, cls) {
+    if (!p) return '';
+    const cats = PLAN_CATS.map(([k, label]) => {
+        const d = (p.categorias || {})[k] || {};
+        const tasa = Number(d.tasa);
+        const ancho = isNaN(tasa) ? 0 : Math.round(tasa * 100);
+        const tt = (d.p_lo != null && d.p_hi != null) ? ` title="IC95% ${pct(d.p_lo)}–${pct(d.p_hi)}"` : '';
+        return `<div class="eco-cat"${tt}>
+            <span class="eco-cat-label">${label}</span>
+            <span class="eco-cat-bar"><span style="width:${ancho}%"></span></span>
+            <span class="eco-cat-val">${pct(tasa)}${d.n != null ? ` <span class="eco-n">n=${d.n}</span>` : ''}</span>
+        </div>`;
+    }).join('');
+    const pis = ['mitad_1', 'mitad_2'].map((k, i) => {
+        const d = (p.pistols || {})[k] || {};
+        const tasa = Number(d.tasa);
+        const ancho = isNaN(tasa) ? 0 : Math.round(tasa * 100);
+        const tt = (d.p_lo != null && d.p_hi != null) ? ` title="IC95% ${pct(d.p_lo)}–${pct(d.p_hi)}"` : '';
+        return `<div class="eco-cat"${tt}>
+            <span class="eco-cat-label">PISTOL M${i + 1}</span>
+            <span class="eco-cat-bar"><span style="width:${ancho}%"></span></span>
+            <span class="eco-cat-val">${pct(tasa)}${d.n != null ? ` <span class="eco-n">n=${d.n}</span>` : ''}</span>
+        </div>`;
+    }).join('');
+    const post = ['mitad_1', 'mitad_2'].map((k, i) => {
+        const m = (p.post_pistol || {})[k] || {};
+        const g = m.tras_ganar || {}, pe = m.tras_perder || {};
+        if (g.tasa == null && pe.tasa == null) return '';
+        return `<div class="micro-casc">
+            <span class="eco-cat-label">M${i + 1} R2 tras pistol</span>
+            <span class="micro-casc-val">ganar ${pct(g.tasa)}${g.n != null ? ` (n=${g.n})` : ''} · perder ${pct(pe.tasa)}${pe.n != null ? ` (n=${pe.n})` : ''}</span>
+        </div>`;
+    }).join('');
+    const cascada = ['mitad_1', 'mitad_2'].map((k, i) => {
+        const m = (p.cascada || {})[k] || {};
+        return ['tras_ganar', 'tras_perder'].map(t => {
+            const d = m[t] || {};
+            if (d.n == null) return '';
+            return `<div class="micro-casc">
+                <span class="eco-cat-label">M${i + 1} ${t === 'tras_ganar' ? 'tras ganar pistol' : 'tras perder pistol'}</span>
+                <span class="micro-casc-val">p(mitad) ${pct(d.p_mitad)}${d.rondas_esperadas != null ? ` · ${fmtNum(d.rondas_esperadas, 1)} rondas esp.` : ''} · n=${d.n}</span>
+            </div>`;
+        }).join('');
+    }).join('');
+    const priors = p.priors_liga
+        ? `<div class="micro-sub">PRIORS LIGA</div>
+           <div class="live-hint">eco ${pct(p.priors_liga.eco)} · semi-eco ${pct(p.priors_liga.semi_eco)} · semi-buy ${pct(p.priors_liga.semi_buy)} · full-buy ${pct(p.priors_liga.full_buy)}</div>`
+        : '';
+    return `<div class="micro-col">
+        <div class="micro-team ${cls}">${escapeHtml(nombre)}</div>
+        ${cats}
+        <div class="micro-sub">PISTOL · R2 TRAS PISTOL</div>
+        ${pis}
+        ${post}
+        <div class="micro-sub">CASCADA (P DE GANAR LA MITAD)</div>
+        ${cascada || '<div class="live-hint">sin datos de cascada.</div>'}
+        ${priors}
+    </div>`;
+}
+
+function microCrucesHtml(d) {
+    if (!d.cruces || typeof d.cruces !== 'object') return '';
+    const eqA = (current && current.equipo_a) || d.equipo_a || 'A';
+    const destacados = new Set(['semi_buy_vs_full_buy', 'eco_vs_full_buy']);
+    const colsB = PLAN_CATS.map(([, l]) => `<span class="eco-mcol">${l}</span>`).join('');
+    const filas = PLAN_CATS.map(([ra, la]) => {
+        const celdas = PLAN_CATS.map(([cb, lb]) => {
+            const c = d.cruces[`${ra}_vs_${cb}`] || {};
+            const p = Number(c.p_estimada_a);
+            const txt = isNaN(p) ? '—' : `${Math.round(p * 100)}%`;
+            const tono = isNaN(p) ? '' : (p >= 0.5 ? 'eco-hi' : 'eco-lo');
+            const dest = destacados.has(`${ra}_vs_${cb}`) ? ' eco-dest' : '';
+            const nTxt = (dest && c.n != null) ? `<span class="eco-cell-n">${c.n}</span>` : '';
+            return `<span class="eco-cell ${tono}${dest}" title="${la} vs ${lb} · p(A)=${txt}${c.n != null ? ' · n=' + c.n : ''}">${txt}${nTxt}</span>`;
+        }).join('');
+        return `<div class="eco-mrow"><span class="eco-mrow-label">${la}</span>${celdas}</div>`;
+    }).join('');
+    return `<div class="eco-cruce-wrap">
+        <div class="eco-cruce-title">CRUCES L3 · prob. estimada de que <b>${escapeHtml(eqA)}</b> gane la ronda
+            <span class="eco-note">filas = ${escapeHtml(eqA)} · columnas = rival · L3 (micro-eventos)</span>
+        </div>
+        <div class="eco-matrix">
+            <div class="eco-mrow eco-mrow-head"><span class="eco-mrow-label"></span>${colsB}</div>
+            ${filas}
+        </div>
+    </div>`;
+}
+
+function renderMicroPerfil(d) {
+    if (!microBody) return;
+    const eqA = (current && current.equipo_a) || d.equipo || d.equipo_a || 'A';
+    const eqB = (current && current.equipo_b) || d.equipo_b || 'B';
+    const esCruce = !!(d.perfil_a || d.perfil_b);
+    const perfiles = esCruce
+        ? microPerfilHtml(d.perfil_a, eqA, 'micro-a') + microPerfilHtml(d.perfil_b, eqB, 'micro-b')
+        : microPerfilHtml(d, d.equipo || eqA, 'micro-a');
+    microBody.innerHTML = `
+    <div class="plan-sum">
+      <span class="plan-k">capa <b>${escapeHtml(String(d.capa || 'l3_micro')).toUpperCase()}</b></span>
+      ${d.n_rondas != null ? `<span class="plan-k">rondas <b>${Number(d.n_rondas).toLocaleString()}</b></span>` : ''}
+    </div>
+    <div class="micro-cols">${perfiles || '<div class="live-hint">sin perfiles en la respuesta.</div>'}</div>
+    ${microCrucesHtml(d)}
+    ${d.nota ? `<div class="plan-note">${escapeHtml(d.nota)}</div>` : ''}
+    <div class="plan-note">Lectura honesta: pistols R1/R13 y full vs full rondan 50/50 por diseño; no son señal fuerte.</div>`;
 }
 
 // MOTOR del enfrentamiento actual: P(A) Glicko plana, solo conocida si ya se
@@ -2193,6 +2463,9 @@ async function exportarDataset() {
 
 if (btnScorecardAgregado) btnScorecardAgregado.addEventListener('click', fetchScorecardAgregado);
 if (btnExportDataset) btnExportDataset.addEventListener('click', exportarDataset);
+// Capas L2/L3 del motor: bajo demanda (cargan el motor completo).
+if (btnPlanVeto) btnPlanVeto.addEventListener('click', fetchPlanVeto);
+if (btnPerfilMicro) btnPerfilMicro.addEventListener('click', fetchMicroPerfil);
 
 // ─── PESTAÑAS ─────────────────────────────────────────────────────────────────
 document.querySelectorAll('.live-tab').forEach(btn => {

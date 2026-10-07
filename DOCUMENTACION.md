@@ -209,6 +209,12 @@ Por eso los **blueprints de lectura** (`partidos`, `equipos`, `jugadores`, `even
     - `UNIQUE(match_id, equipo_a, equipo_b, map_name, lado_inicial_a)`.
 12. **`predicciones_serie`**: predicción cacheada de la serie.
     - `id`, `match_id`, `equipo_a`, `equipo_b`, `formato`, `mapas_json`, `prob_serie_a`, `prob_serie_b`, `n_sim`, `modelo_version`, `created_at`.
+    - `recomendacion_json` (TEXT, nullable): recomendación L2 serializada que el
+      servicio escribe **best-effort** cuando `/api/predecir` o `/api/serie`
+      calculan filas y hay `match_id` (un cache-hit no escribe). No hay endpoint
+      de lectura: para el vivo se usa `POST /api/recomendar`. La web la expone
+      parseada como `recomendacion` en `/api/aletheia/serie` en modo DB si la
+      columna existe (la DB local vieja se degrada sin ella).
 
 **1 tabla de la web** (la gestiona la propia web; el motor no la escribe):
 
@@ -266,10 +272,11 @@ Solo lo que el servicio deriva va a **`ALETHEIA_PREDICT_READ_URL`** (Render,
 cache-first, con reintento por cold start y caída a `ALETHEIA_PREDICT_URL`):
 `equipos`, `comparacion`, `scorecard(_agregado)`, `dataset` sin guardar,
 `predecir` y `serie` no cacheada. El **cómputo pesado y las mutaciones**
-(`precalcular`, `precalcular/estado`, `asociar`, `borrar`, `dataset?guardar=1`
-y `predecir`/`serie` con `forzar:true`) van a `ALETHEIA_PREDICT_URL`
-(PC/ngrok). Si `ALETHEIA_PREDICT_READ_URL` no está definida, las lecturas no
-cacheadas van a `ALETHEIA_PREDICT_URL` (comportamiento anterior).
+(`precalcular`, `precalcular/estado`, `asociar`, `borrar`, `dataset?guardar=1`,
+`recomendar`, `perfil` y `predecir`/`serie` con `forzar:true`) van a
+`ALETHEIA_PREDICT_URL` (PC/ngrok). Si `ALETHEIA_PREDICT_READ_URL` no está
+definida, las lecturas no cacheadas van a `ALETHEIA_PREDICT_URL`
+(comportamiento anterior).
 
 La clave `ALETHEIA_API_KEY` (si está configurada en el entorno de la web) viaja
 **solo server-side**: `_request_service` la añade como header `X-API-Key` a
@@ -318,6 +325,15 @@ se normaliza a `[100, MAX_SIM]` (default `10000`). **En hosting free no usar 25K
 > `null` si la capa está apagada) y `escenario_mapa` (o `null`); cuando
 > `escenario_mapa` viene `null`, se usa `prob_victoria_a` + `esc_peso` y se
 > oculta la confianza (no es error).
+
+**Campos aditivos por capas (2026-10-07, F1–F4):** las respuestas del servicio
+añaden `mapas[].capa` (`"esc"`|`"motor"`) y la raíz `capa_serie`
+(`"motor_glicko"`); no cambian ningún valor. En modo DB no se persisten: el
+proxy los deriva (`capa` de `esc_peso`; `capa_serie` siempre `"motor_glicko"`)
+y expone `recomendacion` parseada de `predicciones_serie.recomendacion_json`
+si la columna existe (si no, la omite sin romper). La web usa
+`esc_peso != null` como indicador de ESC en filas DB y muestra `capa` en el
+bloque PLAN DE VETO (L2).
 
 **Respuesta del servicio (proxy sin cambios):**
 ```json
@@ -498,6 +514,28 @@ estas tablas). Endpoints adicionales del proxy:
   preparaciones erróneas). Responde `{"ok": true, "filas_borradas": N, "match_id": ...}`.
   Nota: el endpoint vive en ALETHEIA_PREDICT; ALETHEIA solo lo invoca por proxy
   (no borra directamente en Turso).
+- `POST /api/aletheia/recomendar` → proxy de `POST {BASE}/api/recomendar` (L2,
+  2026-10-07). Body `{"equipo_a", "equipo_b", "mapas": [...]?}` (`mapas`
+  opcional, máx. 5, strings o `{"map_name"}`; sin él usa el pool vigente;
+  `equipo_a == equipo_b` → 400). **Carga el motor completo (1–2 min en frío):
+  va siempre a BASE_URL/ngrok (`prefer='ngrok'`), sin fallback a READ_URL.**
+  Respuesta: raíz `capa` (`"esc"`), `p_motor_a/b` (referencia Glicko; **no
+  mueve la P(serie)**), `lambda`/`k`/`k_peso`, `min_publicar`/`min_fuerte` y
+  `mapas[]` con `orden`, `map_name`, `lado_recomendado_a`,
+  `prob_victoria_a/b` (ESC del lado recomendado), `p_lo`/`p_hi`,
+  `delta_logit`, `n_a`/`n_b`/`n_min`, `peso` (0–1), `evidencia`
+  (`sin_datos` · `limitada` <10 · `publicable` ≥10 · `fuerte` ≥30) y
+  `por_lado.attack/defense`; más `mejor_mapa_a`, `mejor_ban_a`, `mejor_mapa_b`,
+  `recomendacion_fuerte_a` (`null` si ningún `n_min ≥ 30`) y `nota`.
+- `GET /api/aletheia/perfil` → proxy de `GET {BASE}/api/perfil` (L3,
+  2026-10-07). Query `equipo_a` (o `equipo`) obligatorio y `equipo_b` opcional
+  (con él devuelve el **cruce**: `capa:"l3_micro"`, `perfil_a`/`perfil_b` y los
+  16 `cruces {cat_a}_vs_{cat_b}` con `p_estimada_a`/`delta_logit`; sin él, el
+  perfil del equipo con `categorias` (`tasa`, `tasa_eb`, `p_lo`/`p_hi`),
+  `pistols` (mitades), `post_pistol` (R2 tras ganar/perder R1), `cascada`
+  (P de ganar la mitad y rondas esperadas) y `priors_liga`). **Carga el motor
+  completo: `prefer='ngrok'`.** Lectura honesta: pistols R1/R13 y
+  `full_buy_vs_full_buy` rondan ~50/50 por diseño (no son señal fuerte).
 
 **Flujo del ciclo (frontend → proxy `/api/aletheia/...`; el navegador nunca
 llama directo a ngrok y la clave API la añade el proxy server-side):**
@@ -768,6 +806,19 @@ llama directo a ngrok y la clave API la añade el proxy server-side):**
         la secuencia mapa a mapa, p. ej. `V-D-D` vs `D-V-D` para un 1-2; ✓ gana A,
         ✗ gana B). Es esperado que un mapa favorezca al rival y la serie al otro:
         el global manda el MOTOR.
+      - **PLAN DE VETO (L2) / MICRO ECONÓMICO (L3):** dos bloques bajo
+        `MAPA / SERIE`, **bajo demanda** (cada uno carga el motor completo:
+        1–2 min en frío; nunca al seleccionar, y se reinician al cambiar de
+        enfrentamiento). **PLAN DE VETO** hace `POST /api/aletheia/recomendar`
+        (solo equipos; sin `mapas` usa el pool) y pinta la tier-list con el ESC
+        del lado recomendado, IC95%, `n A/B`, `evidencia`
+        (fuerte/publicable/limitada/sin_datos), MEJOR MAPA/BAN A y el aviso
+        "sin recomendación fuerte" si `recomendacion_fuerte_a` es `null`; la
+        raíz `p_motor_a/b` es solo referencia (la serie no cambia).
+        **MICRO ECONÓMICO** hace `GET /api/aletheia/perfil?equipo_a=&equipo_b=`
+        (cruce: perfiles A/B + 16 cruces) y pinta categorías, pistol (mitades
+        + R2 tras pistol) y cascada por mitad, con la nota de que pistols y
+        full vs full ~50/50 son esperados (no señal fuerte).
       - **DESCARGAR ANÁLISIS (.md):** botón que genera y descarga un `.md` con
         **(1) el prompt general** para un LLM, **(2) los MERCADOS** precalculados
         (ganador de serie, MOTOR plano, total de mapas Más/Menos, marcador exacto
@@ -1051,6 +1102,25 @@ Al recibir una nueva tarea o solicitud de cambio:
 
 ## 8. Registro de Cambios
 
+- **2026-10-07 — Integración web del motor por capas L1/L2/L3 (plan F1–F4).**
+  - **`aletheia/aletheia.py`:** dos proxies nuevos, ambos a BASE_URL/ngrok
+    (`prefer='ngrok'`, cargan el motor completo, sin fallback a READ_URL):
+    `POST /api/aletheia/recomendar` (L2: tier-list + mejor mapa/ban/lado) y
+    `GET /api/aletheia/perfil` (L3: perfil económico PIT por equipo o cruce).
+  - **Campos aditivos (modo DB):** `_derivar_fila` expone `capa`
+    (`esc`/`motor`, derivada de `esc_peso`); `_serie_desde_db` añade
+    `capa_serie:"motor_glicko"`, `capa` por mapa y `recomendacion` (parseada
+    de `predicciones_serie.recomendacion_json`; si la columna no existe en la
+    DB local, relee sin ella sin romper). Las respuestas del servicio pasan
+    `mapas[].capa`/`capa_serie` tal cual (aditivos, no cambian valores).
+  - **EN VIVO (`aletheia/`):** bloques **PLAN DE VETO · L2** y
+    **MICRO ECONÓMICO · L3** bajo `MAPA / SERIE`, bajo demanda (botón; timeout
+    190 s; aviso de motor en frío), con `evidencia`/IC/`n`, aviso "sin
+    recomendación fuerte", categorías/pistol/cascada y los 16 cruces; se
+    reinician al cambiar de enfrentamiento. Ninguno mueve la P(serie).
+  - Verificado: rutas registradas (`/api/aletheia/recomendar|perfil`), test de
+    `_serie_desde_db`/`_derivar_fila` en modo DB con fallback de columna, y
+    render L2/L3 + flujo fetch (happy path y error) en Node con DOM simulado.
 - **2026-10-05 — Botones altos con cristal + más nodos en el fondo.**
   - `header/header.css`: botones más altos (`16px 26px`). El cristal
     (`backdrop-filter`) se probó a 9px y se revirtió por lag; vuelve a **7px sin

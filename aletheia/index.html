@@ -21,7 +21,7 @@
     <link rel="stylesheet" href="../comun/theme.min.css?v=00289f60" />
     <link rel="stylesheet" href="../header/header.min.css?v=ac18a586" />
     <link rel="stylesheet" href="../comun/vct.min.css?v=fcfd86c5" />
-    <link rel="stylesheet" href="style.min.css?v=c6a1589b" />
+    <link rel="stylesheet" href="style.min.css?v=bac97ec4" />
 </head>
 
 <body>
@@ -125,6 +125,31 @@
                         <div class="series-banner" id="seriesBanner"></div>
                     </div>
                 </div>
+
+                <!-- Capas L2/L3 del motor: solo se calculan al pulsar el botón
+                     (cargan el motor completo; 1-2 min en frío). -->
+                <div class="plan-blocks">
+                    <div class="plan-block" id="planVetoBlock">
+                        <div class="plan-head">
+                            <span class="mb-title">PLAN DE VETO · L2</span>
+                            <span class="plan-hint">tier-list del pool + mejor mapa/ban y lado (capa ESC)</span>
+                            <div class="mb-spacer"></div>
+                            <button class="btn-nav" id="btnPlanVeto">CALCULAR PLAN DE VETO</button>
+                        </div>
+                        <div class="live-status" id="planVetoStatus"></div>
+                        <div class="plan-body" id="planVetoBody"></div>
+                    </div>
+                    <div class="plan-block" id="microBlock">
+                        <div class="plan-head">
+                            <span class="mb-title">MICRO ECONÓMICO · L3</span>
+                            <span class="plan-hint">perfil PIT: categorías, pistol y cascada</span>
+                            <div class="mb-spacer"></div>
+                            <button class="btn-nav" id="btnPerfilMicro">CALCULAR PERFIL</button>
+                        </div>
+                        <div class="live-status" id="microStatus"></div>
+                        <div class="plan-body" id="microBody"></div>
+                    </div>
+                </div>
             </div>
 
             <!-- Tab: comparación (predicho vs. real) -->
@@ -148,7 +173,7 @@
     <script src="../header/header.min.js?v=91585dc7"></script>
     <script src="../header/header-nodes.min.js?v=7ba3f0ee"></script>
     <script src="../comun/vct.min.js?v=9605d5c0"></script>
-    <script src="script.min.js?v=d98bb249"></script>
+    <script src="script.min.js?v=edd015cd"></script>
 </body>
 
 </html>
