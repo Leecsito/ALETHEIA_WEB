@@ -16,7 +16,7 @@ let selectedB = null;
 let nSim = 10000;
 const TEAM_ABBREV_CACHE = {};
 let cacheRows = {};        // 'map|side' -> fila (solo para el badge de caché)
-const TOTAL_COMBOS = 26;   // 13 mapas × 2 lados
+let totalCombos = 26;      // fallback; se ajusta al pool vigente (map_pool)
 
 // ─── JOB PERSISTENTE / TIMEOUTS ───────────────────────────────────────────────
 // El job de precálculo se guarda por enfrentamiento (match_id+equipos) en
@@ -56,6 +56,7 @@ const btnAsociar = document.getElementById('btnAsociar');
 const btnPreparar = document.getElementById('btnPreparar');
 const prepareTimer = document.getElementById('prepareTimer');
 const prepareStatus = document.getElementById('prepareStatus');
+const combosHint = document.getElementById('combosHint');
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const pct = v => Math.round((v || 0) * 100);
@@ -103,6 +104,37 @@ function quitarJob(clave) {
     if (jobs[clave]) { delete jobs[clave]; escribirJobs(jobs); }
 }
 
+// match_id con el que se preparó cada enfrentamiento: el job se borra al
+// terminar, así que para el `desde_match_id` de ASOCIAR (incluso tras recargar
+// la página) se guarda aparte, indexado por la pareja de equipos.
+const PREPARED_KEY = 'ae_prepared_match_ids';
+
+function claveEquipos(a, b) {
+    return `eq:${String(a || '').trim().toLowerCase()}|${String(b || '').trim().toLowerCase()}`;
+}
+
+function leerPreparados() {
+    try {
+        const raw = localStorage.getItem(PREPARED_KEY);
+        const obj = raw ? JSON.parse(raw) : {};
+        return obj && typeof obj === 'object' ? obj : {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function guardarPreparado(a, b, mid) {
+    if (!a || !b) return;
+    const obj = leerPreparados();
+    obj[claveEquipos(a, b)] = parseInt(mid, 10) || 0;
+    try { localStorage.setItem(PREPARED_KEY, JSON.stringify(obj)); } catch (e) { /* modo privado */ }
+}
+
+function preparadoGuardado(a, b) {
+    if (!a || !b) return 0;
+    return parseInt(leerPreparados()[claveEquipos(a, b)], 10) || 0;
+}
+
 // Job guardado del enfrentamiento; tolera que se preparara sin id y que ahora
 // se haya escrito el match_id (misma pareja de equipos).
 function jobGuardado(a, b, mid) {
@@ -134,6 +166,24 @@ async function loadTeams() {
         gridA.innerHTML = err;
         gridB.innerHTML = err;
     }
+}
+
+// Nº real de combinaciones = mapas del pool vigente (`map_pool`, en_pool=1) × 2
+// lados. Antes estaba fijo en 26 (13 mapas); con el pool actual son 7×2 = 14.
+async function loadPoolCombos() {
+    try {
+        const res = await fetch(`${API}/aletheia/mapas?pool=1`);
+        const data = await res.json();
+        const mapas = data && Array.isArray(data.mapas) ? data.mapas : [];
+        if (data && data.ok && mapas.length) {
+            totalCombos = mapas.length * 2;
+            if (combosHint) {
+                combosHint.textContent =
+                    `${mapas.length} mapas × 2 lados = ${totalCombos} combinaciones`;
+            }
+        }
+    } catch (e) { /* se mantiene el fallback */ }
+    if (selectedA && selectedB) updateCacheBadge();
 }
 
 function renderTeamGrids(list) {
@@ -178,6 +228,7 @@ function selectTeam(team, side) {
 function showPrepare() {
     const ready = !!(selectedA && selectedB);
     preparePanel.style.display = ready ? 'block' : 'none';
+    if (ready) preparedMatchId = preparadoGuardado(selectedA, selectedB);
     updateActionState();
     if (ready) {
         loadCacheSummary();
@@ -296,16 +347,16 @@ function updateCacheBadge() {
     if (rows.length === 0) {
         cacheBadge.className = 'cache-badge warn';
         cacheBadge.textContent = '⚠ sin predicciones en caché';
-    } else if (n >= TOTAL_COMBOS) {
+    } else if (n >= totalCombos) {
         cacheBadge.className = 'cache-badge ok';
         cacheBadge.textContent = `✓ ya predicho (${n} filas vigentes)`;
     } else if (staleModel) {
         const sample = (rows.find(r => r.modelo_version) || {}).modelo_version || '?';
         cacheBadge.className = 'cache-badge warn';
-        cacheBadge.textContent = `⚠ ${n}/${TOTAL_COMBOS} filas vigentes (modelo ${sample}) — RE-PREPARAR`;
+        cacheBadge.textContent = `⚠ ${n}/${totalCombos} filas vigentes (modelo ${sample}) — RE-PREPARAR`;
     } else {
         cacheBadge.className = 'cache-badge partial';
-        cacheBadge.textContent = `${n}/${TOTAL_COMBOS} filas vigentes en caché`;
+        cacheBadge.textContent = `${n}/${totalCombos} filas vigentes en caché`;
     }
     if (bpText) bpText.textContent = needsReprepare() ? 'RE-PREPARAR' : 'PREPARAR PARTIDO';
 }
@@ -384,8 +435,8 @@ function adoptarJobData(data) {
         equipo_a: selectedA,
         equipo_b: selectedB,
         match_id: matchId,
-        n_sim: nSim,
-        total: data.total || TOTAL_COMBOS,
+        n_sim: data.n_sim || nSim,
+        total: data.total || totalCombos,
         modelo_version: data.modelo_version || null,
         estado: data.estado || 'en_proceso',
         started_at: Date.now(),
@@ -419,7 +470,7 @@ async function prepararPartido() {
         updateActionState();
     };
 
-    mostrarEstadoPreparar(`⏳ Precomputando 13 mapas × 2 lados (${nSim.toLocaleString()} sims) con match_id <strong>#${matchId || 0}</strong>. <strong>No cierres esta pestaña.</strong>`);
+    mostrarEstadoPreparar(`⏳ Precomputando ${Math.ceil(totalCombos / 2)} mapas × 2 lados (${nSim.toLocaleString()} sims) con match_id <strong>#${matchId || 0}</strong>. <strong>No cierres esta pestaña.</strong>`);
 
     let res = null;
     let data = null;
@@ -495,12 +546,13 @@ async function prepararPartido() {
         }
         const secs = data.tiempo_s != null ? data.tiempo_s : ((Date.now() - t0) / 1000).toFixed(1);
         preparedMatchId = matchId;
+        guardarPreparado(selectedA, selectedB, preparedMatchId);
         if (data.modelo_version) preparedModelVersion = data.modelo_version;
         await refreshModelVersion();
         if (!preparedModelVersion) preparedModelVersion = serviceModelVersion;
         updateModelBadge();
         mostrarEstadoPreparar(
-            `✓ ${data.total || TOTAL_COMBOS} combinaciones listas en <strong>${secs}s</strong>` +
+            `✓ ${data.total || totalCombos} combinaciones listas en <strong>${secs}s</strong>` +
             ` · ${data.computados != null ? data.computados + ' computadas, ' : ''}` +
             `${data.desde_cache != null ? data.desde_cache + ' desde caché' : ''}` +
             ` · modelo ${preparedModelVersion || '—'}`, 'ok');
@@ -537,12 +589,14 @@ async function atenderJob(job) {
         updateActionState();
     };
 
-    const result = await pollPrecalcularJob(job.job_id, t0, job.total || TOTAL_COMBOS)
+    const result = await pollPrecalcularJob(job.job_id, t0, job.total || totalCombos)
         .catch(e => ({ status: 'error', error: (e && e.message) || 'fallo inesperado' }));
 
     if (result.status === 'listo') {
         quitarJob(job.clave);
         preparedMatchId = job.match_id || matchId;
+        guardarPreparado(job.equipo_a || selectedA, job.equipo_b || selectedB,
+                         preparedMatchId);
         // El modelo vigente viene en el 202 (data.modelo_version); el job de
         // estado puede no incluirlo.
         preparedModelVersion = (result.job && result.job.modelo_version)
@@ -671,6 +725,7 @@ async function asociarId() {
             return;
         }
         preparedMatchId = matchId;
+        guardarPreparado(selectedA, selectedB, preparedMatchId);
         prepareStatus.className = 'prepare-status ok';
         prepareStatus.textContent = `✓ ${data.filas_actualizadas != null ? data.filas_actualizadas : 0} filas asociadas a #${matchId}.`;
         loadCacheSummary();
@@ -720,6 +775,7 @@ function reanudarJobGuardado() {
 
 async function init() {
     await loadTeams();
+    await loadPoolCombos();
     refreshModelVersion();
     reanudarJobGuardado();
 }
