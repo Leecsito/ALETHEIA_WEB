@@ -221,9 +221,12 @@ def _request_service(method, path, payload=None, params=None, prefer='read',
                 'status': 502,
             }
             continue
-        # Un 5xx del servicio de lectura (p. ej. cold start roto) no descarta
-        # al PC: se prueba el siguiente candidato antes de rendirse.
-        if resp.status_code >= 500 and indice < len(intentos) - 1:
+        # Un 5xx del servicio de lectura (p. ej. cold start roto) o un 404 de su
+        # URL muerta (Render devolviendo "no encontrado") no descarta al PC: se
+        # prueba el siguiente candidato antes de rendirse. El 404 del ÚLTIMO
+        # candidato sí pasa tal cual (es un "no hay predicción" legítimo).
+        if (resp.status_code >= 500 or resp.status_code == 404) \
+                and indice < len(intentos) - 1:
             ultimo_error = {
                 'error': f'El servicio de lectura devolvió HTTP {resp.status_code}.',
                 'status': resp.status_code,

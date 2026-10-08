@@ -7,8 +7,9 @@ services:
     envVars:
       - key: ALETHEIA_PREDICT_URL
         value: https://snugly-encore-sweep.ngrok-free.dev
-      - key: ALETHEIA_PREDICT_READ_URL
-        value: https://aletheia-predict.onrender.com
+      # Sin ALETHEIA_PREDICT_READ_URL: las lecturas que no están en Turso van
+      # directo a ALETHEIA_PREDICT_URL (PC/ngrok); el servicio de Render del
+      # predictor está dado de baja (404).
       - key: TURSO_DATABASE_URL
         value: libsql://aletheia-laperradeadrelees.aws-us-east-1.turso.io
       - key: TURSO_AUTH_TOKEN
